@@ -31,6 +31,9 @@ public final class ChatSearchBar extends EditBox {
 		super(font, x, y, width, SEARCH_HEIGHT, Component.translatable("zea.chat.search"));
 		setBordered(false);
 		setHeight(SEARCH_HEIGHT);
+		// Chatting's ceiling for a query; the default 32 runs out mid-name.
+		setMaxLength(100);
+		setHint(Component.translatable("zea.chat.search.hint"));
 	}
 
 	@Override

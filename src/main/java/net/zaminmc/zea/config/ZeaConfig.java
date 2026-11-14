@@ -143,6 +143,21 @@ public final class ZeaConfig extends Config {
 				minStep = 10)
 		@ConfigOrder(1)
 		public int smoothChatDurationMillis = 200;
+
+		@ConfigOption(name = "Search button", desc = "Show a search button at the right end "
+				+ "of the chat tab row. It opens and closes the chat search — the "
+				+ "same thing Ctrl+F does — so the search never depends on knowing "
+				+ "the hotkey.")
+		@ConfigEditorBoolean
+		@ConfigOrder(2)
+		public boolean searchButton = true;
+
+		@ConfigOption(name = "Clear history button", desc = "Show a clear button at the right "
+				+ "end of the chat tab row. One click empties the visible chat and "
+				+ "this server's saved history.")
+		@ConfigEditorBoolean
+		@ConfigOrder(3)
+		public boolean clearHistoryButton = true;
 	}
 
 	/** Chat tab visibility. The default tabs are always present. */
@@ -302,6 +317,16 @@ public final class ZeaConfig extends Config {
 	public int smoothChatDurationMillis() {
 		return (int) Math.clamp(chatInterface.smoothChatDurationMillis,
 				MIN_SMOOTH_CHAT_MILLIS, MAX_SMOOTH_CHAT_MILLIS);
+	}
+
+	/** Whether the search button shows in the chat action row; on by default. */
+	public boolean searchButtonEnabled() {
+		return chatInterface.searchButton;
+	}
+
+	/** Whether the clear-history button shows in the chat action row; on by default. */
+	public boolean clearHistoryButtonEnabled() {
+		return chatInterface.clearHistoryButton;
 	}
 
 	/**

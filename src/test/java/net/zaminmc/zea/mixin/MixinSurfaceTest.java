@@ -44,6 +44,9 @@ class MixinSurfaceTest {
 		declaredMethod(ChatScreen.class, "keyPressed", KeyEvent.class);
 		declaredMethod(ChatScreen.class, "removed");
 		declaredMethod(ChatScreen.class, "mouseClicked", MouseButtonEvent.class, boolean.class);
+		// The render path the focus-loss search close polls.
+		declaredMethod(ChatScreen.class, "extractRenderState",
+				GuiGraphicsExtractor.class, int.class, int.class, float.class);
 	}
 
 	@Test

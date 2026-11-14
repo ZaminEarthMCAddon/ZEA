@@ -19,15 +19,16 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Pins the chat widgets out of 26.3's keyboard focus navigation. Vanilla
- * screens move focus with Tab and the arrow keys; with the tab strip and
- * search bar registered as ordinary focusable children, a history-recall
- * up-arrow while typing moved screen focus onto them and silently ate
- * every following keystroke — the live report of losing the caret
- * mid-sentence. Both widgets therefore override {@code nextFocusPath} to
- * return null. Instantiating them needs a real {@code Font} (the tab bar
- * measures its labels at construction), so this reads the compiled
- * bytecode instead — the same approach ChatSubsystemWiringTest takes —
- * and asserts the override exists and can only answer null.
+ * screens move focus with Tab and the arrow keys; with the tab strip,
+ * search bar and action buttons registered as ordinary focusable
+ * children, a history-recall up-arrow while typing moved screen focus
+ * onto them and silently ate every following keystroke — the live report
+ * of losing the caret mid-sentence. All three widgets therefore override
+ * {@code nextFocusPath} to return null. Instantiating the tab bar needs
+ * a real {@code Font} (it measures its labels at construction), so this
+ * reads the compiled bytecode instead — the same approach
+ * ChatSubsystemWiringTest takes — and asserts the override exists and can
+ * only answer null.
  */
 class ChatWidgetsFocusTest {
 	private static final Path MAIN_CLASSES = Paths.get("build", "classes", "java", "main");
@@ -36,6 +37,7 @@ class ChatWidgetsFocusTest {
 	void theChatWidgetsNeverOfferThemselvesAsKeyboardFocusTargets() throws IOException {
 		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatTabBar.class");
 		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatSearchBar.class");
+		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatButtonBar.class");
 	}
 
 	private static void refusesFocusNavigation(String classFile) throws IOException {

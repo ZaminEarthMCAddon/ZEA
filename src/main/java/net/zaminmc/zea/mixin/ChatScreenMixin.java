@@ -1,6 +1,7 @@
 package net.zaminmc.zea.mixin;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -15,9 +16,11 @@ import net.zaminmc.zea.chat.feeds.MultiSendInteraction;
 import net.zaminmc.zea.chat.feeds.MultiSendResult;
 import net.zaminmc.zea.chat.feeds.SendTargets;
 import net.zaminmc.zea.chat.feeds.WriteChannel;
+import net.zaminmc.zea.chat.render.ChatButtonBar;
 import net.zaminmc.zea.chat.render.ChatCopier;
 import net.zaminmc.zea.chat.render.ChatSearchBar;
 import net.zaminmc.zea.chat.render.ChatTabBar;
+import net.zaminmc.zea.chat.render.ClearHistoryToast;
 import net.zaminmc.zea.chat.render.CopyToast;
 import net.zaminmc.zea.chat.render.MultiSendToast;
 import net.zaminmc.zea.duck.ScreenWidgetAccess;
@@ -34,9 +37,11 @@ import java.util.stream.Collectors;
 
 /**
  * Adds ZEA's chat-screen behavior: the chat tab strip (with shift-click
- * multi-send targeting), the search field (Ctrl+F), right-click message
- * copying, and multi-target send interception. Active only while
- * connected to EarthMC — elsewhere the vanilla chat is untouched.
+ * multi-send targeting), the action buttons at its right end (search
+ * toggle, clear history — the placement Polyfrost's Chatting made the
+ * reference for), the search field (Ctrl+F or the button), right-click
+ * message copying, and multi-target send interception. Active only
+ * while connected to EarthMC — elsewhere the vanilla chat is untouched.
  */
 @Mixin(ChatScreen.class)
 public abstract class ChatScreenMixin {
@@ -56,6 +61,18 @@ public abstract class ChatScreenMixin {
 	 */
 	private static final int SHORTCUT_KEY_F = 'f';
 
+	/**
+	 * The chat action buttons and the tab strip share one row: the
+	 * strip on the left (never past the chat panel's width), the
+	 * buttons at the screen's right edge, flush with the input's right
+	 * edge. The strip's maximum is reduced by what the buttons occupy
+	 * so the two can never run under each other, even on narrow
+	 * windows.
+	 */
+	private static final int BUTTON_ROW_RIGHT_MARGIN = 4;
+	/** Breathing room between the tab strip and the action buttons. */
+	private static final int BUTTON_ROW_GAP = 2;
+
 	@Shadow
 	protected EditBox input;
 
@@ -72,11 +89,17 @@ public abstract class ChatScreenMixin {
 		Minecraft minecraft = Minecraft.getInstance();
 		FeedFilter filter = chat.feedFilter();
 
+		boolean searchButton = ZeaClient.config().searchButtonEnabled();
+		boolean clearButton = ZeaClient.config().clearHistoryButtonEnabled();
+		int buttonRowWidth = ChatButtonBar.rowWidth(searchButton, clearButton);
+		int stripReserve = buttonRowWidth == 0 ? 0
+				: BUTTON_ROW_RIGHT_MARGIN + buttonRowWidth + BUTTON_ROW_GAP;
+
 		ChatTabBar tabBar = new ChatTabBar(
 				minecraft.font,
 				2,
 				screen.height - INPUT_STRIP_HEIGHT - ChatTabBar.TAB_HEIGHT,
-				zea$stripMaxWidth(minecraft, screen),
+				zea$stripMaxWidth(minecraft, screen) - stripReserve,
 				Feeds.visibleTabs(ZeaClient.config().enabledExtraFeedIds()),
 				chat.feedSelection(),
 				feed -> MultiSendInteraction.isTargeted(
@@ -94,6 +117,18 @@ public abstract class ChatScreenMixin {
 		// cannot be @Shadowed here — ScreenMixin exposes it instead.
 		((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(tabBar);
 
+		if (buttonRowWidth > 0) {
+			ChatButtonBar buttonBar = new ChatButtonBar(
+					screen.width - BUTTON_ROW_RIGHT_MARGIN - buttonRowWidth,
+					screen.height - INPUT_STRIP_HEIGHT - ChatTabBar.TAB_HEIGHT,
+					searchButton,
+					clearButton,
+					() -> filter.searchQuery() != null,
+					() -> zea$toggleSearch(screen, filter, minecraft),
+					() -> zea$clearHistory(minecraft));
+			((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(buttonBar);
+		}
+
 		zea$searchBar = new ChatSearchBar(
 				minecraft.font,
 				2,
@@ -105,6 +140,11 @@ public abstract class ChatScreenMixin {
 		if (openQuery != null) {
 			zea$searchBar.setValue(openQuery);
 			zea$searchBar.visible = true;
+			// The search keeps the caret across the rebuild too: without
+			// this, typing would silently go to the chat input while the
+			// search bar shows its old query — and the focus-loss close
+			// below would treat that as a finished search.
+			zea$moveFocus(screen, zea$searchBar);
 		}
 		zea$searchBar.setResponder(text -> {
 			filter.setSearchQuery(text);
@@ -115,14 +155,16 @@ public abstract class ChatScreenMixin {
 
 	/**
 	 * Ctrl+F toggles the search field. Escape closes an open search before
-	 * it closes the screen. While the search field is focused, confirmation
-	 * returns focus to the chat input instead of sending its text. Tab is
-	 * consumed outright: 26.3 screens treat it as focus navigation, and
-	 * even when that navigation finds no target (all of ZEA's chat widgets
-	 * refuse it, and vanilla's input is guarded by canLoseFocus=false) the
-	 * search for one still clears the screen's focus — after which typed
-	 * characters reach no widget until the player clicks the input again.
-	 * A chat box has no Tab semantics worth that trap.
+	 * it closes the screen; so does Enter while the search field is focused —
+	 * the player has finished asking, and with the focus-loss close below,
+	 * anything that hands the caret back to the input ends the search anyway,
+	 * so the key does it outright instead of a frame later. Tab is consumed
+	 * outright: 26.3 screens treat it as focus navigation, and even when that
+	 * navigation finds no target (all of ZEA's chat widgets refuse it, and
+	 * vanilla's input is guarded by canLoseFocus=false) the search for one
+	 * still clears the screen's focus — after which typed characters reach
+	 * no widget until the player clicks the input again. A chat box has no
+	 * Tab semantics worth that trap.
 	 */
 	@Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
 	private void zea$handleSearchKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
@@ -140,11 +182,7 @@ public abstract class ChatScreenMixin {
 		}
 		if (event.hasControlDownWithQuirk() && event.shortcutKey() == SHORTCUT_KEY_F
 				|| ZeaKeys.SEARCH_CHAT.matches(event)) {
-			if (filter.searchQuery() == null) {
-				zea$openSearch(screen, filter, minecraft);
-			} else {
-				zea$closeSearch(screen, filter, minecraft);
-			}
+			zea$toggleSearch(screen, filter, minecraft);
 			cir.setReturnValue(true);
 			return;
 		}
@@ -155,7 +193,7 @@ public abstract class ChatScreenMixin {
 		}
 		if (filter.searchQuery() != null && event.isConfirmation()
 				&& zea$searchBar != null && screen.getFocused() == zea$searchBar) {
-			screen.setFocused(input);
+			zea$closeSearch(screen, filter, minecraft);
 			cir.setReturnValue(true);
 		}
 	}
@@ -174,6 +212,32 @@ public abstract class ChatScreenMixin {
 		FeedFilter filter = chat.feedFilter();
 		if (filter.searchQuery() != null) {
 			zea$closeSearch((ChatScreen) (Object) this, filter, Minecraft.getInstance());
+		}
+	}
+
+	/**
+	 * A search closes when the player clicks into the chat input — the
+	 * "found it, now I reply" moment Chatting also treats as done. The
+	 * check is polled from the render path (after the screen's focus
+	 * machinery, never reentrantly inside a focus transfer) and closes
+	 * only on the input specifically: focus landing on a tab, say, must
+	 * keep the search open, because a search composes with the selected
+	 * feed and checking another feed mid-search is a normal move.
+	 */
+	@Inject(method = "extractRenderState", at = @At("TAIL"))
+	private void zea$closeSearchWhenTheInputTakesFocus(GuiGraphicsExtractor extractor, int mouseX, int mouseY,
+			float partialTick, CallbackInfo ci) {
+		ChatSubsystem chat = ZeaClient.chat();
+		if (chat == null || !ZeaClient.lifecycle().onEarthMc()) {
+			return;
+		}
+		FeedFilter filter = chat.feedFilter();
+		if (filter.searchQuery() == null || zea$searchBar == null || zea$searchBar.isFocused()) {
+			return;
+		}
+		ChatScreen screen = (ChatScreen) (Object) this;
+		if (screen.getFocused() == input) {
+			zea$closeSearch(screen, filter, Minecraft.getInstance());
 		}
 	}
 
@@ -263,6 +327,25 @@ public abstract class ChatScreenMixin {
 		zea$searchBar.setValue("");
 		zea$moveFocus(screen, zea$searchBar);
 		filter.apply(minecraft.gui.hud.getChat());
+	}
+
+	/** Opens a closed search, closes an open one — the shared body of Ctrl+F and the search button. */
+	private void zea$toggleSearch(ChatScreen screen, FeedFilter filter, Minecraft minecraft) {
+		if (filter.searchQuery() == null) {
+			zea$openSearch(screen, filter, minecraft);
+		} else {
+			zea$closeSearch(screen, filter, minecraft);
+		}
+	}
+
+	/** Empties the visible chat and this server's saved history, then confirms what went. */
+	private void zea$clearHistory(Minecraft minecraft) {
+		ChatSubsystem chat = ZeaClient.chat();
+		if (chat == null) {
+			return;
+		}
+		chat.clearChatHistory();
+		ClearHistoryToast.show(minecraft);
 	}
 
 	/**
