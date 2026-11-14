@@ -11,6 +11,8 @@ import net.minecraft.util.FormattedCharSequence;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.chat.ChatSubsystem;
 import net.zaminmc.zea.chat.feeds.FeedFilter;
+import net.zaminmc.zea.chat.model.MessageCategory;
+import net.zaminmc.zea.chat.render.ChannelTint;
 import net.zaminmc.zea.chat.render.ChatGeometry;
 import net.zaminmc.zea.chat.render.SmoothChat;
 import net.zaminmc.zea.chat.render.SplitLineCache;
@@ -87,6 +89,13 @@ public abstract class ChatComponentMixin {
          * rebuild re-adds the whole history, and re-wrapping every message
          * per tab switch is the live-reported lag — while everywhere else
          * vanilla's compute-per-call behavior is kept byte-for-byte.
+         *
+         * <p>This is also where received channel messages pick up the
+         * slight-yellow tint: the wrap is computed from a tinted copy of
+         * the content (see {@link ChannelTint}), memoized under the
+         * original message, so every later rebuild reuses the tinted wrap.
+         * The stored message itself is never modified — copying, mention
+         * identity and history see the original component.
          */
         @WrapOperation(method = "addMessageToDisplayQueue", at = @At(value = "INVOKE",
                         target = "Lnet/minecraft/client/multiplayer/chat/GuiMessage;splitLines(Lnet/minecraft/client/gui/Font;I)Ljava/util/List;"))
@@ -96,7 +105,7 @@ public abstract class ChatComponentMixin {
                 if (zea$onEarthMc()) {
                         lines = zea$splitLines.cached(message, font, maxWidth);
                         if (lines == null) {
-                                lines = original.call(message, font, maxWidth);
+                                lines = original.call(zea$tintIfChannel(message), font, maxWidth);
                                 zea$splitLines.remember(message, font, maxWidth, lines);
                         }
                 } else {
@@ -104,6 +113,30 @@ public abstract class ChatComponentMixin {
                 }
                 zea$pendingLines = lines.size();
                 return lines;
+        }
+
+        /**
+         * The message to wrap for display: a derived record whose content is
+         * the slight-yellow tinted copy when the message arrived in a
+         * writable channel and the tint is enabled; the original otherwise.
+         * Classification goes through the cache, so this is a lookup in
+         * steady state.
+         */
+        private GuiMessage zea$tintIfChannel(GuiMessage message) {
+                if (!ZeaClient.config().channelTintEnabled()) {
+                        return message;
+                }
+                ChatSubsystem chat = ZeaClient.chat();
+                if (chat == null) {
+                        return message;
+                }
+                MessageCategory category = chat.classifications()
+                                .classificationOf(message.content()).category();
+                if (!ChannelTint.TINTED_CATEGORIES.contains(category)) {
+                        return message;
+                }
+                return new GuiMessage(message.addedTime(), ChannelTint.tint(message.content()),
+                                message.signature(), message.source(), message.tag());
         }
 
         @Inject(method = "addMessageToDisplayQueue", at = @At("HEAD"))
