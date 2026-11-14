@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
-import net.zaminmc.zea.buttons.ButtonAnchor;
+import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.buttons.InventoryButton;
 
 import java.util.ArrayList;
@@ -151,9 +151,11 @@ public final class InventoryButtonsPayload implements SharePayload {
 			String name,
 			String command,
 			String icon,
-			ButtonAnchor anchor,
-			Integer offsetX,
-			Integer offsetY,
+			String text,
+			String tooltip,
+			ButtonRegion region,
+			Integer order,
+			Boolean closeOnExecute,
 			Boolean enabled) {
 		InventoryButton toButton() {
 			return new InventoryButton(
@@ -161,9 +163,11 @@ public final class InventoryButtonsPayload implements SharePayload {
 					name,
 					command,
 					icon,
-					anchor,
-					offsetX == null ? InventoryButton.DEFAULT_OFFSET_X : offsetX,
-					offsetY == null ? InventoryButton.DEFAULT_OFFSET_Y : offsetY,
+					text,
+					tooltip,
+					region,
+					order == null ? 0 : order,
+					closeOnExecute != null && closeOnExecute,
 					enabled == null || enabled);
 		}
 
@@ -173,9 +177,11 @@ public final class InventoryButtonsPayload implements SharePayload {
 					button.name(),
 					button.command(),
 					button.icon(),
-					button.anchor(),
-					button.offsetX(),
-					button.offsetY(),
+					button.text(),
+					button.tooltip(),
+					button.region(),
+					button.order(),
+					button.closeOnExecute(),
 					button.enabled());
 		}
 	}

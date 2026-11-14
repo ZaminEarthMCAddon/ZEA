@@ -5,117 +5,70 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ButtonDragSessionTest {
-	private static final int LEFT = 50;
-	private static final int TOP = 30;
-	private static final int WIDTH = 176;
-	private static final int HEIGHT = 166;
+        private static final int BUTTON_X = 100;
+        private static final int BUTTON_Y = 40;
 
-	private final ButtonDragSession drag = new ButtonDragSession();
+        @Test
+        void beginGrabsAtTheCursorAndTracksThePreview() {
+                ButtonDragSession drag = new ButtonDragSession();
+                InventoryButton button = InventoryButton.newButton(1);
+                drag.begin(button, BUTTON_X, BUTTON_Y, 105, 47);
 
-	private static InventoryButton topLeft(int offsetX, int offsetY) {
-		return InventoryButton.newButton(1).withCommand("g hi")
-				.withAnchor(ButtonAnchor.TOP_LEFT).withOffset(offsetX, offsetY);
-	}
+                assertTrue(drag.isActive());
+                assertEquals(button.id(), drag.button().id());
+                assertEquals(BUTTON_X, drag.previewX());
+                assertEquals(BUTTON_Y, drag.previewY());
 
-	@Test
-	void idleSessionHasNothingToSay() {
-		assertFalse(drag.isActive());
-		assertNull(drag.end(LEFT, TOP, WIDTH, HEIGHT));
-		drag.cancel();
-		assertFalse(drag.isActive());
-	}
+                drag.moveTo(120, 60);
+                assertEquals(115, drag.previewX());
+                assertEquals(53, drag.previewY());
+                assertTrue(drag.moved());
+        }
 
-	@Test
-	void pressWithoutMovementKeepsTheButton() {
-		InventoryButton button = topLeft(4, 6);
-		drag.begin(button, LEFT + 4, TOP + 6, LEFT + 10, TOP + 12);
-		drag.moveTo(LEFT + 11, TOP + 13);
+        @Test
+        void jitterWithinThreePixelsIsNotMovement() {
+                ButtonDragSession drag = new ButtonDragSession();
+                drag.begin(InventoryButton.newButton(1), BUTTON_X, BUTTON_Y, 100, 40);
+                drag.moveTo(102, 42);
+                assertFalse(drag.moved());
+                drag.moveTo(104, 40);
+                assertTrue(drag.moved());
+        }
 
-		assertTrue(drag.isActive());
-		assertFalse(drag.moved(), "two pixels of wiggle are not a drag");
-		assertNull(drag.end(LEFT, TOP, WIDTH, HEIGHT), "an unmoved press must not reposition");
-		assertFalse(drag.isActive());
-	}
+        @Test
+        void endReturnsTheButtonOnlyForARealDrag() {
+                ButtonDragSession drag = new ButtonDragSession();
+                drag.begin(InventoryButton.newButton(1), BUTTON_X, BUTTON_Y, 100, 40);
+                drag.moveTo(101, 41);
+                assertNull(drag.end());
+                assertFalse(drag.isActive());
 
-	@Test
-	void dragMovesThePreviewWithTheCursor() {
-		InventoryButton button = topLeft(0, 0);
-		drag.begin(button, LEFT, TOP, LEFT + 5, TOP + 5);
+                InventoryButton second = InventoryButton.newButton(2).withOrder(1);
+                drag.begin(second, BUTTON_X, BUTTON_Y, 100, 40);
+                drag.moveTo(140, 60);
+                InventoryButton dragged = drag.end();
+                assertEquals(second.id(), dragged.id());
+                assertEquals(1, dragged.order());
+                assertFalse(drag.isActive());
+        }
 
-		drag.moveTo(LEFT + 40, TOP + 60);
+        @Test
+        void cancelAbortsAndMoveIsIgnoredWhenIdle() {
+                ButtonDragSession drag = new ButtonDragSession();
+                drag.begin(InventoryButton.newButton(1), BUTTON_X, BUTTON_Y, 100, 40);
+                drag.cancel();
+                assertFalse(drag.isActive());
+                drag.moveTo(200, 200);
+                assertEquals(BUTTON_X, drag.previewX(), "an idle session ignores moves");
+        }
 
-		assertEquals(LEFT + 35, drag.previewX(), "the cursor keeps its place inside the button");
-		assertEquals(TOP + 55, drag.previewY());
-		assertTrue(drag.moved());
-	}
-
-	@Test
-	void releasedDragReanchorsToTheNearestCorner() {
-		InventoryButton button = topLeft(0, 0);
-		drag.begin(button, LEFT, TOP, LEFT + 2, TOP + 2);
-		drag.moveTo(LEFT + 40, TOP + 60);
-
-		InventoryButton result = drag.end(LEFT, TOP, WIDTH, HEIGHT);
-
-		assertEquals(button.id(), result.id());
-		assertEquals(button.command(), result.command());
-		assertEquals(ButtonAnchor.TOP_LEFT, result.anchor());
-		assertEquals(38, result.offsetX());
-		assertEquals(58, result.offsetY());
-	}
-
-	@Test
-	void draggedTowardTheRightEdgeAnchorsRight() {
-		InventoryButton button = topLeft(0, 0);
-		drag.begin(button, LEFT, TOP, LEFT + 2, TOP + 2);
-		drag.moveTo(LEFT + WIDTH + 30, TOP + 4);
-
-		InventoryButton result = drag.end(LEFT, TOP, WIDTH, HEIGHT);
-
-		assertEquals(ButtonAnchor.TOP_RIGHT, result.anchor());
-		// The flush right position minus the size, expressed as the new offset.
-		int expectedX = ButtonGeometry.x(result, LEFT, WIDTH);
-		assertEquals(LEFT + WIDTH + 30 - 2, expectedX, "button keeps its left edge under the cursor");
-	}
-
-	@Test
-	void offsetsAreClampedWhenDraggedFarAway() {
-		InventoryButton button = topLeft(0, 0);
-		drag.begin(button, LEFT, TOP, LEFT + 2, TOP + 2);
-		drag.moveTo(LEFT + 20_000, TOP + 2);
-
-		InventoryButton result = drag.end(LEFT, TOP, WIDTH, HEIGHT);
-
-		assertEquals(InventoryButton.MAX_OFFSET, result.offsetX());
-	}
-
-	@Test
-	void cancelAbortsWithoutResult() {
-		InventoryButton button = topLeft(0, 0);
-		drag.begin(button, LEFT, TOP, LEFT + 2, TOP + 2);
-		drag.moveTo(LEFT + 100, TOP + 100);
-
-		drag.cancel();
-
-		assertFalse(drag.isActive());
-		assertNull(drag.end(LEFT, TOP, WIDTH, HEIGHT));
-	}
-
-	@Test
-	void beginResetsStateFromAnyEarlierDrag() {
-		InventoryButton first = topLeft(0, 0);
-		InventoryButton second = topLeft(100, 100);
-		drag.begin(first, LEFT, TOP, LEFT + 2, TOP + 2);
-		drag.moveTo(LEFT + 100, TOP + 100);
-		drag.end(LEFT, TOP, WIDTH, HEIGHT);
-
-		drag.begin(second, LEFT + 100, TOP + 100, LEFT + 105, TOP + 105);
-
-		assertTrue(drag.isActive());
-		assertFalse(drag.moved(), "a new grab starts clean");
-		assertEquals(LEFT + 100, drag.previewX());
-	}
+        @Test
+        void beginRejectsNull() {
+                ButtonDragSession drag = new ButtonDragSession();
+                assertThrows(NullPointerException.class, () -> drag.begin(null, 0, 0, 0, 0));
+        }
 }

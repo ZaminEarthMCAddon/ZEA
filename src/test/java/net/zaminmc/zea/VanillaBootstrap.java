@@ -9,6 +9,14 @@ import net.minecraft.server.Bootstrap;
  * registries — the component codec, for instance, pulls in click-event
  * actions whose static initializers read {@code BuiltInRegistries}.
  *
+ * <p>Deliberately stops at {@code Bootstrap.bootStrap()}: since 26.3,
+ * item default components bind only during the data-load flow, and that
+ * flow resolves datapack tags (fire resistance reads the damage-type
+ * tags) that a bare test JVM never loads. Tests therefore exercise
+ * component-free logic — the rarity tier resolvers, for instance, expose
+ * pure seams exactly so they can run here — and ItemStack-dependent
+ * paths get live verification instead.
+ *
  * <p>Idempotent and cheap after the first call; tests that never leave
  * plain component construction never need it.
  */

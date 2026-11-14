@@ -3,6 +3,7 @@ package net.zaminmc.zea.config;
 import io.github.notenoughupdates.moulconfig.Config;
 import io.github.notenoughupdates.moulconfig.annotations.Category;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean;
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorButton;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorSlider;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorText;
@@ -29,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ZeaConfigStructureTest {
         private static final List<Class<? extends Annotation>> EDITOR_ANNOTATIONS = List.of(
-                        ConfigEditorBoolean.class, ConfigEditorSlider.class, ConfigEditorDropdown.class, ConfigEditorText.class);
+                        ConfigEditorBoolean.class, ConfigEditorSlider.class, ConfigEditorDropdown.class,
+                        ConfigEditorText.class, ConfigEditorButton.class);
 
         @Test
         void extendsMoulConfigBase() {
@@ -99,6 +101,72 @@ class ZeaConfigStructureTest {
         }
 
         @Test
+        void rarityCategoryNestsItsVisualSubcategories() {
+                // The rarity spec's layout: one top-level Rarity category
+                // holding the master switch plus the Appearance and
+                // Enchantment display subcategories — the same MoulConfig
+                // nesting mechanism Chat uses.
+                List<Class<?>> topLevel = new ArrayList<>();
+                for (Field field : ZeaConfig.class.getDeclaredFields()) {
+                        if (field.isAnnotationPresent(Category.class)) {
+                                topLevel.add(field.getType());
+                        }
+                }
+                assertTrue(topLevel.contains(ZeaConfig.Rarity.class), "Rarity is a top-level category");
+                assertTrue(topLevel.contains(ZeaConfig.Miscellaneous.class),
+                                "Miscellaneous is a top-level category");
+                assertFalse(topLevel.contains(ZeaConfig.Appearance.class)
+                                || topLevel.contains(ZeaConfig.EnchantmentDisplay.class),
+                                "rarity visual settings nest under Rarity");
+                List<Class<?>> heldByRarity = categoriesHeldBy(ZeaConfig.Rarity.class);
+                assertTrue(heldByRarity.contains(ZeaConfig.Appearance.class),
+                                "Appearance nests under Rarity");
+                assertTrue(heldByRarity.contains(ZeaConfig.EnchantmentDisplay.class),
+                                "Enchantment display nests under Rarity");
+        }
+
+        @Test
+        void inventoryUtilitiesNestTheirSubcategories() {
+                // The inventory utilities layout: one top-level category
+                // holding the master switch, the editor launcher and the
+                // Button placement, Search bar, Slot binding and Slot
+                // locking subcategories.
+                List<Class<?>> held = categoriesHeldBy(ZeaConfig.InventoryButtons.class);
+                assertTrue(held.contains(ZeaConfig.ButtonPlacement.class),
+                                "Button placement nests under the inventory category");
+                assertTrue(held.contains(ZeaConfig.SearchBar.class),
+                                "Search bar nests under the inventory category");
+                assertTrue(held.contains(ZeaConfig.SlotBinding.class),
+                                "Slot binding nests under the inventory category");
+                assertTrue(held.contains(ZeaConfig.SlotLocking.class),
+                                "Slot locking nests under the inventory category");
+                List<Class<?>> topLevel = new ArrayList<>();
+                for (Field field : ZeaConfig.class.getDeclaredFields()) {
+                        if (field.isAnnotationPresent(Category.class)) {
+                                topLevel.add(field.getType());
+                        }
+                }
+                assertFalse(topLevel.contains(ZeaConfig.ButtonPlacement.class)
+                                || topLevel.contains(ZeaConfig.SearchBar.class)
+                                || topLevel.contains(ZeaConfig.SlotBinding.class)
+                                || topLevel.contains(ZeaConfig.SlotLocking.class),
+                                "inventory utility settings nest, never stand beside the category");
+        }
+
+        @Test
+        void miscellaneousHoldsScrollableTooltips() {
+                boolean found = false;
+                for (Field field : ZeaConfig.Miscellaneous.class.getDeclaredFields()) {
+                        if (field.getName().equals("scrollableTooltips")) {
+                                found = true;
+                                assertTrue(field.isAnnotationPresent(ConfigOption.class));
+                                assertTrue(field.isAnnotationPresent(ConfigEditorBoolean.class));
+                        }
+                }
+                assertTrue(found, "the scrollable-tooltips option lives under Miscellaneous");
+        }
+
+        @Test
         void everyOptionIsPublicNonStaticAndPairedWithAMatchingEditor() {
                 for (Class<?> category : categoryTypes()) {
                         for (Field field : category.getDeclaredFields()) {
@@ -137,6 +205,11 @@ class ZeaConfigStructureTest {
                                         assertTrue(field.getType() == String.class,
                                                         category.getSimpleName() + "." + field.getName()
                                                                         + " is a text field but not a string");
+                                }
+                                if (editors.contains(ConfigEditorButton.class)) {
+                                        assertTrue(field.getType() == boolean.class,
+                                                        category.getSimpleName() + "." + field.getName()
+                                                                        + " is a launcher button but not boolean (NEU convention)");
                                 }
                         }
                 }

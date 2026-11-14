@@ -18,44 +18,53 @@ import java.util.List;
  * the built-in shortcuts always keep working.
  */
 public final class ZeaKeys {
-	/** ZEA's group in the controls screen. */
-	private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
-			Identifier.fromNamespaceAndPath("zea", "zea"));
+        /** ZEA's group in the controls screen. */
+        private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
+                        Identifier.fromNamespaceAndPath("zea", "zea"));
 
-	/**
-	 * Toggles the chat search field while the chat screen is open.
-	 * Unbound by default — Ctrl+F (Cmd+F on macOS) already does this.
-	 */
-	public static final KeyMapping SEARCH_CHAT = new KeyMapping(
-			"zea.key.search_chat", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
+        /**
+         * Toggles the chat search field while the chat screen is open.
+         * Unbound by default — Ctrl+F (Cmd+F on macOS) already does this.
+         */
+        public static final KeyMapping SEARCH_CHAT = new KeyMapping(
+                        "zea.key.search_chat", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
 
-	/**
-	 * Toggles inventory-button editing while a container screen is
-	 * open. Unbound by default — bind it once in Controls → ZEA.
-	 */
-	public static final KeyMapping EDIT_BUTTONS = new KeyMapping(
-			"zea.key.edit_buttons", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
+        /**
+         * Toggles inventory-button editing while a container screen is
+         * open. Unbound by default — bind it once in Controls → ZEA.
+         */
+        public static final KeyMapping EDIT_BUTTONS = new KeyMapping(
+                        "zea.key.edit_buttons", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
 
-	/**
-	 * Every binding {@link #register()} delegates to — the single source
-	 * of truth, so a mapping can never be defined and consumed but left
-	 * out of registration (the edit-mode keybind once was, which left
-	 * button editing unreachable).
-	 */
-	private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS);
+        /**
+         * While a container screen is open, pressing this over a player
+         * inventory slot toggles its lock; keeping it held and clicking a
+         * hotbar slot binds the two. Unbound by default — bind it once in
+         * Controls → ZEA.
+         */
+        public static final KeyMapping LOCK_SLOT = new KeyMapping(
+                        "zea.key.lock_slot", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
 
-	private ZeaKeys() {
-	}
+        /**
+         * Every binding {@link #register()} delegates to — the single source
+         * of truth, so a mapping can never be defined and consumed but left
+         * out of registration (the edit-mode keybind once was, which left
+         * button editing unreachable).
+         */
+        private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS, LOCK_SLOT);
 
-	/** Registers the bindings; called once from the client entrypoint. */
-	public static void register() {
-		for (KeyMapping mapping : ALL) {
-			KeyMappingHelper.registerKeyMapping(mapping);
-		}
-	}
+        private ZeaKeys() {
+        }
 
-	/** The bindings registration hands to Fabric; the test surface. */
-	public static List<KeyMapping> registered() {
-		return ALL;
-	}
+        /** Registers the bindings; called once from the client entrypoint. */
+        public static void register() {
+                for (KeyMapping mapping : ALL) {
+                        KeyMappingHelper.registerKeyMapping(mapping);
+                }
+        }
+
+        /** The bindings registration hands to Fabric; the test surface. */
+        public static List<KeyMapping> registered() {
+                return ALL;
+        }
 }

@@ -8,6 +8,11 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
@@ -101,16 +106,40 @@ class MixinSurfaceTest {
 		declaredField(AbstractContainerScreen.class, int.class, "imageWidth");
 		declaredField(AbstractContainerScreen.class, int.class, "imageHeight");
 		declaredField(AbstractContainerScreen.class, boolean.class, "isQuickCrafting");
+		declaredField(AbstractContainerScreen.class, AbstractContainerMenu.class, "menu");
+		declaredMethod(AbstractContainerScreen.class, "init");
 		declaredMethod(AbstractContainerScreen.class, "extractContents",
 				GuiGraphicsExtractor.class, int.class, int.class, float.class);
+		declaredMethod(AbstractContainerScreen.class, "extractSlot",
+				GuiGraphicsExtractor.class, Slot.class, int.class, int.class);
 		declaredMethod(AbstractContainerScreen.class, "extractTooltip",
 				GuiGraphicsExtractor.class, int.class, int.class);
+		declaredMethod(AbstractContainerScreen.class, "getTooltipFromContainerItem", ItemStack.class);
 		declaredMethod(AbstractContainerScreen.class, "keyPressed", KeyEvent.class);
 		declaredMethod(AbstractContainerScreen.class, "mouseClicked", MouseButtonEvent.class, boolean.class);
 		declaredMethod(AbstractContainerScreen.class, "mouseDragged", MouseButtonEvent.class,
 				double.class, double.class);
 		declaredMethod(AbstractContainerScreen.class, "mouseReleased", MouseButtonEvent.class);
 		declaredMethod(AbstractContainerScreen.class, "removed");
+		// The lock/binding interception point: every click path funnels here.
+		declaredMethod(AbstractContainerScreen.class, "slotClicked",
+				Slot.class, int.class, int.class, ContainerInput.class);
+		// Drag membership: locked slots are filtered out of quick-crafting.
+		declaredMethod(AbstractContainerScreen.class, "shouldAddSlotToQuickCraft",
+				Slot.class, ItemStack.class);
+	}
+
+	@Test
+	void recipeBookComponentIsDeclaredByAbstractRecipeBookScreen() {
+		declaredField(AbstractRecipeBookScreen.class,
+				net.minecraft.client.gui.screens.recipebook.RecipeBookComponent.class,
+				"recipeBookComponent");
+	}
+
+	@Test
+	void dropItemIsDeclaredByMultiPlayerGameMode() {
+		declaredMethod(net.minecraft.client.multiplayer.MultiPlayerGameMode.class, "dropItem",
+				net.minecraft.client.player.LocalPlayer.class, boolean.class);
 	}
 
 	private static void declaredMethod(Class<?> owner, String name, Class<?>... parameterTypes) {

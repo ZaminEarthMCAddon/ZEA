@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ButtonActivatorTest {
 	/** Records sends; throws when asked to simulate a dead connection. */
@@ -97,5 +99,15 @@ class ButtonActivatorTest {
 		activator.reset();
 
 		assertEquals(ButtonActivator.Result.EXECUTED, activator.activate(button, 1_100));
+	}
+
+	@Test
+	void closeOnExecuteOnlyAfterASuccessfulDispatchOnAnUnchangedScreen() {
+		assertTrue(ButtonActivator.shouldCloseAfter(ButtonActivator.Result.EXECUTED, true));
+		assertFalse(ButtonActivator.shouldCloseAfter(ButtonActivator.Result.EXECUTED, false),
+				"a command that opened another GUI keeps it");
+		assertFalse(ButtonActivator.shouldCloseAfter(ButtonActivator.Result.FAILED, true));
+		assertFalse(ButtonActivator.shouldCloseAfter(ButtonActivator.Result.COOLDOWN, true));
+		assertFalse(ButtonActivator.shouldCloseAfter(ButtonActivator.Result.INVALID, true));
 	}
 }

@@ -62,7 +62,11 @@ Packages represent responsibilities. The mapping:
 | `net.zaminmc.zea.notify` | Central notification coordinator and destinations |
 | `net.zaminmc.zea.mention` | Mention detection and (opt-in) responses |
 | `net.zaminmc.zea.player` | Player hover cards, username resolution |
-| `net.zaminmc.zea.buttons` | Inventory buttons |
+| `net.zaminmc.zea.buttons` | Inventory buttons: region placement, presets, editing, command dispatch |
+| `net.zaminmc.zea.rarity` | Item rarity: calculation model, enchantment budgets, tooltip edits, slot tint |
+| `net.zaminmc.zea.misc` | Small utilities: native scrollable tooltips |
+| `net.zaminmc.zea.search` | Inventory search bar: calculator, matching mode, search text cache |
+| `net.zaminmc.zea.slots` | Slot locking and binding: state, click guard, indicators |
 | `net.zaminmc.zea.share` | Paste client, share envelope, payload codecs, coordinator, `/zea` commands |
 | `net.zaminmc.zea.earthmc` | EarthMC API client, server identity, ZEA-REPO data |
 | `net.zaminmc.zea.config` | Configuration (MoulConfig), the `/zea` settings screen |
@@ -171,7 +175,7 @@ Rules:
 
 ## 8. Persistence boundaries
 
-All persistent stores (chat history, inventory buttons, tab configuration,
+All persistent stores (chat history, inventory buttons, slot locks, tab configuration,
 share caches) go through `persistence` which implements a single safe-write
 protocol (the pattern proven by NEU's `ConfigUtil`, verified in research):
 

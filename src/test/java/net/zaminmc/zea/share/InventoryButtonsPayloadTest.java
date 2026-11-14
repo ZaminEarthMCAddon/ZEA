@@ -2,7 +2,7 @@ package net.zaminmc.zea.share;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.zaminmc.zea.buttons.ButtonAnchor;
+import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.buttons.InventoryButton;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InventoryButtonsPayloadTest {
 	private static InventoryButton button(String name, String command) {
 		return new InventoryButton(UUID.randomUUID(), name, command, "minecraft:compass",
-				ButtonAnchor.TOP_RIGHT, 10, 20, true);
+				"", "", ButtonRegion.RIGHT, 0, false, true);
 	}
 
 	@Test
@@ -32,9 +33,8 @@ class InventoryButtonsPayloadTest {
 		assertEquals("Home", decoded.buttons().get(0).name());
 		assertEquals("spawn", decoded.buttons().get(0).command());
 		assertEquals("Shop", decoded.buttons().get(1).name());
-		assertEquals(ButtonAnchor.TOP_RIGHT, decoded.buttons().get(0).anchor());
-		assertEquals(10, decoded.buttons().get(0).offsetX());
-		assertEquals(20, decoded.buttons().get(0).offsetY());
+		assertEquals(ButtonRegion.RIGHT, decoded.buttons().get(0).region());
+		assertEquals(0, decoded.buttons().get(0).order());
 	}
 
 	@Test
@@ -134,9 +134,9 @@ class InventoryButtonsPayloadTest {
 
 		assertEquals(1, buttons.size());
 		InventoryButton button = buttons.get(0);
-		assertEquals(ButtonAnchor.TOP_RIGHT, button.anchor());
-		assertEquals(InventoryButton.DEFAULT_OFFSET_X, button.offsetX());
-		assertEquals(InventoryButton.DEFAULT_OFFSET_Y, button.offsetY());
+		assertEquals(ButtonRegion.RIGHT, button.region());
+		assertEquals(0, button.order());
+		assertFalse(button.closeOnExecute());
 		assertTrue(button.enabled());
 	}
 
@@ -167,7 +167,7 @@ class InventoryButtonsPayloadTest {
 	@Test
 	void exportsNeverCarryAForwardSlashCommand() {
 		InventoryButton withSlash = new InventoryButton(UUID.randomUUID(), "Slash", "/spawn",
-				"minecraft:compass", ButtonAnchor.TOP_LEFT, 0, 0, true);
+				"minecraft:compass", "", "", ButtonRegion.LEFT, 0, false, true);
 
 		List<InventoryButton> exported = InventoryButtonsPayload.of(List.of(withSlash), null).buttons();
 

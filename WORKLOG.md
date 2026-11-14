@@ -2240,3 +2240,339 @@ copy is unaffected.
   changes LegacyText for every color — left out of this pass.
 - The scroll glide's removal is a judgment call: if the player only
   disliked the *accumulation*, a capped scroll glide could come back.
+
+## 2026-11-14 (session 6) — Item rarity, the missing-enchantment line, and native scrollable tooltips
+
+### Research performed and findings
+
+**NEU (1.8.9, Hypixel SkyBlock)** — the assigned reference. Read, not guessed:
+
+- Rarity is *server-provided* there (a `rarity` field in the item JSON of
+  NEU-REPO), never calculated — so the useful references are the color
+  mapping (`Utils.rarityArrC`: white, green, dark_purple, gold, all bold
+  for the lore line), `ItemRarityHalo` (a framebuffer+shader item halo —
+  heavy, 1.8.9-bound, deliberately not copied) and `ChromaColour`
+  (`specialToChromaRGB`: a plain HSB hue rotation from
+  `System.currentTimeMillis()`).
+- Enchant styling (`EnchantStyleCustomizer` + `EnchantMatcher`) matches
+  tooltip lines by regex on rendered text; the matching idea survives,
+  the string regex does not (SkyBlock-only enchant names).
+- ZEA adaptation: same four colors for the four levels, the bold rarity
+  lore line, chroma as an animated hue — applied per line instead of per
+  glyph so no custom font renderer is needed, and computed at tooltip
+  build time (tooltips rebuild every frame while hovered, so the
+  animation costs nothing).
+
+**Minecraft 26.3 registries** (verified against the loom-cached named jar,
+`javap` and the embedded vanilla data, not from memory):
+
+- Enchantments: `Enchantment` is a record; `isSupportedItem(stack)`
+  (tag-driven `supported_items`), `areCompatible(Holder, Holder)`
+  (the `exclusive_set` data), `getMaxLevel()`, and
+  `getFullname(Holder, int)` (the exact vanilla display text,
+  roman numerals included). The registry is **data-driven** in 26.3 —
+  `BuiltInRegistries.ENCHANTMENT` no longer exists; enchantments come
+  from the level's own `RegistryAccess`.
+- Materials: tool classes (SwordItem & co.) are gone; tools are plain
+  items built from `ToolMaterial` records (WOOD, GOLD, STONE, COPPER,
+  IRON, DIAMOND, NETHERITE — copper equipment is new). No material field
+  survives on the item, but each material writes a unique
+  (durability, enchantability) pair into the item components, so the
+  pair recovers the material exactly; the lookup is built from the
+  records themselves. Armor carries an `Equippable` component whose
+  `assetId()` matches the `EquipmentAssets` constants — registry-key
+  identity, no substring matching anywhere.
+- Item kinds: the vanilla tags `#minecraft:swords/axes/pickaxes/shovels/
+  hoes` and `#minecraft:head/chest/leg/foot_armor` decide supported
+  kinds (the `enchantable/*` tags also list shears, skulls and elytra —
+  not used, they are out of scope).
+- Rendering: 26.3 extracts draw commands. `AbstractContainerScreen`
+  exposes `extractSlot` (per-slot, uses `slot.x/y` locals — vanilla's own
+  hover highlight fills the same rectangle), `extractTooltip` and
+  `getTooltipFromContainerItem` (the per-frame tooltip list source),
+  with a protected `hoveredSlot`. Tooltips are *deferred*
+  (`setTooltipForNextFrame`) and drawn in `GuiGraphicsExtractor.tooltip`,
+  which resolves the position through one
+  `ClientTooltipPositioner.positionTooltip` call and then draws
+  background, text and images at explicit coordinates — no matrix
+  translate to hook.
+- Input: `MouseHandler.onScroll(long, double, double)` dispatches into
+  `Screen.mouseScrolled(DDDD)` at exactly one site; shift state comes
+  from `Minecraft.getInstance().hasShiftDown()`.
+
+**ScrollableTooltipsPort (Sk1erLLC)** — read in full. Its mechanics:
+reset on hovered-slot change, translate the tooltip matrix, clamp scroll
+to screen margins (6 px), wheel step 10, shift = horizontal, start-at-top
+reset. Its hooks (1.8.9–1.21.x `drawTooltip*` matrix juggling with
+MixinExtras `@Local`) do not exist on 26.3; the mechanics were rebuilt on
+the position-resolution redirect instead. One scrollable-tooltips mixin
+redirects `positionTooltip` in `GuiGraphicsExtractor.tooltip` — background
+and content all derive from that one result, so nothing can drift apart.
+
+### The rarity model (documented in full in `RarityCalculator`'s javadoc)
+
+- Material tier 0..6: tools wood, gold, stone, copper, iron, diamond,
+  netherite; armor leather, gold, chainmail, copper, iron, diamond,
+  turtle, netherite. Unknown material (modded/edited) → tier 0, never a
+  wrong material.
+- Enchantment fill F = Σ level/maxLevel over the item's compatible,
+  non-neutral enchantments. The budget M = the fill of the best
+  legitimate maxed setup for the item's class (exclusive groups count
+  once — greedy selection, exact for vanilla's clique conflicts), cached
+  per item class and invalidated on disconnect (the registry is
+  data-driven per level).
+- Progress P = F/M measures hypermaxed-ness *within the class*, so a
+  maxed pickaxe (4.0) and a maxed sword (6.0) compare fairly and a bow
+  with Infinity is not punished for lacking Mending.
+- Rarity = clamp(max(material rarity, enchant rarity), ceiling):
+  material rarity `clamp(T-4, 0, 2)` (iron and below Common, diamond
+  Uncommon, netherite Epic); enchant rarity at P ≥ 0.30 / 0.55 /
+  0.85(+F ≥ 3.0); ceiling 1 for tiers 0–1, 2 for 2–4, 3 for 5–6.
+  Worked examples live in the javadoc and the test matrix; every guard
+  is explained there.
+
+### Neutral and preference enchantments
+
+`EnchantPolicy`: Knockback, Thorns, Soul Speed, Swift Sneak, Frost Walker
+and both curses are neutral — zero contribution, never suggested, never
+required for Legendary. Identified by registry key path (resource packs
+cannot move them). Conflict-group leaders for suggestions: Sharpness,
+Protection, Mending, Silk Touch, Loyalty, Multishot, Depth Strider;
+unranked groups fall back to the alphabetical key. Groups are detected
+from the registry (`areCompatible`), not hardcoded.
+
+### Missing enchantments (Shift hover)
+
+`MissingUpgrades`: present-below-max → the next level ("Sharpness IV" →
+"Sharpness V"); absent → the maximum level (the meaningful target);
+conflicts with *held* enchantments (including held neutrals — a Frost
+Walker boot never gets Depth Strider suggested) are impossible and
+skipped; absent group members collapse to the leader; neutrals never
+appear (they are filtered at the budget). Output sorted by display name.
+Rendering: a dark-gray "Missing enchantments:" header plus the gray list
+joined with ", ", wrapped at comma boundaries to
+min(240, screen − 40) glyph units — a single over-long entry is placed
+alone rather than broken or dropped, and the empty list renders nothing.
+The width budget keeps the tooltip box (~256 px worst case) inside even
+the smallest vanilla GUI width (320), so the line can never stretch to
+the screen edge.
+
+### Files
+
+- New: `rarity/{ItemRarity, MaterialTier, EnchantPolicy, EnchantBudget,
+  RarityCalculator, MissingUpgrades, RarityTooltipEditor, RarityEngine}`,
+  `misc/TooltipScroller`,
+  `mixin/{CreativeScreenMixin, GuiGraphicsExtractorMixin,
+  MouseHandlerMixin}`, `duck/HoveredSlotAccess`.
+- Extended: `mixin/ContainerScreenMixin` (slot tint at `extractSlot`
+  HEAD, tooltip edit at `getTooltipFromContainerItem` TAIL, scroller
+  tracking at `extractTooltip` HEAD, scroller reset on `removed`),
+  `config/ZeaConfig` (Rarity category with the Appearance and
+  Enchantment display subcategories, a Miscellaneous category, clamped
+  accessors), `ZeaClient` (cache invalidation on disconnect),
+  `zea.mixins.json` (+3 mixins).
+- Rendering touches nothing but the per-frame tooltip list vanilla
+  builds and a 16×16 background fill; stacks, components and stored lore
+  are never written.
+
+### Tests performed
+
+- `./gradlew build` green; **630 tests, 0 failures** (was 574).
+- `RarityCalculatorTest` (+16) — the full threshold matrix from the
+  spec's verification list: the six unenchanted materials, identical
+  setups on different materials, maxed low/mid/high tiers, partial high
+  tier vs maxed low tier, the 0.85+3.0 Legendary gates, determinism.
+- `MissingUpgradesTest` (+14) — Sharpness IV → only Sharpness V; absent →
+  max level; maxed → silent; Smite blocks Sharpness; a maxed group
+  member blocks the group; absent groups collapse to the leader; held
+  Frost Walker blocks Depth Strider; neutrals absent from suggestions;
+  comma wrapping (short, long, single over-long entry, 30-entry list).
+- `EnchantPolicyTest` (+13) — the neutral set, all leader tables,
+  alphabetical fallback, exclusivity contracts, transitive group shape.
+- `MaterialTierTest` (+7) — fingerprint uniqueness across the seven
+  real materials, the tool ladder, the armor ladder through the real
+  `EquipmentAssets` constants, unknown-pair fallback, non-player assets.
+- `TooltipScrollerTest` (+5) — the clamped bounds math: overflow ranges,
+  bottom margin, pinned content, horizontal semantics, pass-through.
+- `ZeaConfigStructureTest` (+2) — Rarity nests Appearance + Enchantment
+  display; Miscellaneous holds scrollable tooltips.
+- Bootstrap note: `VanillaBootstrap` stays at `Bootstrap.bootStrap()` —
+  26.3 binds item default components only during the data-load flow,
+  which needs datapack tags a test JVM never loads. The tier resolvers
+  expose pure seams precisely so the real registry data stays testable;
+  constructing an `Enchantment` before bootstrapping poisons the test
+  JVM's registries ("Not bootstrapped"), so the fixtures bootstrap
+  first.
+
+### Outstanding problems
+
+- Live verification pending the next session: the tint's visibility at
+  25 % against real inventory textures, the shift list's wrap against
+  real enchantment name lengths, chroma speed (1.8 s cycle) taste, and
+  scrollable-tooltips behavior against MoulConfig's own tooltips (they
+  share `GuiGraphicsExtractor.tooltip`; the scroller only engages for
+  container screens with a hovered slot).
+- The enchantment budget is cached per item class per session; a server
+  whose datapack changes enchantment data mid-session (join → same
+  session, different registries) would keep the old budget until the
+  next disconnect — acceptable, recorded.
+- Copper tools/armor sit at tier 3 (between stone and iron, matching
+  their durability band) — a judgment call recorded in `MaterialTier`.
+
+## 2026-11-15 (session 7) — Inventory buttons v2, the search bar, slot binding and slot locking
+
+### Repository state before work
+
+- Branch `develop`, up to date with origin; the rarity/scrollable-tooltips
+  work from session 6 present as uncommitted changes — all preserved, no
+  resets, no commits made.
+
+### NEU research performed (source + history, not READMEs)
+
+Cloned `NotEnoughUpdates/NotEnoughUpdates` (blobless, full history,
+1550 commits) and read the actual implementations:
+
+- `RenderListener.iterateButtons/renderButtons/onGuiScreenDrawPost` —
+  button rendering, the hover tooltip delay, the click dispatch:
+  `ClientCommandHandler.executeCommand` first, server chat as fallback,
+  click swallowed (not run) while an item is carried.
+- `GuiInvButtonEditor` (991 lines) — the editor: a drawn player-inventory
+  canvas, per-button command field, background/icon-type selectors, a
+  searchable scrollable icon grid, presets from `presets.json`,
+  base64 clipboard share. Presets carry **blank commands** (NEU's
+  default set is 49 positioned placeholders).
+- `NEUOverlay` + `MixinRenderItem`/`MixinGuiContainer` — the search bar:
+  double-click (300 ms) toggles the gray-out mode; matching items get a
+  light overlay under the item, non-matching a dark overlay over it,
+  empty slots darken too; `NeuSearchCalculator.format` appends
+  `§e = §a<result>`; `Calculator` is lexer + shunting-yard + RPN over
+  BigDecimal with a variable hook.
+- `SlotLocking.java` (~830 lines) — `LockedSlot{locked, boundTo}` per
+  profile, per-dimension (Rift) separation; lock key toggles + starts a
+  pairing; click a hotbar slot while held binds; right-click a bound
+  slot performs a synthetic `windowClick(from, to, 2)` swap; hover
+  highlight recolored red; locked slots excluded from `checkHotbarKeys`.
+
+The listed historical commits, each read as a full diff:
+
+- Inventory buttons: `990d552` (accessory-icon overlap: fixed by nudging
+  x), `0f3cfc2` (wardrobe overlap), `3047979` (rift warp menu
+  visibility), `f41be3f` (Buttons Everywhere preset, 1012 buttons),
+  `ba051e5` (third-party `NEUApi.disableInventoryButtons`),
+  `7dd1543` (quick enable/disable toggle), `1ccc013` (hide in dungeon
+  menus), `dc4cd12` (the starts-with menu set fix).
+- Slot locking: `9f2ae5b` (drop race: 1.8.9 could drop the slot the
+  server still had selected after a fast scroll-away; fixed with
+  slot-change timestamps), `8f01042` (keybinds dead over locked slots:
+  caused by nulling `theSlot`; fixed by keeping a "real slot" copy),
+  `fb08aa9` (ninth hotbar slot: excluded from locking entirely),
+  `f402113` (Rift/Overworld separation), `2a3536b` + `ca875b3`
+  (storage/backpack lock disabling).
+- Slot binding: `036d00a` (armor slots: swap index must be the menu slot
+  id 5-8, not the inventory index 36-39), `30fea5f` (chest GUIs:
+  `idChest = id + (size - 45)` converts inventory index to menu id).
+
+### Design decisions (NEU lessons → ZEA)
+
+- **Regions, not pixel offsets.** NEU's overlap history (accessory icons,
+  wardrobe, menu titles) all came from free offsets. ZEA v2 buttons own
+  a region (TOP/BOTTOM/UNDER_SEARCH/LEFT/RIGHT, capacities 8/8/5/8/8)
+  and an order; `ButtonGeometry` computes every rectangle from live
+  screen values. Overflow hides instead of colliding; the recipe book
+  claims the left strip while open.
+- **Preset templates are inert.** Like NEU's default set, preset buttons
+  carry blank commands — nothing invented for EarthMC. The store keeps
+  blank-command buttons (inert data); the share import still rejects
+  them.
+- **Close-on-execute** closes only after `sendCommand` returned and only
+  if the screen is still the same instance (a client command that opened
+  a GUI keeps it).
+- **Binding via the live menu's slot index.** The swap is synthesized
+  with `MultiPlayerGameMode.handleContainerInput(containerId,
+  slot.index, target, SWAP, player)` — the exact call vanilla's number
+  key makes — which structurally absorbs NEU's armor-slot and chest-GUI
+  fixes.
+- **One interception point.** Every click path funnels through
+  `slotClicked(Slot,int,int,ContainerInput)`: one HEAD-inject decides
+  BLOCK/SWAP/PASS; `shouldAddSlotToQuickCraft` excludes locked slots
+  from drags; the drop key without a hovered slot is blocked in
+  `MultiPlayerGameMode.dropItem`. Modern `dropItem` sends the
+  carried-item sync before the drop packet, so NEU's scroll-race guard
+  is unnecessary.
+- **No hover-state nulling.** NEU's dead-keybinds bug cannot recur by
+  construction; the padlock indicator replaces the red hover.
+- **Ninth slot lockable.** MC 26.3's player-inventory numbering (0-8,
+  9-35, 36-39, 40) is clean; NEU's exclusion was a 1.8.9 workaround.
+- **Per-server lock contexts** (connect hostname — the same key history
+  uses), the modern reading of NEU's per-profile/per-dimension split.
+- **Search resets on screen change** (query and mode), fixing NEU's
+  stale-global-search behavior; per-slot search text cached against the
+  stack and revalidated with `ItemStack.matches`.
+- Buttons are no longer EarthMC-gated (the spec requires them to work on
+  other servers); chat keeps its gate.
+
+### Files
+
+- New: `buttons/{ButtonRegion, ButtonPresets, ButtonListScreen}`,
+  `search/{Calculator, SearchText, InventorySearch, SearchOverlay,
+  SearchBarWidget}`, `slots/{SlotLocks, SlotLockStore, SlotGuard,
+  SlotIndicators}`, `mixin/{RecipeBookScreenMixin,
+  MultiPlayerGameModeMixin}`, `duck/RecipeBookAccess`.
+- Rewritten: `buttons/{InventoryButton, ButtonGeometry, ButtonRenderer,
+  ButtonDragSession, ButtonEditForm, ButtonEditScreen,
+  InventoryButtonStore, InventoryButtons}`, `mixin/ContainerScreenMixin`.
+- Extended: `ZeaClient` (subsystems, `/zeabuttons`, lock context on
+  join/leave), `keybind/ZeaKeys` (LOCK_SLOT), `config/ZeaConfig` (the
+  Inventory utilities category with Button placement / Search bar /
+  Slot binding / Slot locking subcategories, the editor launcher
+  runnable, accessors), `share/InventoryButtonsPayload` (v2 wire
+  shape), `zea.mixins.json` (+2 mixins), lang (+47 keys).
+- Also in the same pass: the optional button description (tooltip)
+  field through model/store/share/form/editor/tooltip; the icon
+  quick-picker row in the edit form (ten vanilla icons, one click
+  fills the icon field — no resource-file editing); buttons and the
+  search bar stay off the creative screen, whose tabs and search own
+  its furniture.
+- Schema: buttons.json v1→v2 migration (corner anchors → regions);
+  slotlocks.json v1 (per-server contexts, 41-slot arrays).
+- Docs: `docs/INVENTORY_UTILITIES.md` (renamed from
+  INVENTORY_BUTTONS.md and rewritten), ARCHITECTURE.md module table.
+
+### Tests performed
+
+- `./gradlew build` green; **718 tests, 0 failures** (was 630).
+- Rewritten/extended button tests (+~40): region layout (stacking, recipe
+  book, capacity, screen clipping, drop targets, hit tests), drag
+  session, edit form (region/order/text/close), store v2 round-trip +
+  v1 migration (top/bottom/right mapping, dense repack, blank commands
+  kept), coordinator moves/presets/restore, tooltips, activator
+  close-on-execute semantics.
+- New search tests (+~30): calculator (the spec's 39+4=43 / 34+39=73,
+  precedence, parens, decimals, unary minus, division by zero,
+  incomplete, non-arithmetic, grouping format, repeating division cap),
+  text normalization/matching/OR, overlay colors, search state machine.
+- New slot tests (+~25): guard matrix (every ContainerInput × locked ×
+  hotbar-target × bound-right-click), ninth slot, quick-craft
+  exclusion, drop key, store round-trip/padding/corruption, lock
+  contexts, persistence, pairing flow.
+- MixinSurfaceTest pins the new targets (`init`, `slotClicked`,
+  `shouldAddSlotToQuickCraft`, `extractSlot`,
+  `getTooltipFromContainerItem`, `menu`, `recipeBookComponent`,
+  `dropItem`).
+
+### Outstanding problems
+
+- In-game verification pending (the sandbox cannot run the client):
+  button hitboxes vs rendering at each GUI scale, the search bar's
+  focus/unfocus feel, matching-mode colors against real container
+  textures, lock padlock readability, binding swap in a real chest,
+  recipe-book left-column yield, `/zeabuttons` canvas layout, preset
+  restore flow. Compiled + unit-tested only; not yet visually verified.
+- The double-click collection (PICKUP_ALL) drain-from-locked limitation
+  is shared with NEU and documented.
+- The recipe-book-open detection uses the component's `isVisible()`; a
+  third-party mod embedding its own recipe book UI would need its own
+  exclusion (none known on 26.3 yet).
+- The four session-6 field tests (tint visibility, shift-list wrap,
+  chroma speed, MoulConfig tooltip scrolling) also remain for the
+  in-game pass.

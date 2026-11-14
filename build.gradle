@@ -61,6 +61,9 @@ dependencies {
 
 test {
         useJUnitPlatform()
+        // Field-test data dump: -Dzea.fieldtest.dump=<path> on the gradle
+        // command line reaches the test JVM; unset means no dump.
+        systemProperty 'zea.fieldtest.dump', providers.systemProperty('zea.fieldtest.dump').getOrElse('')
 }
 
 processResources {

@@ -9,6 +9,11 @@
                 "ChatScreenMixin",
                 "MentionHighlightMixin",
                 "ContainerScreenMixin",
+                "CreativeScreenMixin",
+                "GuiGraphicsExtractorMixin",
+                "MouseHandlerMixin",
+                "MultiPlayerGameModeMixin",
+                "RecipeBookScreenMixin",
                 "ScreenMixin"
         ],
         "injectors": {

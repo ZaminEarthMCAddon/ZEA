@@ -23,6 +23,20 @@ public final class ButtonIcons {
 	/** Rendered when the configured icon id does not resolve to an item. */
 	private static final String FALLBACK_ICON = "minecraft:barrier";
 
+	/** The editor's quick-pick icons: common, recognizable, all vanilla. */
+	public static final String[] QUICK_PICK = {
+				"minecraft:compass",
+				"minecraft:chest",
+				"minecraft:ender_chest",
+				"minecraft:book",
+				"minecraft:emerald",
+				"minecraft:clock",
+				"minecraft:map",
+				"minecraft:paper",
+				"minecraft:gold_ingot",
+				"minecraft:nether_star",
+	};
+
 	/** Cache cap; button sets are tiny, this only guards pathological input. */
 	private static final int MAX_CACHE_SIZE = 64;
 

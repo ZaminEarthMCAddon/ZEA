@@ -72,8 +72,25 @@ class ConfigScreenTest {
         void inventoryButtonsStaysTopLevel() {
                 Map<String, ? extends ProcessedCategory> categories =
                                 ConfigScreen.process(new ZeaConfig()).getAllCategories();
-                assertNull(byDisplayName(categories, "Inventory buttons").getParentCategoryId(),
-                                "Inventory buttons is not chat-related and must not nest under Chat");
+                assertNull(byDisplayName(categories, "Inventory utilities").getParentCategoryId(),
+                                "Inventory utilities is not chat-related and must not nest under Chat");
+        }
+
+        @Test
+        void processingNestsTheRaritySubcategoriesUnderRarity() {
+                // The rarity spec's layout: Appearance and Enchantment
+                // display render under Rarity, and Miscellaneous stays
+                // top-level for the small utilities.
+                Map<String, ? extends ProcessedCategory> categories =
+                                ConfigScreen.process(new ZeaConfig()).getAllCategories();
+                ProcessedCategory rarity = byDisplayName(categories, "Rarity");
+                for (String name : List.of("Appearance", "Enchantment display")) {
+                        ProcessedCategory sub = byDisplayName(categories, name);
+                        assertEquals(rarity.getIdentifier(), sub.getParentCategoryId(),
+                                        name + " must nest under Rarity");
+                }
+                assertNull(byDisplayName(categories, "Miscellaneous").getParentCategoryId(),
+                                "Miscellaneous is top-level");
         }
 
         private static ProcessedCategory byDisplayName(Map<String, ? extends ProcessedCategory> categories,

@@ -3,6 +3,7 @@ package net.zaminmc.zea.config;
 import io.github.notenoughupdates.moulconfig.Config;
 import io.github.notenoughupdates.moulconfig.annotations.Category;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean;
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorButton;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorSlider;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorText;
@@ -11,9 +12,14 @@ import io.github.notenoughupdates.moulconfig.annotations.ConfigOrder;
 import io.github.notenoughupdates.moulconfig.common.text.StructuredStyle;
 import io.github.notenoughupdates.moulconfig.common.text.StructuredText;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
+import net.zaminmc.zea.buttons.ButtonListScreen;
+import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.notify.Notification;
+import net.zaminmc.zea.search.SearchOverlay;
+import net.zaminmc.zea.ZeaClient;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -63,6 +69,18 @@ public final class ZeaConfig extends Config {
         /** History size slider bounds, in entries per server. */
         public static final int MIN_HISTORY_ENTRIES = 500;
         public static final int MAX_HISTORY_ENTRIES = 10_000;
+
+        /** Slot-tint intensity slider bounds, in percent. */
+        public static final int MIN_TINT_OPACITY = 10;
+        public static final int MAX_TINT_OPACITY = 60;
+
+        /** Search-dim slider bounds and default, in percent of opacity. */
+        public static final int MIN_SEARCH_DIM = SearchOverlay.MIN_DIM_INTENSITY;
+        public static final int MAX_SEARCH_DIM = SearchOverlay.MAX_DIM_INTENSITY;
+        public static final int DEFAULT_SEARCH_DIM = SearchOverlay.DEFAULT_DIM_INTENSITY;
+
+        /** The MoulConfig runnable id that opens the button editor. */
+        public static final int RUNNABLE_OPEN_BUTTON_EDITOR = 7;
 
         /** The default history size, deliberately far below the maximum. */
         public static final int DEFAULT_HISTORY_ENTRIES = 2_000;
@@ -115,14 +133,139 @@ public final class ZeaConfig extends Config {
                 public History history = new History();
         }
 
-        /** Inventory buttons beside container GUIs. */
+        /**
+         * Inventory utilities: buttons beside container GUIs, the search
+         * bar beneath them, slot binding and slot locking. The {@code
+         * enabled} key is the buttons' master switch (it predates the
+         * others and keeps its stored name).
+         */
         public static final class InventoryButtons {
-                @ConfigOption(name = "Inventory buttons", desc = "Show your custom buttons beside "
-                                + "inventory and chest screens on EarthMC. Buttons run the command "
-                                + "you configured when clicked.")
+                @ConfigOption(name = "Inventory utilities", desc = "Show your custom buttons beside "
+                                + "inventory and chest screens. Buttons run the command you "
+                                + "configured when clicked; the search bar, slot binding and slot "
+                                + "locking have their own switches below.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
                 public boolean enabled = true;
+
+                @ConfigOption(name = "Open button editor", desc = "Open the button editor (also "
+                                + "available as the /zeabuttons command).")
+                @SuppressWarnings("deprecation") // the annotation member is deprecated-but-live; NEU uses it
+                @ConfigEditorButton(runnableId = RUNNABLE_OPEN_BUTTON_EDITOR, buttonText = "Open")
+                @ConfigOrder(1)
+                public boolean openEditor = true;
+
+                @Category(name = "Button placement", desc = "Which button regions are shown.")
+                @ConfigOrder(2)
+                public ButtonPlacement buttonPlacement = new ButtonPlacement();
+
+                @Category(name = "Search bar", desc = "The search bar under the inventory: calculator and item matching.")
+                @ConfigOrder(3)
+                public SearchBar searchBar = new SearchBar();
+
+                @Category(name = "Slot binding", desc = "Bind inventory slots to hotbar slots.")
+                @ConfigOrder(4)
+                public SlotBinding slotBinding = new SlotBinding();
+
+                @Category(name = "Slot locking", desc = "Protect inventory slots from accidental actions.")
+                @ConfigOrder(5)
+                public SlotLocking slotLocking = new SlotLocking();
+        }
+
+        /** Which button regions render. */
+        public static final class ButtonPlacement {
+                @ConfigOption(name = "Top row", desc = "Show buttons placed above the container GUI.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean top = true;
+
+                @ConfigOption(name = "Bottom row", desc = "Show buttons placed below the search bar "
+                                + "(below the GUI when the search bar is off).")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean bottom = true;
+
+                @ConfigOption(name = "Under the search bar", desc = "Show the row of up to five buttons "
+                                + "beneath the search bar. Hidden entirely while the search bar is off.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean underSearch = true;
+
+                @ConfigOption(name = "Left column", desc = "Show buttons left of the container GUI. "
+                                + "They step aside while the recipe book is open.")
+                @ConfigEditorBoolean
+                @ConfigOrder(3)
+                public boolean left = true;
+
+                @ConfigOption(name = "Right column", desc = "Show buttons right of the container GUI.")
+                @ConfigEditorBoolean
+                @ConfigOrder(4)
+                public boolean right = true;
+        }
+
+        /** The inventory search bar. */
+        public static final class SearchBar {
+                @ConfigOption(name = "Search bar", desc = "Show the search bar under inventory and "
+                                + "container screens.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean enabled = true;
+
+                @ConfigOption(name = "Calculator", desc = "Type an arithmetic expression (like "
+                                + "39 + 4) and the result appears in the bar.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean calculator = true;
+
+                @ConfigOption(name = "Double-click matching", desc = "Double-click the bar to enter "
+                                + "matching mode: items whose name or lore match your search are "
+                                + "highlighted and the rest are dimmed.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean doubleClickMatching = true;
+
+                @ConfigOption(name = "Matching highlight color", desc = "The color of the highlight "
+                                + "on matching item slots.")
+                @ConfigEditorDropdown
+                @ConfigOrder(3)
+                public SearchOverlay.HighlightColor highlight = SearchOverlay.HighlightColor.GREEN;
+
+                @ConfigOption(name = "Non-matching dim", desc = "How strongly non-matching items are "
+                                + "darkened, in percent.")
+                @ConfigEditorSlider(minValue = MIN_SEARCH_DIM, maxValue = MAX_SEARCH_DIM, minStep = 1)
+                @ConfigOrder(4)
+                public int dimIntensity = DEFAULT_SEARCH_DIM;
+        }
+
+        /** Slot binding (inventory slot ↔ hotbar slot). */
+        public static final class SlotBinding {
+                @ConfigOption(name = "Slot binding", desc = "Hold the lock key over an inventory "
+                                + "slot and click a hotbar slot to bind them; right-click the bound "
+                                + "slot to swap it with its hotbar partner.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean enabled = true;
+
+                @ConfigOption(name = "Binding indicators", desc = "Show the bound hotbar slot's digit "
+                                + "on bound slots.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean indicators = true;
+        }
+
+        /** Slot locking. */
+        public static final class SlotLocking {
+                @ConfigOption(name = "Slot locking", desc = "Press the lock key over a player "
+                                + "inventory slot to lock it: clicking, shift-clicking, swapping, "
+                                + "dragging and dropping it are blocked. Other keybinds keep working.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean enabled = true;
+
+                @ConfigOption(name = "Lock indicators", desc = "Show a small padlock on locked slots.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean indicators = true;
         }
 
         /** Persistent chat history. */
@@ -314,15 +457,108 @@ public final class ZeaConfig extends Config {
                 public int autoResponseCooldownSeconds = 30;
         }
 
+        /**
+         * Item rarity for tools and armor: Common, Uncommon, Epic,
+         * Legendary, calculated from the item's material and its
+         * enchantment progression.
+         */
+        public static final class Rarity {
+                @ConfigOption(name = "Item rarity", desc = "Rate supported tools and armor "
+                                + "(swords, pickaxes, axes, shovels, hoes, armor pieces) as Common, "
+                                + "Uncommon, Epic or Legendary from the material and the enchantment "
+                                + "setup. Turning this off disables every rarity visual.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean enabled = true;
+
+                @Category(name = "Appearance", desc = "How rarity shows up on items.")
+                @ConfigOrder(1)
+                public Appearance appearance = new Appearance();
+
+                @Category(name = "Enchantment display", desc = "What the tooltip says about "
+                                + "enchantments.")
+                @ConfigOrder(2)
+                public EnchantmentDisplay enchantmentDisplay = new EnchantmentDisplay();
+        }
+
+        /** Rarity appearance: slot tint, name coloring, tooltip label. */
+        public static final class Appearance {
+                @ConfigOption(name = "Slot tint", desc = "Give the slot of a rated item a subtle "
+                                + "background wash in its rarity color. Items, counts, durability "
+                                + "bars and enchantment glints draw on top of it untouched.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean slotTint = true;
+
+                @ConfigOption(name = "Tint intensity", desc = "How strong the slot tint is, in "
+                                + "percent. Lower is subtler.")
+                @ConfigEditorSlider(minValue = MIN_TINT_OPACITY, maxValue = MAX_TINT_OPACITY,
+                                minStep = 5)
+                @ConfigOrder(1)
+                public int tintOpacity = 25;
+
+                @ConfigOption(name = "Rarity-colored names", desc = "Color an item's tooltip name "
+                                + "in its rarity color. Items with a custom name keep that name and "
+                                + "its colors — rarity never overwrites a name you gave the item.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean nameColoring = false;
+
+                @ConfigOption(name = "Rarity in tooltip", desc = "Show the rarity (COMMON, "
+                                + "UNCOMMON, EPIC, LEGENDARY) at the bottom of supported items' "
+                                + "tooltips, in the rarity color.")
+                @ConfigEditorBoolean
+                @ConfigOrder(3)
+                public boolean loreRarity = true;
+        }
+
+        /** Enchantment display: missing upgrades on Shift and max-level chroma. */
+        public static final class EnchantmentDisplay {
+                @ConfigOption(name = "Missing enchantments", desc = "Hold Shift while hovering a "
+                                + "supported tool or armor piece to see its meaningful remaining "
+                                + "upgrades as a gray, comma-separated list. Impossible combinations "
+                                + "and preference enchantments (Knockback, Thorns, ...) are never "
+                                + "listed.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean missingEnchants = true;
+
+                @ConfigOption(name = "Max-level chroma", desc = "Enchantments that have reached "
+                                + "their maximum legitimate level cycle through the colors in the "
+                                + "tooltip. Lower-level enchantments are not touched.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean chroma = false;
+        }
+
+        /** Small quality-of-life features that fit nowhere else. */
+        public static final class Miscellaneous {
+                @ConfigOption(name = "Scrollable tooltips", desc = "When an item tooltip is taller "
+                                + "or wider than the screen, scroll it with the mouse wheel (Shift "
+                                + "scrolls sideways). It stays pinned inside the screen and starts at "
+                                + "the top when you move onto another item.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean scrollableTooltips = true;
+        }
+
         private int configVersion = CURRENT_VERSION;
 
         @Category(name = "Chat", desc = "EarthMC chat: sending, tabs, appearance, notifications, history.")
         @ConfigOrder(0)
         public Chat chat = new Chat();
 
-        @Category(name = "Inventory buttons", desc = "Custom buttons beside container screens.")
+        @Category(name = "Inventory utilities", desc = "Buttons, search bar, slot binding and slot locking.")
         @ConfigOrder(1)
         public InventoryButtons inventoryButtons = new InventoryButtons();
+
+        @Category(name = "Rarity", desc = "Item rarity for tools and armor: calculation and visuals.")
+        @ConfigOrder(2)
+        public Rarity rarity = new Rarity();
+
+        @Category(name = "Miscellaneous", desc = "Small utilities: scrollable tooltips and friends.")
+        @ConfigOrder(3)
+        public Miscellaneous miscellaneous = new Miscellaneous();
 
         /** Set by the store so the MoulConfig editor's saves go through safe-write. */
         private transient Runnable saveAction;
@@ -357,6 +593,29 @@ public final class ZeaConfig extends Config {
                         out.append(StructuredText.of(run.toString()).withStyle(style));
                 }
                 return out;
+        }
+
+        /**
+         * The button-editor launcher for the config's "Open button editor"
+         * button. Deferred through {@link Minecraft#execute} like the
+         * settings screen itself: a command that runs mid-keystroke would
+         * have its screen wiped by the same key's follow-up handling.
+         */
+        @Override
+        @SuppressWarnings("deprecation") // MoulConfig's runnable hook, deprecated-but-live; NEU uses it too
+        public void executeRunnable(int runnableId) {
+                if (runnableId == RUNNABLE_OPEN_BUTTON_EDITOR) {
+                        Minecraft minecraft = Minecraft.getInstance();
+                        net.zaminmc.zea.buttons.InventoryButtons buttons = ZeaClient.inventoryButtons();
+                        if (buttons != null) {
+                                minecraft.execute(() -> minecraft.gui.setScreen(new ButtonListScreen(buttons)));
+                        }
+                }
+        }
+
+        @Override
+        public boolean isValidRunnable(int runnableId) {
+                return runnableId == RUNNABLE_OPEN_BUTTON_EDITOR;
         }
 
         /** An empty MoulConfig style, the base every code applies onto. */
@@ -506,7 +765,120 @@ public final class ZeaConfig extends Config {
 
         /** Whether inventory buttons render; on by default (they do nothing until configured). */
         public boolean inventoryButtonsEnabled() {
-                return inventoryButtons.enabled;
+                return inventoryButtons != null && inventoryButtons.enabled;
+        }
+
+        /** Whether one button region is enabled (the master switch gates it). */
+        public boolean inventoryButtonsRegionEnabled(ButtonRegion region) {
+                if (!inventoryButtonsEnabled() || inventoryButtons.buttonPlacement == null) {
+                        return false;
+                }
+                ButtonPlacement placement = inventoryButtons.buttonPlacement;
+                return switch (region) {
+                        case TOP -> placement.top;
+                        case BOTTOM -> placement.bottom;
+                        case UNDER_SEARCH -> placement.underSearch;
+                        case LEFT -> placement.left;
+                        case RIGHT -> placement.right;
+                };
+        }
+
+        /** Whether the inventory search bar is shown. */
+        public boolean inventorySearchEnabled() {
+                return inventoryButtons != null && inventoryButtons.searchBar != null
+                                && inventoryButtons.searchBar.enabled;
+        }
+
+        /** Whether the search bar evaluates arithmetic. */
+        public boolean inventorySearchCalculatorEnabled() {
+                return inventorySearchEnabled() && inventoryButtons.searchBar.calculator;
+        }
+
+        /** Whether double-click matching mode may be entered. */
+        public boolean inventorySearchMatchingEnabled() {
+                return inventorySearchEnabled() && inventoryButtons.searchBar.doubleClickMatching;
+        }
+
+        /** The matching highlight color, defaulting to green when unset. */
+        public SearchOverlay.HighlightColor inventorySearchHighlight() {
+                if (inventoryButtons == null || inventoryButtons.searchBar == null
+                                || inventoryButtons.searchBar.highlight == null) {
+                        return SearchOverlay.HighlightColor.GREEN;
+                }
+                return inventoryButtons.searchBar.highlight;
+        }
+
+        /** The non-matching dim intensity, clamped to the slider range. */
+        public int inventorySearchDimIntensity() {
+                if (inventoryButtons == null || inventoryButtons.searchBar == null) {
+                        return DEFAULT_SEARCH_DIM;
+                }
+                return (int) Math.clamp(inventoryButtons.searchBar.dimIntensity, MIN_SEARCH_DIM, MAX_SEARCH_DIM);
+        }
+
+        /** Whether slot binding is enabled. */
+        public boolean slotBindingEnabled() {
+                return inventoryButtons != null && inventoryButtons.slotBinding != null
+                                && inventoryButtons.slotBinding.enabled;
+        }
+
+        /** Whether binding indicators are drawn. */
+        public boolean slotBindingIndicatorsEnabled() {
+                return slotBindingEnabled() && inventoryButtons.slotBinding.indicators;
+        }
+
+        /** Whether slot locking is enabled. */
+        public boolean slotLockingEnabled() {
+                return inventoryButtons != null && inventoryButtons.slotLocking != null
+                                && inventoryButtons.slotLocking.enabled;
+        }
+
+        /** Whether lock indicators are drawn. */
+        public boolean slotLockIndicatorsEnabled() {
+                return slotLockingEnabled() && inventoryButtons.slotLocking.indicators;
+        }
+
+        /** Whether the item rarity system runs; the master switch for every rarity visual. */
+        public boolean rarityEnabled() {
+                return rarity != null && rarity.enabled;
+        }
+
+        /** Whether supported items' slots receive the rarity background tint. */
+        public boolean raritySlotTintEnabled() {
+                return rarityEnabled() && rarity.appearance.slotTint;
+        }
+
+        /** The slot-tint intensity, clamped to the slider range. */
+        public int rarityTintOpacity() {
+                if (rarity == null) {
+                        return 25;
+                }
+                return (int) Math.clamp(rarity.appearance.tintOpacity, MIN_TINT_OPACITY, MAX_TINT_OPACITY);
+        }
+
+        /** Whether vanilla item names are recolored to the rarity color; custom names always win. */
+        public boolean rarityNameColoringEnabled() {
+                return rarityEnabled() && rarity.appearance.nameColoring;
+        }
+
+        /** Whether supported items' tooltips end with the rarity label. */
+        public boolean rarityLoreRarityEnabled() {
+                return rarityEnabled() && rarity.appearance.loreRarity;
+        }
+
+        /** Whether holding Shift reveals the missing enchantment upgrades. */
+        public boolean rarityMissingEnchantsEnabled() {
+                return rarityEnabled() && rarity.enchantmentDisplay.missingEnchants;
+        }
+
+        /** Whether maximum-level enchantments carry the chroma animation. */
+        public boolean rarityChromaEnabled() {
+                return rarityEnabled() && rarity.enchantmentDisplay.chroma;
+        }
+
+        /** Whether overflowing tooltips scroll with the mouse wheel. */
+        public boolean scrollableTooltipsEnabled() {
+                return miscellaneous != null && miscellaneous.scrollableTooltips;
         }
 
         /** Whether chat history persists between sessions; on by default, strictly retention-bound. */
