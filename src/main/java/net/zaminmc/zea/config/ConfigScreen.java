@@ -9,6 +9,7 @@ import io.github.notenoughupdates.moulconfig.processor.MoulConfigProcessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.zaminmc.zea.util.LegacyText;
 
 /**
  * Opens the MoulConfig editor for {@link ZeaConfig} — the {@code /zea}
@@ -32,33 +33,44 @@ import net.minecraft.network.chat.Component;
  * store, so {@code checkExpose} is switched off instead of annotating
  * fields for a serializer they never meet.
  *
+ * <p>Opening is deferred through {@link Minecraft#execute} (the dev.26
+ * live defect: {@code /zea} did nothing at all). A client command runs
+ * in the middle of {@code ChatScreen.keyPressed}: vanilla opens the menu
+ * from the Fabric interception, and then — still inside the same Enter
+ * press — the chat screen calls {@code setScreen(null)} to close itself,
+ * wiping the just-opened menu before a single frame renders it. Scheduling
+ * the open onto the client task queue runs it after the chat screen has
+ * finished closing, so the menu stays up.
+ *
  * <p>Works anywhere — configuration is not EarthMC-specific. Closing the
  * editor returns to whatever screen the player opened it from.
  */
 public final class ConfigScreen {
-	private ConfigScreen() {
-	}
+        private ConfigScreen() {
+        }
 
-	/** Processes the config into the shape the editor renders. */
-	public static MoulConfigProcessor<ZeaConfig> process(ZeaConfig config) {
-		MoulConfigProcessor<ZeaConfig> processor = MoulConfigProcessor.withDefaults(config);
-		ConfigProcessorDriver driver = new ConfigProcessorDriver(processor);
-		driver.checkExpose = false;
-		driver.processConfig(config);
-		return processor;
-	}
+        /** Processes the config into the shape the editor renders. */
+        public static MoulConfigProcessor<ZeaConfig> process(ZeaConfig config) {
+                MoulConfigProcessor<ZeaConfig> processor = MoulConfigProcessor.withDefaults(config);
+                ConfigProcessorDriver driver = new ConfigProcessorDriver(processor);
+                driver.checkExpose = false;
+                driver.processConfig(config);
+                return processor;
+        }
 
-	/** Builds the editor screen; {@code previous} is restored on close. */
-	public static Screen create(ZeaConfig config, Screen previous) {
-		MoulConfigEditor<ZeaConfig> editor = new MoulConfigEditor<>(process(config));
-		return new MoulConfigScreenComponent(
-				Component.literal("ZEA"),
-				new GuiContext(new GuiElementComponent(editor)),
-				previous);
-	}
+        /** Builds the editor screen; {@code previous} is restored on close. */
+        public static Screen create(ZeaConfig config, Screen previous) {
+                MoulConfigEditor<ZeaConfig> editor = new MoulConfigEditor<>(process(config));
+                return new MoulConfigScreenComponent(
+                                LegacyText.parse(ZeaConfig.MENU_TITLE_CODED),
+                                new GuiContext(new GuiElementComponent(editor)),
+                                previous);
+        }
 
-	/** Builds and shows the editor; call on the client thread. */
-	public static void open(Minecraft minecraft, ZeaConfig config) {
-		minecraft.gui.setScreen(create(config, minecraft.gui.screen()));
-	}
+        /** Builds and shows the editor; call on the client thread. */
+        public static void open(Minecraft minecraft, ZeaConfig config) {
+                // Deferred — see the class javadoc: a screen opened during a
+                // chat-screen send is closed again before it can render.
+                minecraft.execute(() -> minecraft.gui.setScreen(create(config, minecraft.gui.screen())));
+        }
 }
