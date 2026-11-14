@@ -12,25 +12,25 @@ import java.util.function.Predicate;
  * Applies the selected display feed — and, while a chat search is open,
  * its query — to the vanilla chat as its official
  * {@code visibleMessageFilter}. Switching feeds and searches must be
- * reversible: every message stays retrievable, so returning to the All
+ * reversible: every message stays retrievable, so returning to the General
  * tab (or any other feed) shows the full history again.
  *
  * <p>Vanilla, however, applies the filter as an <b>ingest gate</b>:
  * {@code ChatComponent.addMessage} returns before its store calls when
  * the filter rejects, so a message hidden by the selected feed would be
  * dropped from the chat entirely — nothing retains it, and switching
- * back to All could not restore it (verified against the 26.3 bytecode:
+ * back to General could not restore it (verified against the 26.3 bytecode:
  * the reject branch skips both {@code addMessageToDisplayQueue} and
  * {@code addMessageToQueue}). ZEA therefore installs only
  * {@link Installed} predicates, and ChatComponentMixin's retention wrap
  * stores a message an {@code Installed} predicate rejected into
  * {@code allMessages} before vanilla drops it: hidden from the display
- * list now, retained for every later feed, search and the All
- * aggregate. The wrap ignores any filter ZEA did not install —
+ * list now, retained for every later feed, search and the General
+  * aggregate. The wrap ignores any filter ZEA did not install —
  * vanilla's own chat-trust filter and other mods' filters keep vanilla's
  * drop semantics untouched.
  *
- * <p>The All tab contributes no feed predicate of its own, which also
+ * <p>The General tab contributes no feed predicate of its own, which also
  * restores messages ZEA never classified (shown by vanilla as usual); a
  * search, however, filters even on All.
  *

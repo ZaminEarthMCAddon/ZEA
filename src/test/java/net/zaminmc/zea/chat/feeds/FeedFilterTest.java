@@ -171,11 +171,11 @@ class FeedFilterTest {
 	 * Vanilla's chat requires a non-null visibleMessageFilter — the field
 	 * starts always-true and addMessage tests it without a null check, so a
 	 * null install throws on the next incoming message and drops the
-	 * connection. The All tab (also: the disconnect reset) must therefore
+	 * connection. The General tab (also: the disconnect reset) must therefore
 	 * install "show everything", not null.
 	 */
 	@Test
-	void allTabInstallsNonNullAlwaysTrueFilter() {
+	void generalTabInstallsNonNullAlwaysTrueFilter() {
 		Predicate<GuiMessage> installed = filter.installableFilter();
 
 		assertNotNull(installed);

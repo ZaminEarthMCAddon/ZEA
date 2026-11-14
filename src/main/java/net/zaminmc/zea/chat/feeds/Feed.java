@@ -14,23 +14,23 @@ import java.util.Set;
  * @param categories categories shown in this feed
  */
 public record Feed(String id, String label, Set<MessageCategory> categories) {
-	public Feed {
-		if (id == null || label == null || categories == null || categories.isEmpty()) {
-			throw new IllegalArgumentException("feed fields must be non-null and categories non-empty");
-		}
-		categories = Set.copyOf(categories);
-	}
+        public Feed {
+                if (id == null || label == null || categories == null || categories.isEmpty()) {
+                        throw new IllegalArgumentException("feed fields must be non-null and categories non-empty");
+                }
+                categories = Set.copyOf(categories);
+        }
 
-	public boolean shows(ClassifiedMessage message) {
-		return categories.contains(message.category());
-	}
+        public boolean shows(ClassifiedMessage message) {
+                return categories.contains(message.category());
+        }
 
-	/**
-	 * Whether this feed shows every category, including unclassified
-	 * messages — true only for aggregates like All. Such feeds can skip
-	 * chat filtering entirely and let vanilla show everything.
-	 */
-	public boolean showsEverything() {
-		return categories.size() == MessageCategory.values().length;
-	}
+        /**
+         * Whether this feed shows every category, including unclassified
+         * messages — true only for aggregates like General. Such feeds can
+         * skip chat filtering entirely and let vanilla show everything.
+         */
+        public boolean showsEverything() {
+                return categories.size() == MessageCategory.values().length;
+        }
 }
