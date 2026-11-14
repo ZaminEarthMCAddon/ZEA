@@ -41,14 +41,14 @@ class MentionAutoResponderTest {
 		responder.onMention(mention("Coriolanus", "hey Zamin", MessageCategory.GLOBAL), NOW);
 
 		assertEquals(1, sent.size());
-		assertEquals("g", sent.get(0).command());
+		assertEquals("global", sent.get(0).command());
 		assertEquals(RESPONSE, sent.get(0).arguments());
 	}
 
 	@Test
 	void blankTextIsInert() {
-		config.mentions.autoRespond = true;
-		config.mentions.autoResponseText = "   ";
+		config.chat.mentions.autoRespond = true;
+		config.chat.mentions.autoResponseText = "   ";
 
 		responder.onMention(mention("Coriolanus", "hey Zamin", MessageCategory.GLOBAL), NOW);
 
@@ -133,8 +133,8 @@ class MentionAutoResponderTest {
 	}
 
 	private void enable() {
-		config.mentions.autoRespond = true;
-		config.mentions.autoResponseText = RESPONSE;
+		config.chat.mentions.autoRespond = true;
+		config.chat.mentions.autoResponseText = RESPONSE;
 	}
 
 	private Mention mention(String speaker, String content, MessageCategory category) {
