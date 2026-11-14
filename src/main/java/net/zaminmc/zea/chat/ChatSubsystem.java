@@ -197,6 +197,23 @@ public final class ChatSubsystem {
 		return history;
 	}
 
+	/**
+	 * Clears the chat the player sees together with the history
+	 * remembered for this server — persistent store included, so the
+	 * cleared messages do not return on the next join. The up-arrow
+	 * sent-message recall deliberately survives: the 26.3
+	 * {@code clearMessages} boolean resets the recall back to raw
+	 * command history, and wiping what the player typed is not what
+	 * "clear the chat" asks for.
+	 */
+	public void clearChatHistory() {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.gui != null) {
+			minecraft.gui.hud.getChat().clearMessages(false);
+		}
+		historyRecorder.clear();
+	}
+
 	/** Flushes pending history writes; called before the executor closes. */
 	public void shutdownHistory() {
 		historyRecorder.flush();

@@ -253,4 +253,107 @@ class HistoryRecorderTest {
 		assertEquals(Optional.of("still recorded"),
 				history.snapshot().stream().map(HistoryEntry::plainText).findFirst());
 	}
+
+	@Test
+	void clearEmptiesTheSessionAndPersistsTheEmptiness() throws IOException {
+		Files.createDirectories(historyFile().getParent());
+		new HistoryStore(historyFile()).save(List.of(entry("keep me not", 1_000)));
+		ChatHistory history = new ChatHistory(10);
+		HistoryRecorder recorder = recorder(history, new ZeaConfig(), Runnable::run);
+		recorder.start(dir.resolve("history"), EARTHMC);
+
+		history.append(entry("session message", now[0]));
+		recorder.clear();
+
+		assertEquals(0, history.size(), "the clear button's job is an empty session");
+		List<HistoryEntry> onDisk = new HistoryStore(historyFile()).load(100);
+		assertTrue(onDisk.isEmpty(),
+				"a cleared history must not resurrect on the next join");
+	}
+
+	@Test
+	void clearWithoutPersistenceOnlyEmptiesTheSession() throws IOException {
+		Files.createDirectories(historyFile().getParent());
+		new HistoryStore(historyFile()).save(List.of(entry("old", 1_000)));
+		ZeaConfig config = new ZeaConfig();
+		config.history.enabled = false;
+		ChatHistory history = new ChatHistory(10);
+		HistoryRecorder recorder = recorder(history, config, Runnable::run);
+		recorder.start(dir.resolve("history"), EARTHMC);
+
+		history.append(entry("session", now[0]));
+		recorder.clear();
+
+		assertEquals(0, history.size());
+		assertEquals(List.of("old"),
+				new HistoryStore(historyFile()).load(100).stream()
+						.map(HistoryEntry::plainText).toList(),
+				"with persistence off the file was never ZEA's to touch");
+	}
+
+	@Test
+	void clearLandsEvenWhenAWriteIsInFlight() {
+		Deque<Runnable> queue = new ArrayDeque<>();
+		Executor deferring = queue::add;
+		ChatHistory history = new ChatHistory(10);
+		HistoryRecorder recorder = recorder(history, new ZeaConfig(), deferring);
+		recorder.start(dir.resolve("history"), EARTHMC);
+		queue.poll().run(); // the deferred load completes
+
+		history.append(entry("doomed", now[0]));
+		recorder.markDirty();
+		now[0] = HistoryRecorder.FLUSH_INTERVAL_MILLIS;
+		recorder.tick();
+		assertTrue(recorder.writing(), "a save with the message is in flight");
+
+		recorder.clear();
+		assertEquals(1, queue.size(),
+				"no second write is submitted while one is in flight");
+
+		queue.poll().run(); // the in-flight save (with the message) lands
+		assertFalse(recorder.writing());
+
+		recorder.tick(); // the dirty flag from clear flushes the empty buffer
+		queue.poll().run();
+
+		assertTrue(new HistoryStore(historyFile()).load(100).isEmpty(),
+				"the emptiness must win over the in-flight save, just later");
+	}
+
+	@Test
+	void clearDropsAJoinLoadStillInFlight() throws IOException {
+		Files.createDirectories(historyFile().getParent());
+		new HistoryStore(historyFile()).save(List.of(entry("from an earlier session", 1_000)));
+		Deque<Runnable> queue = new ArrayDeque<>();
+		Executor deferring = queue::add;
+		ChatHistory history = new ChatHistory(10);
+		HistoryRecorder recorder = recorder(history, new ZeaConfig(), deferring);
+
+		recorder.start(dir.resolve("history"), EARTHMC);
+		assertEquals(1, queue.size(), "the join load is queued, not yet landed");
+
+		recorder.clear(); // the player clears before the load reports back
+		assertEquals(2, queue.size(), "the empty save queues behind the load");
+
+		queue.poll().run(); // the load reads the old file…
+		queue.poll().run(); // …but its callback is dropped, and the empty save lands
+
+		assertEquals(0, history.size(),
+				"a load from before the clear must not re-seed the old messages");
+		assertTrue(new HistoryStore(historyFile()).load(100).isEmpty());
+	}
+
+	@Test
+	void clearSurvivesDisconnectWithoutFurtherTicks() {
+		ChatHistory history = new ChatHistory(10);
+		HistoryRecorder recorder = recorder(history, new ZeaConfig(), Runnable::run);
+		recorder.start(dir.resolve("history"), EARTHMC);
+
+		history.append(entry("gone at logout", now[0]));
+		recorder.clear();
+		recorder.stop();
+
+		assertTrue(new HistoryStore(historyFile()).load(100).isEmpty(),
+				"the disconnect flush must still carry the clear");
+	}
 }

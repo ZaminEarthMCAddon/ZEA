@@ -53,6 +53,8 @@ public final class HistoryRecorder {
 	private boolean writing;
 	private long lastFlushAt;
 	private long lastRetentionAt;
+	/** Bumped whenever the remembered past becomes irrelevant: a new session, a clear. */
+	private int session;
 
 	/**
 	 * @param history        the session's history buffer
@@ -78,6 +80,8 @@ public final class HistoryRecorder {
 	 * thread on IO).
 	 */
 	public void start(Path historyDirectory, ServerIdentity server) {
+		session++;
+		final int generation = session;
 		history.clear();
 		store = null;
 		dirty = false;
@@ -89,7 +93,7 @@ public final class HistoryRecorder {
 		if (!submit(() -> {
 			List<HistoryEntry> loaded = fresh.load(config.historyMaxEntries());
 			toClientThread.accept(() -> {
-				if (store == fresh) {
+				if (store == fresh && generation == session) {
 					history.prependAll(loaded);
 				}
 			});
@@ -162,6 +166,31 @@ public final class HistoryRecorder {
 		flush();
 		history.clear();
 		store = null;
+	}
+
+	/**
+	 * Clears everything remembered for this session and persists the
+	 * emptiness: the player asked for the history gone, so the next
+	 * join must not resurrect it. A write already in flight is allowed
+	 * to land first (the executor is sequential, so it cannot land
+	 * after the empty one); the dirty flag set here guarantees the
+	 * empty buffer is written by the very next flush — the next tick
+	 * once the in-flight write reports back, or at the latest on
+	 * disconnect. The session generation also invalidates a join
+	 * load still in flight, whose callback would otherwise re-seed
+	 * the old messages right back over the clear.
+	 */
+	public void clear() {
+		session++;
+		history.clear();
+		if (store == null) {
+			// Persistence off: nothing on disk belongs to this session,
+			// so the emptied buffer is the whole job.
+			return;
+		}
+		dirty = true;
+		lastFlushAt = 0L;
+		flush();
 	}
 
 	/** Whether a write is currently in flight; exposed for tests. */
