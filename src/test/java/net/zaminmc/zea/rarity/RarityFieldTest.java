@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -491,6 +492,58 @@ class RarityFieldTest {
                 }
                 assertEquals(5.0, bootsFill, 1e-9);
                 assertEquals(ItemRarity.LEGENDARY, RarityCalculator.calculate(5, bootsFill, 5.0));
+        }
+
+        @Test
+        void sameEnchantmentsScoreIdenticallyOnEveryClient() {
+                // Two players see the same sword through different holder
+                // instances — each client's registry interns its own — so
+                // the identity-keyed component maps hold different objects
+                // and can walk their entries in different orders. Each
+                // client sums the fill over its own budget list in the
+                // canonical registry-key order (the iteration
+                // RarityEngine.fillOf performs, reading levels through
+                // getLevel); the key order is identical on both clients,
+                // so the two fills must agree bitwise — never just within
+                // an epsilon.
+                RarityFieldTest otherClient = new RarityFieldTest();
+                ItemEnchantments local = enchantments(this,
+                                "Sharpness", "4", "Fire Aspect", "1", "Looting", "2",
+                                "Mending", "1", "Unbreaking", "3");
+                ItemEnchantments remote = enchantments(otherClient,
+                                "Unbreaking", "3", "Mending", "1", "Looting", "2",
+                                "Fire Aspect", "1", "Sharpness", "4");
+
+                double localFill = canonicalFill(compatible("sword"), local);
+                double remoteFill = canonicalFill(otherClient.compatible("sword"), remote);
+
+                // Sharpness IV 4/5 + Fire Aspect I 1/2 + Looting II 2/3
+                // + Mending 1 + Unbreaking 1 ≈ 3.97 — Epic progress on a
+                // netherite sword either way.
+                assertEquals(localFill, remoteFill);
+                assertEquals(4.0 / 5 + 1.0 / 2 + 2.0 / 3 + 1.0 + 1.0, localFill, 1e-9);
+                assertEquals(ItemRarity.EPIC, RarityCalculator.calculate(6, localFill, 6.0));
+                assertEquals(ItemRarity.EPIC, RarityCalculator.calculate(6, remoteFill, 6.0));
+        }
+
+        /**
+         * The fill as RarityEngine.fillOf computes it: the budget's list
+         * in canonical registry-key order, each level read through
+         * getLevel from the client's own component.
+         */
+        private static double canonicalFill(List<EnchantBudget.Compatible> budget,
+                        ItemEnchantments held) {
+                List<EnchantBudget.Compatible> canonical = new ArrayList<>(budget);
+                canonical.sort(Comparator.comparing(candidate -> candidate.enchantment()
+                                .unwrapKey().orElseThrow().identifier().toString()));
+                double fill = 0.0;
+                for (EnchantBudget.Compatible candidate : canonical) {
+                        int level = held.getLevel(candidate.enchantment());
+                        if (level > 0) {
+                                fill += candidate.fillAt(level);
+                        }
+                }
+                return fill;
         }
 
         @Test

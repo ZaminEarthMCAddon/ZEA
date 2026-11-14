@@ -10,7 +10,6 @@ import net.zaminmc.zea.config.ZeaConfig;
 import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The rarity engine — the single facade rendering and tooltips ask. Pure
@@ -118,6 +117,17 @@ public final class RarityEngine {
          * compatible, non-neutral enchantments. Unsupported or neutral
          * entries contribute nothing — a stack can carry an enchantment
          * its class does not accept (commands), and that must not score.
+         *
+         * <p><b>Client independence.</b> The sum iterates the budget's
+         * canonically ordered list (registry-key order, see {@link
+         * EnchantBudget}) and reads each level through {@code getLevel}
+         * — never the component's own entry set. {@code ItemEnchantments}
+         * is backed by an identity-hashed open-addressing map, so its
+         * iteration order differs between JVMs; summing over it could
+         * round the floating-point total differently on different
+         * clients. Summing over the sorted budget list makes the fill —
+         * and with it the rarity — bit-for-bit identical for every
+         * player seeing the same item in the same world.
          */
         private static double fillOf(ItemEnchantments enchantments, ItemStack stack) {
                 if (enchantments.isEmpty()) {
@@ -125,21 +135,11 @@ public final class RarityEngine {
                 }
                 EnchantBudget budget = EnchantBudget.of(stack.getItem(), registryLookup());
                 double fill = 0.0;
-                for (Map.Entry<net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment>, Integer> entry : enchantments
-                                .entrySet()) {
-                        net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> enchantment =
-                                        entry.getKey();
-                        if (EnchantPolicy.isNeutral(enchantment)) {
-                                continue;
+                for (EnchantBudget.Compatible compatible : budget.compatible()) {
+                        int level = enchantments.getLevel(compatible.enchantment());
+                        if (level > 0 && !EnchantPolicy.isNeutral(compatible.enchantment())) {
+                                fill += compatible.fillAt(level);
                         }
-                        EnchantBudget.Compatible compatible = budget.compatible().stream()
-                                                        .filter(candidate -> candidate.enchantment() == enchantment)
-                                                        .findFirst()
-                                                        .orElse(null);
-                        if (compatible == null) {
-                                continue;
-                        }
-                        fill += compatible.fillAt(entry.getValue());
                 }
                 return fill;
         }

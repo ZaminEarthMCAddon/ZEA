@@ -2576,3 +2576,63 @@ The listed historical commits, each read as a full diff:
 - The four session-6 field tests (tint visibility, shift-list wrap,
   chroma speed, MoulConfig tooltip scrolling) also remain for the
   in-game pass.
+
+## 2026-11-15 (session 8) — Rarity determinism audit: one cross-client hazard found and fixed
+
+### The question
+
+"Are rarity calculations consistent? Won't two players get entirely
+different rarity for the same item and enchantments?" Answered by
+auditing every input to the tier, not by reassuring:
+
+- **Material tier** — a pure lookup of the item type's
+  (durability, enchantability) pair; vanilla data, identical on every
+  client.
+- **Enchantment budget** — `EnchantBudget.compute` sorts its candidate
+  list by registry key before the greedy selection and the maxFill sum,
+  and the enchantment registry is server-synced, so every client on the
+  same world derives the same budget. Datapack worlds can legitimately
+  differ — rarity measures progression under *that world's* rules, the
+  same context separation NEU applies between dimensions.
+- **Neutral classification / group leaders** — key-path based
+  (`minecraft:knockback`), immune to resource packs and translations.
+- **The cache** — memoization only; `ItemEnchantments` overrides
+  `equals` order-independently, and a flush recomputes the same value.
+
+### The hazard
+
+`RarityEngine.fillOf` summed the floating-point `level/maxLevel` fill
+by iterating the component's `entrySet()`. Verified against the
+loom-cached 26.3 jar: `ItemEnchantments` is backed by an
+`Object2IntOpenHashMap` keyed by `Holder.Reference`, which does **not**
+override `hashCode`/`equals` — identity hashing. Iteration order of the
+same logical enchantment set therefore differs between JVMs, and since
+floating-point addition is not associative, two clients could round
+the fill differently. It would take a progress value sitting within an
+ulp of a threshold (0.30 / 0.55 / 0.85 / the 3.0 fill floor) to
+actually diverge — vanishingly rare, but the calculator's javadoc
+promises "same material, same enchantments → same rarity, always", so
+the hole is closed rather than excused.
+
+### The fix
+
+`fillOf` now iterates the budget's canonically ordered list (registry
+key order) and reads each level through `getLevel` — the component's
+map is never walked. The sum order is then a pure function of registry
+content, identical on every client, making the fill bit-for-bit
+reproducible. (Also removed an unused `ConcurrentHashMap` import.)
+
+### Test
+
+`RarityFieldTest.sameEnchantmentsScoreIdenticallyOnEveryClient` — two
+independently built "clients" (separate holder pools, so the component
+maps really are keyed by different objects and can order differently)
+each sum their own budget in canonical key order; the fills must match
+bitwise, never merely within an epsilon, and both must classify the
+same partially-enchanted netherite sword as Epic. Writing it surfaced a
+fixture subtlety worth remembering: `Holder.Reference` equality is
+identity, so a component built from one client's holders cannot be
+queried with another client's holders — each client's budget must be
+built from its own registry, exactly as in production.
+
+`./gradlew build` green; **719 tests, 0 failures** (was 718).
