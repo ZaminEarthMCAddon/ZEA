@@ -2094,3 +2094,149 @@ carries the emptiness). Both are pinned by tests.
   were not adapted; neither was requested and both are separate
   features, not parts of the search/clear ask.
 - The EarthMC API client (hover cards) stays parked.
+
+## 2026-11-14 (session 5) — The third live report: /zea, sends by tab, General, the scroll drift, and the menu rewrite
+
+### What happened
+
+Five live reports landed together, all on the action-row build:
+
+1. `/zea` does absolutely nothing; the menu is reachable only through
+   ModMenu.
+2. A message typed while a channel tab is selected should go to that
+   channel (`/global <msg>` on Global, `/local`, `/nc`, `/tc`,
+   `/tradechat`).
+3. The "All" tab should be "General" — one tab that shows every channel's
+   messages plus everything else.
+4. While scrolling, the whole chat element drifts up and down ("type shit
+   happening").
+5. The config menu title should read "Zamin's EarthMC Addon - Created by
+   Abasing" (given as `&`-coded text), and the chat-related config
+   categories should nest under Chat instead of standing side by side.
+   Plus: channel messages should carry a slight yellow text tint so the
+   player can tell where a message arrived; everything else keeps its
+   colors ("already red" is the mention highlight's job).
+
+### The /zea root cause, verified in the 26.3 bytecode
+
+`ChatScreen.keyPressed` on Enter calls `handleChatInput` first and THEN,
+unconditionally, `gui.setScreen(null)` (closeOnSubmit). A client command
+executes inside that first call: Fabric's interception opens the config
+screen, and the very next statement of the same key press closes it —
+the menu opens and dies inside one call stack, never rendering a frame.
+"Absolutely nothing" was literal.
+
+Fix: `ConfigScreen.open` now schedules the open through
+`Minecraft.execute`, so it runs after the chat screen has finished
+closing. The previous-screen capture happens at task time too, so the
+editor's back target is the game, not the closing chat.
+
+### Sends by selected tab
+
+`ChatSubsystem.sendToSelectedChannel(feed, message)` routes through the
+existing `OutgoingRouter` + interval-spaced dispatcher; the chat screen's
+`handleChatInput` hook tries multi-send first (unchanged), then single-
+channel routing for non-command text on a channel feed. General, PMs and
+event feeds fall through to vanilla plain chat. Slash commands stay
+vanilla in both branches. Global's per-message command is now
+`global`, not `g` — both are verified in the ZEA-REPO channels table;
+the player asked for the full word. Single-channel routing is
+deliberately not gated behind the multi-send setting: it is core tab
+behavior, and the dispatch queue still spaces rapid sends.
+
+### General, and the unclassified tab renamed
+
+`Feeds.ALL` keeps its stable `all` id (config and tests reference it)
+but its label is now "General". The hidden unclassified feed —
+previously also labeled "General" — becomes "Other" (config option
+"Other tab"), so the aggregate owns the name.
+
+### The scroll drift
+
+The smooth-chat glide was hooked into `scrollChat` and
+`resetChatScroll` too: every wheel notch shifted the whole chat pose by
+the eased remainder, and consecutive notches accumulated (each shift
+adds its remainder and restarts the clock), so fast scrolling
+rubber-banded the entire panel — lines and their backgrounds are drawn
+inside the pose the render hook translates. Scrolling is now instant,
+like vanilla; the glide survives exactly where it reads as polish — new
+messages arriving at the bottom. `SmoothChat` itself is untouched; the
+scroll/reset hooks are gone from `ChatComponentMixin`.
+
+### The menu title and the nested categories
+
+- `Config.getTitle()` (MoulConfig's default is literally "Config GUI")
+  is overridden with the coded title, parsed into MoulConfig
+  `StructuredText` runs (colors via `TextColor.fromLegacyFormat` — the
+  26.3 `ChatFormatting` no longer carries RGB itself). The Screen title
+  component parses the same string through the new
+  `LegacyText.parse` (`&` and `§` forms, formats and resets, unknown
+  markers stay literal).
+- The config layout is now two top-level categories: **Chat** (multi-
+  send, dispatch interval, channel tint) with the **Tabs**, **Chat
+  interface**, **Notifications**, **Mentions** and **Chat history**
+  subcategories nested inside it, and **Inventory buttons**. MoulConfig
+  4.8.0 supports one nesting level: a `@Category` field inside a
+  category class becomes a subcategory (verified against the bundled
+  processor driver bytecode — `processCategoryMeta` recurses through the
+  collected bound fields and calls `setCategoryParent`).
+- Schema version 2: Gson cannot move whole objects at the value level
+  (unknown fields drop silently), so `JsonStore` gained a tree-level
+  migration hook — the v1 file's five chat category objects are hoisted
+  under `chat` before deserialization, values untouched, and the file
+  is rewritten immediately. A current-version file passes through
+  byte-identical. The share payload's wire format is untouched (it is
+  its own format; only the config field paths inside `of`/`applyTo`
+  moved).
+
+### The slight yellow
+
+`ChannelTint` (new, `chat.render`): a message classified into one of the
+five writable channels gets a tinted copy of its component for display
+wrapping — every run's *effective* color blended 35% toward warm yellow
+(`0xFFE878`; colorless runs blend from white). Styles are resolved the
+way `Component.visit` resolves them (own style over the parent's
+effective, siblings inherit) and baked per node, so bold/italic/hover/
+click carry over and inherited colors land correctly. The wrap happens
+inside the split-lines memoization hook: the tinted lines are computed
+once and memoized under the original message — the stored message is
+never modified, so copying, mention identity (which keys on component
+identity) and history all see the original. Behind a "Channel tint"
+option (Chat, default on). Known trade-off: formatted copy of a tinted
+line emits the blended RGBs, which have no legacy codes — the plain
+copy is unaffected.
+
+### Tests performed
+
+- `./gradlew build` green; **574 tests, 0 failures** (was 554).
+- `ChannelTintTest` (new, 8) — white and colored blends, blend-is-not-a-
+  repaint, input never modified, per-sibling colors, inherited colors
+  resolve before blending, non-color styles survive, determinism.
+- `LegacyTextTest` (+6) — the coded title splits into three colored
+  runs, `§` form, format flags and reset, unknown marker stays literal,
+  empty/null, uppercase codes.
+- `ZeaConfigTest` (+2, rewritten 2) — v1 file's categories hoist under
+  `chat` with every value carried over and the flat layout gone after
+  the rewrite; a current-version file is not rewritten; v0 migration
+  updated for the new version constant.
+- `ConfigScreenTest` (+2) — the processor records the parent link for
+  all five subcategories; Inventory buttons stays top-level.
+- `ZeaConfigStructureTest` — rewritten for the nesting: every Chat field
+  is exactly one of option or subcategory, the five subcategories are
+  not top-level, options checked recursively through nested categories.
+- `OutgoingRouterTest` — global routes through `global`.
+- `MentionAutoResponderTest` — auto-responses on Global go through
+  `global` too.
+
+### Outstanding problems
+
+- Live verification pending the next session: `/zea` opening (and the
+  ModMenu path unchanged), sends landing on the selected tab's channel,
+  the General tab label, instant scrolling with the arrival glide kept,
+  the title/colors, the nested menu, and the tint's visibility against
+  EarthMC's actual line colors.
+- Formatted copy of tinted lines loses legacy codes (blended RGBs);
+  rounding blended colors to the nearest legacy code would fix it but
+  changes LegacyText for every color — left out of this pass.
+- The scroll glide's removal is a judgment call: if the player only
+  disliked the *accumulation*, a capped scroll glide could come back.
