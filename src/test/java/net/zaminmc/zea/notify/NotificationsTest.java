@@ -83,7 +83,7 @@ class NotificationsTest {
 
 	@Test
 	void disabledNotificationsShowNothingButStillResolve() {
-		config.notifications.pmNotifications = false;
+		config.chat.notifications.pmNotifications = false;
 
 		notifications.onClassified(pm("Coriolanus", "psst", PrivateMessage.Direction.INCOMING), NOW);
 
@@ -96,7 +96,7 @@ class NotificationsTest {
 
 	@Test
 	void disabledSoundStaysSilent() {
-		config.notifications.pmSound = false;
+		config.chat.notifications.pmSound = false;
 
 		notifications.onClassified(pm("Coriolanus", "psst", PrivateMessage.Direction.INCOMING), NOW);
 
@@ -106,7 +106,7 @@ class NotificationsTest {
 
 	@Test
 	void titleDestinationIsConfigurable() {
-		config.notifications.pmDestination = Notification.Destination.TITLE;
+		config.chat.notifications.pmDestination = Notification.Destination.TITLE;
 
 		notifications.onClassified(pm("Coriolanus", "psst", PrivateMessage.Direction.INCOMING), NOW);
 
@@ -116,7 +116,7 @@ class NotificationsTest {
 
 	@Test
 	void unsetDestinationFallsBackToActionBar() {
-		config.notifications.pmDestination = null;
+		config.chat.notifications.pmDestination = null;
 
 		notifications.onClassified(pm("Coriolanus", "psst", PrivateMessage.Direction.INCOMING), NOW);
 

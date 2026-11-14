@@ -17,15 +17,15 @@ class GeneralConfigPayloadTest {
 		ZeaConfig config = new ZeaConfig();
 		config.chat.multiSendEnabled = true;
 		config.chat.dispatchIntervalMillis = 2500;
-		config.chatInterface.smoothChat = false;
-		config.chatInterface.smoothChatDurationMillis = 120;
-		config.tabs.discord = true;
-		config.tabs.deaths = true;
-		config.notifications.pmDestination = Notification.Destination.TITLE;
-		config.notifications.mentionSound = false;
-		config.mentions.autoRespond = true;
-		config.mentions.autoResponseText = "hi there";
-		config.mentions.autoResponseCooldownSeconds = 45;
+		config.chat.chatInterface.smoothChat = false;
+		config.chat.chatInterface.smoothChatDurationMillis = 120;
+		config.chat.tabs.discord = true;
+		config.chat.tabs.deaths = true;
+		config.chat.notifications.pmDestination = Notification.Destination.TITLE;
+		config.chat.notifications.mentionSound = false;
+		config.chat.mentions.autoRespond = true;
+		config.chat.mentions.autoResponseText = "hi there";
+		config.chat.mentions.autoResponseCooldownSeconds = 45;
 		config.inventoryButtons.enabled = false;
 
 		GeneralConfigPayload payload = GeneralConfigPayload.of(config);
@@ -36,23 +36,23 @@ class GeneralConfigPayloadTest {
 
 		assertEquals(true, applied.chat.multiSendEnabled);
 		assertEquals(2500, applied.chat.dispatchIntervalMillis);
-		assertEquals(false, applied.chatInterface.smoothChat);
-		assertEquals(120, applied.chatInterface.smoothChatDurationMillis);
-		assertEquals(true, applied.tabs.discord);
-		assertEquals(true, applied.tabs.deaths);
-		assertEquals(Notification.Destination.TITLE, applied.notifications.pmDestination);
-		assertEquals(false, applied.notifications.mentionSound);
-		assertEquals(true, applied.mentions.autoRespond);
-		assertEquals("hi there", applied.mentions.autoResponseText);
-		assertEquals(45, applied.mentions.autoResponseCooldownSeconds);
+		assertEquals(false, applied.chat.chatInterface.smoothChat);
+		assertEquals(120, applied.chat.chatInterface.smoothChatDurationMillis);
+		assertEquals(true, applied.chat.tabs.discord);
+		assertEquals(true, applied.chat.tabs.deaths);
+		assertEquals(Notification.Destination.TITLE, applied.chat.notifications.pmDestination);
+		assertEquals(false, applied.chat.notifications.mentionSound);
+		assertEquals(true, applied.chat.mentions.autoRespond);
+		assertEquals("hi there", applied.chat.mentions.autoResponseText);
+		assertEquals(45, applied.chat.mentions.autoResponseCooldownSeconds);
 		assertEquals(false, applied.inventoryButtons.enabled);
 	}
 
 	@Test
 	void exportsExcludeLocalDataByConstruction() {
 		ZeaConfig config = new ZeaConfig();
-		config.history.enabled = true;
-		config.history.maxEntries = 9000;
+		config.chat.history.enabled = true;
+		config.chat.history.maxEntries = 9000;
 
 		String json = GeneralConfigPayload.of(config).toJson().toString();
 
@@ -116,7 +116,7 @@ class GeneralConfigPayloadTest {
 		GeneralConfigPayload.fromJson(data).applyTo(config);
 
 		assertEquals(ZeaConfig.MAX_DISPATCH_INTERVAL_MILLIS, config.chat.dispatchIntervalMillis);
-		assertEquals(ZeaConfig.MIN_AUTO_RESPONSE_COOLDOWN_SECONDS, config.mentions.autoResponseCooldownSeconds);
+		assertEquals(ZeaConfig.MIN_AUTO_RESPONSE_COOLDOWN_SECONDS, config.chat.mentions.autoResponseCooldownSeconds);
 	}
 
 	@Test
@@ -128,7 +128,7 @@ class GeneralConfigPayloadTest {
 		ZeaConfig config = new ZeaConfig();
 		GeneralConfigPayload.fromJson(data).applyTo(config);
 
-		assertEquals("ab c", config.mentions.autoResponseText);
+		assertEquals("ab c", config.chat.mentions.autoResponseText);
 	}
 
 	@Test
@@ -140,7 +140,7 @@ class GeneralConfigPayloadTest {
 		GeneralConfigPayload.fromJson(data).applyTo(config);
 
 		assertEquals(GeneralConfigPayload.MAX_AUTO_RESPONSE_LENGTH,
-				config.mentions.autoResponseText.length());
+				config.chat.mentions.autoResponseText.length());
 	}
 
 	@Test
@@ -179,6 +179,6 @@ class GeneralConfigPayloadTest {
 		ZeaConfig config = new ZeaConfig();
 		GeneralConfigPayload.fromJson(data).applyTo(config);
 
-		assertFalse(config.mentions.autoRespond);
+		assertFalse(config.chat.mentions.autoRespond);
 	}
 }

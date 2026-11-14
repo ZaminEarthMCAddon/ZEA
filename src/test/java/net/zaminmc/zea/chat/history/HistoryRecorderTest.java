@@ -60,7 +60,7 @@ class HistoryRecorderTest {
 		Files.createDirectories(historyFile().getParent());
 		new HistoryStore(historyFile()).save(List.of(entry("old", 1_000)));
 		ZeaConfig config = new ZeaConfig();
-		config.history.enabled = false;
+		config.chat.history.enabled = false;
 		ChatHistory history = new ChatHistory(10);
 		HistoryRecorder recorder = recorder(history, config, Runnable::run);
 
@@ -165,7 +165,7 @@ class HistoryRecorderTest {
 	@Test
 	void retentionRemovesExpiredEntriesOnItsSchedule() {
 		ZeaConfig config = new ZeaConfig();
-		config.history.retention = ZeaConfig.History.Retention.ONE_DAY;
+		config.chat.history.retention = ZeaConfig.History.Retention.ONE_DAY;
 		ChatHistory history = new ChatHistory(100);
 		HistoryRecorder recorder = recorder(history, config, Runnable::run);
 		recorder.start(dir.resolve("history"), EARTHMC);
@@ -276,7 +276,7 @@ class HistoryRecorderTest {
 		Files.createDirectories(historyFile().getParent());
 		new HistoryStore(historyFile()).save(List.of(entry("old", 1_000)));
 		ZeaConfig config = new ZeaConfig();
-		config.history.enabled = false;
+		config.chat.history.enabled = false;
 		ChatHistory history = new ChatHistory(10);
 		HistoryRecorder recorder = recorder(history, config, Runnable::run);
 		recorder.start(dir.resolve("history"), EARTHMC);

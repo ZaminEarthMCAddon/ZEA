@@ -62,7 +62,7 @@ class MentionsTest {
 
 	@Test
 	void disabledHighlightStillNotifies() {
-		config.mentions.highlight = false;
+		config.chat.mentions.highlight = false;
 
 		mentions.onClassified(globalChat("Coriolanus", "hey Zamin"), NOW);
 
@@ -72,7 +72,7 @@ class MentionsTest {
 
 	@Test
 	void disabledNotificationsStillHighlight() {
-		config.notifications.mentionNotifications = false;
+		config.chat.notifications.mentionNotifications = false;
 
 		mentions.onClassified(globalChat("Coriolanus", "hey Zamin"), NOW);
 
@@ -83,7 +83,7 @@ class MentionsTest {
 
 	@Test
 	void disabledSoundStaysSilent() {
-		config.notifications.mentionSound = false;
+		config.chat.notifications.mentionSound = false;
 
 		mentions.onClassified(globalChat("Coriolanus", "hey Zamin"), NOW);
 
