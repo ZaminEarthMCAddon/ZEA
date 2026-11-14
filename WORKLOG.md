@@ -1992,3 +1992,105 @@ The config menu:
   cosmetic for now but worth re-checking on their next release.
 - The EarthMC API client (hover cards) remains parked behind this
   repair work, per the session plan.
+
+## 2026-11-14 (session 4) — Chatting's action buttons: search and clear history
+
+### What happened
+
+The player added one more pointer to Polyfrost/Chatting: its search and
+clear-history are "already correctly thoughtful" — a real button in a
+real place, not a hotkey to memorize. The ask was to adapt that for
+ZEA. The Chatting source (cloned and read, not guessed from memory)
+puts a small 9×9 button row at the right end of the input's row —
+search toggle, clear history, screenshot — with a search field beside
+it, hover tooltips above each button, and a search that closes itself
+when its box loses focus. Every element was studied against the 26.3
+mappings before anything was written.
+
+### What was adapted, and what deliberately was not
+
+- **The button row** (new `ChatButtonBar`, `chat.render`): search
+  toggle and clear-history as one quiet flat row at the right end of
+  the tab strip's row, flush with the input's right edge — the same
+  input-adjacent placement Chatting uses, sharing ZEA's existing tab
+  row instead of Chatting's search field row (ZEA's search bar keeps
+  its own full-width row above, which composes with the tab strip).
+  9×9 buttons, 2px gaps, Chatting's grid; icons drawn as chunky
+  1-pixel fills (magnifier, cross) rather than Chatting's texture
+  blits — no textures to bundle, and it matches the tab strip's flat
+  language. The search button shows an active state while a search is
+  open, like a selected tab.
+- **Discoverability**: the search button does exactly what Ctrl+F
+  does (shared `zea$toggleSearch`); both are configurable ("Search
+  button", "Clear history button", Chat interface category, default
+  on). The tab strip's maximum width now reserves the button row, so
+  the two can never overlap on narrow windows.
+- **The clear button** (Chatting: `chat.clearMessages(false)`, live
+  chat only) adapted across ZEA's persistence: one click empties the
+  visible chat *and* this server's saved history — `clearMessages(false)`
+  keeps the up-arrow recall (the 26.3 boolean resets it to raw command
+  history), `HistoryRecorder.clear()` empties the buffer and persists
+  the emptiness, and a toast says what went, because "cleared" that
+  silently resurrects on rejoin is not cleared.
+- **The focus-loss close** (Chatting polls it every frame from the
+  render path to avoid reentrancy in the focus machinery — kept
+  exactly): ZEA's poll closes the search only when focus lands on the
+  chat input specifically. Chatting can afford "any focus loss"
+  because its tabs are hand-drawn, not widgets; ZEA's tabs are
+  widgets, and clicking one mid-search must keep the search open — a
+  search composes with the selected feed, and checking another feed
+  mid-search is a normal move.
+- **Enter now closes** the search (it used to just return focus to the
+  input): with the focus-loss rule, handing the caret back would close
+  it a frame later anyway, so the key does it outright.
+- **Search bar polish from Chatting**: query ceiling raised to 100
+  characters (vanilla EditBox defaults to 32 — it runs out mid-name),
+  and the ghost-text hint ("Search messages…") finally wired to the
+  lang key that was reserved for it.
+- **A resize no longer strands the search caret**: a rebuild with a
+  search open now moves focus to the restored bar. Before, typing
+  silently went to the chat input while the bar showed its old query.
+
+### A race the clear path exposed
+
+`HistoryRecorder.start` seeds the buffer from an async load. A clear
+issued before that load lands would be overwritten by the load's
+`prependAll` callback — the old messages re-seeded right over the
+clear, then written back by the next flush. Fixed with a session
+generation (`start` and `clear` bump it; the load callback applies
+only when the generation still matches), plus the in-flight-save case
+(the sequential executor means the empty write can never land before
+an earlier one; the dirty flag guarantees the next flush after it
+carries the emptiness). Both are pinned by tests.
+
+### Tests performed
+
+- `./gradlew build` green; **554 tests, 0 failures** (was 539).
+- `ChatButtonBarTest` (new, 10) — row width per configuration, hit
+  routing to the right callback, the gap as dead space, clicks outside
+  the row, left-button-only activation (right stays free for copying),
+  single-button rows, hit-testing the buttons and not the widget box,
+  null-callback rejection, narration naming only the shown buttons.
+- `HistoryRecorderTest` (4 new, 14 total) — clear persists emptiness;
+  clear with persistence off touches no file; clear lands after an
+  in-flight save; **clear drops a join load still in flight** (the
+  race); clear survives disconnect without further ticks.
+- `ChatWidgetsFocusTest` — the new widget is pinned out of keyboard
+  focus navigation like its siblings (the dev.24 caret rule).
+- `MixinSurfaceTest` — `ChatScreen.extractRenderState` (the focus-loss
+  poll's target) is pinned as declared, per the file's own rule.
+
+### Outstanding problems
+
+- Live verification pending the next session — the sequences to test:
+  the button row appearing at the tab row's right end, search
+  open/narrow/close by button and hotkey, Enter/Esc/click-input
+  closing the search, tab clicks keeping it open, the clear button
+  emptying chat + history with the file staying empty across rejoin.
+- The icons are 1-pixel fills; at odd GUI scales they may read thin.
+  Chatting ships textures — swapping in drawn sprites later is a
+  drop-in inside `drawMagnifier`/`drawCross` if the pixel look tires.
+- Chatting's third button (screenshot chat) and its per-line delete
+  were not adapted; neither was requested and both are separate
+  features, not parts of the search/clear ask.
+- The EarthMC API client (hover cards) stays parked.

@@ -73,14 +73,19 @@ alt+right-click formatted, legacy serializer, confirmation toast),
 chat search (Ctrl+F, composes with the selected feed, survives resize,
 clears on close/disconnect), smooth chat (quartic ease-out for new
 messages, wheel/page scrolling and the close-screen reset; configurable
-duration, on by default), and a rebindable "toggle chat search" key
+duration, on by default), a rebindable "toggle chat search" key
 binding (unbound default; the modifier-based shortcuts themselves stay
-fixed — vanilla key mappings cannot express Ctrl+F or right-click).
-Chat dimensions need no ZEA work: vanilla 26.3 ships width and
-focused/unfocused height options. Blocked pending in-game data:
-player hover presentation and the real-username option (EarthMC's API
-does not expose nicknames — resolution depends on the component tree,
-see docs/EARTHMC_API.md).
+fixed — vanilla key mappings cannot express Ctrl+F or right-click),
+and the chat action row after Polyfrost/Chatting's placement: a search
+toggle and a one-click clear-history button at the right end of the
+tab row (configurable, default on), the clear emptying the visible
+chat and this server's persistent history together, and a search that
+closes on Enter, Escape, Ctrl+F or the moment the player clicks back
+into the chat input. Chat dimensions need no ZEA work: vanilla 26.3
+ships width and focused/unfocused height options. Blocked pending
+in-game data: player hover presentation and the real-username option
+(EarthMC's API does not expose nicknames — resolution depends on the
+component tree, see docs/EARTHMC_API.md).
 
 **Deliverable:** modernized chat interface.
 
