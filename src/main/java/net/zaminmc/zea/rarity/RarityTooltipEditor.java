@@ -29,15 +29,17 @@ import java.util.function.ToIntFunction;
  *       keeps the name the player or server gave it, including its own
  *       formatting; only vanilla-generated names are recolored. The rest
  *       of the line's formatting (italic and friends) is preserved.</li>
- *   <li><b>Chroma</b> — enchantment lines that sit at their maximum
- *       legitimate level get the animated chroma color. Lines are matched
- *       against the exact vanilla display text ({@code
- *       Enchantment.getFullname}) of the item's own maxed enchantments, so
+ *   <li><b>Enchantment styling</b> — enchantment lines are recolored
+ *       by their level relative to the registered maximum: grey for
+ *       below-max (basic), the animated chroma color for at-max, and
+ *       blue for above-max (enhanced). Maximum levels are read from
+ *       {@link Enchantment#getMaxLevel}, never hardcoded. Lines are
+ *       matched against the exact vanilla display text ({@code
+ *       Enchantment.getFullname}) of the item's own enchantments, so
  *       custom lore that merely contains the same words is out of reach
- *       unless it really is that enchantment line. Lower-level lines are
- *       never touched. Colors are recomputed per frame from the clock —
- *       tooltips rebuild every frame while hovered, so the animation costs
- *       nothing extra.</li>
+ *       unless it really is that enchantment line. Colors are recomputed
+ *       per frame from the clock — tooltips rebuild every frame while
+ *       hovered, so the animation costs nothing extra.</li>
  *   <li><b>Missing upgrades</b> — while Left Shift is held, the gray
  *       comma-separated list from {@link MissingUpgrades} is appended,
  *       wrapped to the tooltip's usable width so it can neither stretch to
@@ -99,7 +101,7 @@ public final class RarityTooltipEditor {
                         recolorName(edited, stack, rarity);
                 }
                 if (cfg.rarityChromaEnabled()) {
-                        chromaMaxedEnchantments(edited, stack);
+                        styleEnchantments(edited, stack);
                 }
                 if (cfg.rarityMissingEnchantsEnabled() && Minecraft.getInstance().hasShiftDown()) {
                         appendMissingUpgrades(edited, stack);
@@ -127,51 +129,117 @@ public final class RarityTooltipEditor {
         }
 
         /**
-         * Applies the chroma color to every line whose plain text is
-         * exactly the vanilla display of one of the item's max-level
-         * enchantments.
+         * Styles the item's enchantment lines by their level relative to
+         * the registered maximum:
+         *
+         * <ul>
+         *   <li><b>Below maximum</b> — grey ({@code &7}), the basic
+         *       enchantment look. The default for an ordinary
+         *       partially-levelled enchantment.</li>
+         *   <li><b>At maximum</b> — the animated chroma color. One
+         *       enchantment at its cap is the achievement the chroma
+         *       celebrates, regardless of enchantment type.</li>
+         *   <li><b>Above maximum</b> — blue ({@code &9}), the
+         *       "enhanced" look. An enchantment pushed past its
+         *       registered maximum (commands, anvil combining) keeps its
+         *       real displayed level but takes the max-level visual
+         *       treatment, so a Sharpness VI reads as enhanced rather
+         *       than as a glitch.</li>
+         * </ul>
+         *
+         * <p>Maximum levels are read from {@link Enchantment#getMaxLevel}
+         * — never hardcoded. Lines are matched against the exact vanilla
+         * display text ({@code Enchantment.getFullname}) of the item's
+         * own enchantments, so custom lore that merely contains the same
+         * words is out of reach unless it really is that enchantment
+         * line. Neutral enchantments (Knockback, Thorns, …) are styled
+         * by level like any other — neutral is a rarity-scoring concern,
+         * not a presentation one.
          */
-        private static void chromaMaxedEnchantments(List<Component> lines, ItemStack stack) {
-                List<String> maxed = maxedEnchantmentTexts(stack);
-                if (maxed.isEmpty()) {
+        private static void styleEnchantments(List<Component> lines, ItemStack stack) {
+                ItemEnchantments enchantments = stack.getOrDefault(
+                                DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
+                if (enchantments.isEmpty()) {
                         return;
                 }
+                EnchantBudget budget = EnchantBudget.of(stack.getItem(), levelLookup());
                 long now = System.currentTimeMillis();
                 int chroma = RarityEngine.chromaColor(now);
                 for (int i = 0; i < lines.size(); i++) {
-                        String text = lines.get(i).getString();
-                        if (maxed.contains(text)) {
-                                lines.set(i, lines.get(i).copy().withStyle(
-                                                                style -> style.withColor(
-                                                                                                net.minecraft.network.chat.TextColor.fromRgb(
-                                                                                                                                chroma & 0xFFFFFF))));
+                        Component line = lines.get(i);
+                        String text = line.getString();
+                        EnchantmentStyle style = enchantmentStyle(text, enchantments, budget);
+                        if (style == null) {
+                                continue;
                         }
+                        int color = style == EnchantmentStyle.MAXED
+                                        ? (chroma & 0xFFFFFF)
+                                        : style.rgb;
+                        lines.set(i, line.copy().withStyle(
+                                        s -> s.withColor(net.minecraft.network.chat.TextColor.fromRgb(color))));
                 }
         }
 
         /**
-         * The exact vanilla display texts of the item's enchantments that
-         * sit at their maximum legitimate level — the chroma candidates.
+         * The styling decision for one enchantment line, or {@code null}
+         * when the line is not one of the item's own enchantment
+         * displays. Resolved by matching the line text against each
+         * held enchantment's vanilla fullname at its held level.
          */
-        private static List<String> maxedEnchantmentTexts(ItemStack stack) {
-                ItemEnchantments enchantments = stack.getOrDefault(
-                                                DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
-                if (enchantments.isEmpty()) {
-                        return List.of();
-                }
-                EnchantBudget budget = EnchantBudget.of(stack.getItem(), levelLookup());
-                List<String> maxed = new ArrayList<>();
+        private static EnchantmentStyle enchantmentStyle(String text, ItemEnchantments enchantments,
+                        EnchantBudget budget) {
                 for (var entry : enchantments.entrySet()) {
+                        var holder = entry.getKey();
                         int level = entry.getIntValue();
-                        if (EnchantPolicy.isNeutral(entry.getKey()) || level < entry.getKey().value().getMaxLevel()) {
+                        int maxLevel = holder.value().getMaxLevel();
+                        // Only enchantments the item's class actually
+                        // accepts are styled — a command-placed
+                        // enchantment the item cannot legitimately hold
+                        // is left at its vanilla color so it reads as
+                        // foreign rather than as a celebrated max.
+                        boolean compatible = budget.compatible().stream()
+                                        .anyMatch(candidate -> candidate.enchantment() == holder);
+                        if (!compatible) {
                                 continue;
                         }
-                        if (budget.compatible().stream()
-                                        .anyMatch(candidate -> candidate.enchantment() == entry.getKey())) {
-                                maxed.add(Enchantment.getFullname(entry.getKey(), level).getString());
+                        String fullname = Enchantment.getFullname(holder, level).getString();
+                        if (!fullname.equals(text)) {
+                                continue;
                         }
+                        return styleForLevels(level, maxLevel);
                 }
-                return maxed;
+                return null;
+        }
+
+        /**
+         * The styling tier for a (level, maxLevel) pair — the pure
+         * seam, testable without a registry. Above-max is enhanced
+         * (blue), at-max is the chroma tier, below-max is basic (grey).
+         */
+        static EnchantmentStyle styleForLevels(int level, int maxLevel) {
+                if (level > maxLevel) {
+                        return EnchantmentStyle.ENHANCED;
+                }
+                if (level >= maxLevel) {
+                        return EnchantmentStyle.MAXED;
+                }
+                return EnchantmentStyle.BASIC;
+        }
+
+        /** The three enchantment styling tiers and their fixed colors. */
+        enum EnchantmentStyle {
+                /** Below maximum — grey ({@code &7}). */
+                BASIC(0xAAAAAA),
+                /** At maximum — the animated chroma color, applied by the caller. */
+                MAXED(-1),
+                /** Above maximum — blue ({@code &9}). */
+                ENHANCED(0x5555FF);
+
+                final int rgb;
+
+                EnchantmentStyle(int rgb) {
+                        this.rgb = rgb;
+                }
         }
 
         /**
