@@ -3366,17 +3366,34 @@ chain is the planner's own position pins, the pose-equivalence test,
 and the snap edge rule, which together imply the end-to-end property
 the fake test claimed to check.
 
+### A replacement race, found re-reading the disposal paths
+
+Landed, then re-read, then fixed in a follow-up commit: a tile id is
+reused across image generations — an ETag revalidation hit queues a
+*replacement* for a slot that already draws — and the cache's disposal
+of the replaced image arrives a frame after the replacement's upload.
+Freeing the GPU handle by tile id alone destroyed the freshly
+uploaded texture while the cache still reported the tile READY: the
+tile would vanish from the map until its next revalidation. Every
+handle now remembers the image instance it was uploaded from, and a
+disposal only frees the handle that exact image owns — reference
+equality, the same instance-identity discipline the claim tessellator
+cache rides on ClaimStore. Verified order-independent for the
+eviction-after-replacement double disposal.
+
 ### Verification
 
-`./gradlew build` green; **959 tests, 0 failures** (was 954; +5:
-the half-pixel bound over a coordinate sweep, adjacency under
-fractional offsets, the round-half-toward-positive-infinity tie rule,
-pose ≡ projection across eight rotations, and plan-level edge
-sharing). Bytecode-verified against the 26.3 jar: the blit overload's
-normalized UVs, the GUI_TEXTURED pipeline under the view blit,
-`NativeImage.close`'s double-free guard, and `DynamicTexture`'s
-texture-then-view release order. In-game verification — the first
-tiles on screen — waits for the screen that will call this code.
+`./gradlew build` green; **959 tests, 0 failures** at landing, **987,
+0 failures** after rebasing onto the parallel RPG-tooltip batch that
+landed as dev.36–38 in between (was 954; +5 from this session: the
+half-pixel bound over a coordinate sweep, adjacency under fractional
+offsets, the round-half-toward-positive-infinity tie rule, pose ≡
+projection across eight rotations, and plan-level edge sharing).
+Bytecode-verified against the 26.3 jar: the blit overload's normalized
+UVs, the GUI_TEXTURED pipeline under the view blit, `NativeImage.close`'s
+double-free guard, and `DynamicTexture`'s texture-then-view release
+order. In-game verification — the first tiles on screen — waits for
+the screen that will call this code.
 
 ### Not done yet (next sessions)
 
