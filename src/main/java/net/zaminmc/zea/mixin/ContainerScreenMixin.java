@@ -301,7 +301,10 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
          * this method without calling super, so it carries its own hook in
          * {@link CreativeScreenMixin}.
          */
-        @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"))
+        // cancellable is load-bearing: the handler writes the return value
+        // back, and a non-cancellable injection makes that first hover crash
+        // the game (pinned by InjectionCancellableTest).
+        @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"), cancellable = true)
         private void zea$rarityTooltip(ItemStack stack,
                                         CallbackInfoReturnable<List<Component>> cir) {
                 List<Component> lines = RarityTooltipEditor.edit(cir.getReturnValue(), stack);

@@ -21,7 +21,10 @@ import java.util.List;
  */
 @Mixin(CreativeModeInventoryScreen.class)
 public abstract class CreativeScreenMixin {
-        @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"))
+        // cancellable is load-bearing: the handler writes the return value
+        // back, and a non-cancellable injection makes that first hover crash
+        // the game (pinned by InjectionCancellableTest).
+        @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"), cancellable = true)
         private void zea$rarityTooltip(ItemStack stack,
                         CallbackInfoReturnable<List<Component>> cir) {
                 cir.setReturnValue(RarityTooltipEditor.edit(cir.getReturnValue(), stack));
