@@ -39,7 +39,11 @@ import java.util.function.ToIntFunction;
  *       custom lore that merely contains the same words is out of reach
  *       unless it really is that enchantment line. Colors are recomputed
  *       per frame from the clock — tooltips rebuild every frame while
- *       hovered, so the animation costs nothing extra.</li>
+ *       hovered, so the animation costs nothing extra. The tier styling
+ *       itself is not optional: when the chroma <em>animation</em> is
+ *       disabled, a maxed enchantment keeps its tier but wears the
+ *       static gold instead of the animated color — the option gates
+ *       the animation, not the information.</li>
  *   <li><b>Missing upgrades</b> — while Left Shift is held, the gray
  *       comma-separated list from {@link MissingUpgrades} is appended,
  *       wrapped to the tooltip's usable width so it can neither stretch to
@@ -100,9 +104,7 @@ public final class RarityTooltipEditor {
                 if (cfg.rarityNameColoringEnabled()) {
                         recolorName(edited, stack, rarity);
                 }
-                if (cfg.rarityChromaEnabled()) {
-                        styleEnchantments(edited, stack);
-                }
+                styleEnchantments(edited, stack);
                 if (cfg.rarityMissingEnchantsEnabled() && Minecraft.getInstance().hasShiftDown()) {
                         appendMissingUpgrades(edited, stack);
                 }
@@ -139,7 +141,9 @@ public final class RarityTooltipEditor {
          *   <li><b>Below maximum</b> — grey ({@code &7}), the basic
          *       enchantment look. The default for an ordinary
          *       partially-levelled enchantment.</li>
-         *   <li><b>At maximum</b> — the animated chroma color. One
+         *   <li><b>At maximum</b> — the animated chroma color when
+         *       the animation is enabled, otherwise the static gold
+         *       that keeps the maxed tier readable without motion. One
          *       enchantment at its cap is the achievement the chroma
          *       celebrates, regardless of enchantment type.</li>
          *   <li><b>Above maximum</b> — blue ({@code &9}), the
@@ -165,13 +169,16 @@ public final class RarityTooltipEditor {
                 if (enchantments.isEmpty()) {
                         return;
                 }
-                EnchantBudget budget = EnchantBudget.of(stack.getItem(), levelLookup());
+                ZeaConfig cfg = ZeaClient.config();
+                boolean animated = cfg != null && cfg.rarityChromaEnabled();
                 long now = System.currentTimeMillis();
-                int chroma = RarityEngine.chromaColor(now);
+                int chroma = animated
+                                ? RarityEngine.chromaColor(now)
+                                : RarityEngine.STATIC_MAXED_COLOR;
                 for (int i = 0; i < lines.size(); i++) {
                         Component line = lines.get(i);
                         String text = line.getString();
-                        EnchantmentStyle style = enchantmentStyle(text, enchantments, budget);
+                        EnchantmentStyle style = enchantmentStyle(text, enchantments, budgetFor(stack));
                         if (style == null) {
                                 continue;
                         }
@@ -250,7 +257,7 @@ public final class RarityTooltipEditor {
          * comma-separated list wrapped to the usable tooltip width.
          */
         private static void appendMissingUpgrades(List<Component> lines, ItemStack stack) {
-                EnchantBudget budget = EnchantBudget.of(stack.getItem(), levelLookup());
+                EnchantBudget budget = budgetFor(stack);
                 ItemEnchantments enchantments = stack.getOrDefault(
                                                 DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
                 List<MissingUpgrades.Upgrade> upgrades =
@@ -388,6 +395,14 @@ public final class RarityTooltipEditor {
                 for (int i = end - 1; i >= headerIndex; i--) {
                         lines.remove(i);
                 }
+        }
+
+        /**
+         * The item class's enchantment budget, shared by the styling and
+         * missing-upgrade paths so one hover asks for it once per use.
+         */
+        private static EnchantBudget budgetFor(ItemStack stack) {
+                return EnchantBudget.of(stack.getItem(), levelLookup());
         }
 
         /**

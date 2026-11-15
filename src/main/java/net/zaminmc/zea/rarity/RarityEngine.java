@@ -46,6 +46,14 @@ public final class RarityEngine {
          */
         public static final long CHROMA_PERIOD_MILLIS = 8_000L;
 
+        /**
+         * The static color a maxed enchantment wears when the chroma
+         * animation is disabled — the gold ({@code &6}) the tier has
+         * always implied, so turning the animation off quiets the
+         * tooltip without hiding which enchantments are at their cap.
+         */
+        public static final int STATIC_MAXED_COLOR = 0xFFAA00;
+
         /** The per-(item, enchantments) rarity cache. */
         private static final Map<RarityKey, ItemRarity> RARITY_CACHE = new HashMap<>();
 

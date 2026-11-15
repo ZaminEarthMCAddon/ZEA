@@ -556,8 +556,9 @@ public final class ZeaConfig extends Config {
                 public boolean missingEnchants = true;
 
                 @ConfigOption(name = "Max-level chroma", desc = "Enchantments that have reached "
-                                + "their maximum legitimate level cycle through the colors in the "
-                                + "tooltip. Lower-level enchantments are not touched.")
+                                + "their maximum legitimate level cycle slowly through the colors in "
+                                + "the tooltip. Turning this off keeps the level tiers visible but "
+                                + "gives maxed enchantments a static gold instead of the animation.")
                 @ConfigEditorBoolean
                 @ConfigOrder(1)
                 public boolean chroma = false;

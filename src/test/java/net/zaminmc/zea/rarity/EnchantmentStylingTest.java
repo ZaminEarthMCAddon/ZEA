@@ -46,4 +46,17 @@ class EnchantmentStylingTest {
                 assertEquals(0xAAAAAA, EnchantmentStyle.BASIC.rgb, "basic is grey (&7 family)");
                 assertEquals(0x5555FF, EnchantmentStyle.ENHANCED.rgb, "enhanced is blue (&9 family)");
         }
+
+        /**
+         * The static fallback for the maxed tier when the chroma
+         * animation is off — the gold (&6 family), so the tier stays
+         * visible without motion. The animated color itself is the
+         * chroma rotation, pure in the clock and pinned in
+         * RarityFieldTest's chroma pins.
+         */
+        @Test
+        void staticMaxedFallbackIsGold() {
+                assertEquals(0xFFAA00, RarityEngine.STATIC_MAXED_COLOR,
+                                "the animation-off maxed color is the gold (&6) tier");
+        }
 }
