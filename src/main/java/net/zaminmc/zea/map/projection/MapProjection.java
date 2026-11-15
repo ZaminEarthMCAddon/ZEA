@@ -38,6 +38,9 @@ public final class MapProjection {
 	 */
 	public static final int QUALITY_ZOOM_BIAS = 2;
 
+	/** The whole of a tile's texture, for quads that draw a tile directly. */
+	public static final TileRegion FULL_REGION = new TileRegion(0.0, 0.0, 1.0, 1.0);
+
 	private final MapCamera camera;
 	private final int surfaceWidth;
 	private final int surfaceHeight;

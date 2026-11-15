@@ -2873,3 +2873,138 @@ MapEditorScreen, `/zeamap` + keybinds, lifecycle wiring (schedulers,
 world resolution, generation), RepoMapClient, claim-command chat
 integration, and the visual checklist on the live server. Still
 nothing committed (spec: commit only on request).
+
+## 2026-11-15 (session 12) — Map subsystem Phase 3: the pure render core
+
+The render layer's decision-making half: everything that decides *what
+a frame contains*, still free of Minecraft types so every visual policy
+is pinned by tests. The only Minecraft-touching part left for later is
+the thin adapter that draws the planned quads and uploads decoded
+images.
+
+### `map.render.tile.Coverage` (new)
+
+The sticky gate between the Quick Map (zoom-0 under-layer) and the
+Detailed layer: activate only at full visible coverage, then stay
+active through dips (a pan into fresh territory, an eviction) while
+individual gaps fill from parent fallback — the `8ce45767` mosaic
+lesson. Stickiness is scoped to one (world, zoom); a pan does not
+re-arm, a zoom or world change does, and `rearm()` serves cache
+clears.
+- Semantics settled while testing: re-arming means full coverage is
+  *required again* — it does not delay activation by a frame when the
+  new view is already fully covered (that would flash the coarser
+  layer for nothing). An empty view (0 slots) never activates on the
+  vacuous truth.
+- A slot covered by 404 (confirmed absent: no finer imagery exists at
+  any level) counts as coverage; a slot merely *backed by an ancestor*
+  does not — that is exactly the blurry state the gate exists to keep
+  off screen.
+
+### `map.render.tile.TileRenderer<T>` (new)
+
+The frame planner, a pure function of camera + cache state + motion:
+- **Frame naming**: quads are emitted in map-frame pixels (view-centre
+  relative, world-north-up, unrotated) so the adapter sets up one
+  rotated pose per frame instead of one transform per quad.
+- **Layers**: zoom-0 overview always planned first (the guarantee that
+  something drawable exists), Detailed at `chooseTileZoom` behind the
+  coverage gate; missing slots fall back to their nearest drawable
+  ancestor above zoom 0 (zoom 0 would duplicate the under-layer).
+- **Requests**: 28/frame idle, 2 while moving, centre-out, never
+  outside the world's published extent. Idle frames prefetch one zoom
+  finer and one coarser plus a margin ring; moving frames spend the
+  tiny budget on the pan lead (0.75 viewports ahead) — spending it on
+  tiles about to scroll out is the stutter it prevents.
+- **Lead semantics pinned by tests**: the lead rect overlaps the
+  current view, and READY tiles are never re-requested, so on an empty
+  cache the moving budget serves the lead's nearest (in-view) tiles,
+  and only a served view lets it reach true out-of-view lead tiles.
+  Both behaviours are asserted, not assumed.
+- Degenerate views (zero-size surface, non-positive ppb) plan
+  `FramePlan.empty()` — previously a 0×0 surface planned 1 slot, and a
+  non-positive ppb would send the visible-tile range to infinity.
+
+### `map.render.tile.TileUploads<T>` (new)
+
+The render thread's half of the cache contract: drains the upload
+queue within budgets (5 uploads / 1.5 ms idle, 1 / 750 µs moving,
+always at least one so a trickle still progresses), sends rejected
+uploads down the failed ladder instead of wedging the queue, and frees
+retired images (`disposeRetired`) — the fetch thread never frees image
+memory (`aa92179f`).
+
+### `map.render.overlay.ClaimTessellator` (new)
+
+Rings → merged fill runs + edge runs: rectilinear scanline between
+distinct vertex rows (EarthMC edges sit at chunk corners, so bands are
+whole-chunk), runs extended vertically while the span recurs, stale
+open-runs purged across empty bands so two bars with a gap never
+bridge into one (the half-drawn-town class of bug), even-odd over all
+rings so enclosed pockets stay holes, and a whole-town ceiling of
+8192 counted runs+edges that drops the town entirely — never a partial
+band (`b92d190`). Results cached by geometry signature *and* instance
+identity (256 towns, cleared whole), riding ClaimStore's instance
+reuse across refreshes (`a5570c6f`).
+
+### `map.render.overlay.ClaimOverlay` / `PlayerOverlay` (new)
+
+Draw-list planners in map-frame pixels:
+- Claims: bounding-box culling against the padded view (16 blocks of
+  slack), run clipping to it, constant-*pixel* outline thickness
+  centred on edges, outline decimation below 2/16 px per block
+  (`10118a2`'s noise floor), per-layer alpha switches.
+- Players: the glide between feed snapshots over exactly the previous
+  feed interval (one period of latency, never extrapolated — dots
+  glide instead of stepping at the feed cadence), the teleport guard
+  at half the view span (a bigger step snaps; NEU's rule), and the
+  live self override replacing the feed's own stale entry.
+
+### MapProjection
+
+`FULL_REGION` constant added (the whole-tile UV rect for direct
+quads); no behaviour change.
+
+### Bugs found and fixed during development
+
+All in this session's own new code and tests — the Phase 2 core
+needed no changes:
+- **Test expectations written against imagined geometry**: the quad-
+  position test used a tile outside the visible set with zoom-0 span
+  math; the world-bounds test asserted Earth's half-*width* on the Z
+  axis too (the real half-height is 32,256, not 64,512).
+- **The camera clamp discovery**: `MapCamera` clamps ppb to
+  [1/64, 8], so `chooseTileZoom` can never return 0 through a camera
+  — the "zoom-0 view" test was silently testing zoom 1. Replaced with
+  the reachable boundary: at the camera floor the view chooses zoom 1
+  and fetches the zoom-0 under-layer as coarser prefetch.
+- **Coverage re-arm misread** (see above): the first draft of the
+  tests demanded a one-frame activation delay after a view change
+  that the (correct) implementation deliberately doesn't have.
+- **Signature collision by construction**: the cache-flush test's
+  loop town #0 was geometry-identical to the town under test (same
+  key, same ring) and overwrote its cache slot — the loop now offsets
+  every town.
+- **Edge culling forgotten in expectations**: the layer-switch test
+  centred the camera so the town's south and east edges fell outside
+  the padded view and were (correctly) culled.
+- `TileRenderer.java` had been left in 8-space indentation; retabbed
+  to the house tabs before commit.
+
+### Verification
+
+`./gradlew build` green; **907 tests, 0 failures** (was 864; +43:
+TileRenderer 14, Coverage 7, ClaimTessellator 10, ClaimOverlay 7,
+PlayerOverlay 5 — including 1638-run and 1639-run checkerboards
+around the ceiling, and gap-bridging bar pairs around the merge
+logic).
+
+### Not done yet (next sessions)
+
+The Minecraft-facing half of the render layer: NativeImage decode +
+`GpuTexture` upload through TileUploads' budgets, the quad-drawing
+adapter (one rotated pose, `blit` with direct UVs), WorldMapScreen,
+MinimapHud (HUD layer registration), MapEditorScreen, `/zeamap` +
+keybinds, lifecycle wiring (schedulers, world resolution, generation
+bumps), RepoMapClient, claim-command chat integration, and the visual
+checklist on the live server.
