@@ -3294,3 +3294,94 @@ natural padding; thirteen tabs scroll with eight visible; with a search
 open the strip spans the row up to the box. In-game verification — the
 arrows' hit boxes, the wheel over the strip versus the chat log, and
 the reflow on Ctrl+F — is the live checklist for the next session.
+
+## 2026-11-16 (session 16) — Map subsystem Phase 4a: GPU tile textures and the quad-drawing adapter
+
+The Minecraft-facing half of the render layer begins — the two thin
+adapters everything visual will flow through, written against the
+actual 26.3 API surface, not remembered from the 1.21.x era. That
+surface was verified against the loom-cached jar before a line was
+written: `DrawContext` no longer exists (`GuiGraphicsExtractor` is the
+drawing context, `pose()` a JOML `Matrix3x2fStack`), the render
+back end moved to `com.mojang.renderpearl`, and
+`blit(GpuTextureView, GpuSampler, x, y, w, h, u0, v0, u1, v1)` takes
+normalized 0..1 UVs — exactly the tile regions the pure core already
+emits, so no coordinate conversion exists in the adapter at all.
+Vanilla's own `map(MapRenderState)` draws a whole 128×128 texture
+through `0, 1, 0, 1`, which is what pinned that last fact.
+
+### `map.render.tile.TileTextures` (new)
+
+The render-side half of the tile cache's ownership contract, and
+nothing else: the class *is* the `TileUploads.Sink` and the
+`TileCache.Disposer`, so production wiring is
+`uploads.run(cache, textures, moving, clock)` plus
+`TileUploads.disposeRetired(cache, textures)` with nothing between.
+Vanilla's `DynamicTexture` is the create-texture → take-view →
+`writeToTexture` pattern (RGBA8, usage copy-dst | texture-binding,
+one mip level, texture closed before view — vanilla's own release
+order). ZEA's tiles differ from vanilla's dynamic textures in one
+respect that shapes the class: a decoded tile is a full megabyte of
+pixel memory, so the CPU image is closed the moment its pixels reach
+the GPU. The cache keeps the emptied husk as its drawable identity,
+and the second `close` when the cache later retires it is the guarded
+no-op `NativeImage.close` already is (the `pixels != 0` guard is
+visible in the bytecode). Failure is refusal, never death: a null
+texture from a GL error, a rejected allocation, or an image that is
+not a tile-shaped rectangle returns false and the tile retries on the
+cache's failed ladder — the queue cannot wedge on one bad image. The
+1024-px edge cap is the poisoned-mirror defense: PNG compresses solid
+colour to almost nothing, so a hostile tile host could hide an 8192²
+texture inside a few kilobytes, and the upload — not the decode — is
+where that would surface. The sampler is clamp-to-edge + linear:
+parent-fallback regions sample to the very edge of a tile, and repeat
+addressing would filter the tile's opposite side into the seam.
+
+### `map.render.tile.TileFrameDrawer` (new)
+
+The quad-drawing adapter, built exactly around the planner's frame
+naming: one rotated pose per frame — translate to the surface centre,
+rotate by the projection's angle — and every quad draws axis-aligned
+inside it. The pose composition is pinned by a test that transforms a
+grid of points through the composed JOML matrix and demands
+`MapProjection.screenX/screenY` agree to the float epsilon, across
+eight rotations including both sign conventions; the adapter cannot
+drift from the projection's own pinned math. The seam defense is the
+second pinned policy: vanilla's blit takes whole-pixel rectangles,
+so each quad *edge* rounds independently and width always follows from
+the snapped edges, never rounds alone — neighbouring quads share their
+edge coordinate exactly by construction (asserted against a real
+planned frame), so they snap to the same integer edge, and the affine
+pose maps a shared edge to one shared coordinate on the far side.
+Scissoring deliberately stays with the screen that owns the layout;
+the drawer knows only the surface centre and the rotation.
+
+### A circular test, caught and cut
+
+The first full-stack test recovered each quad's world rectangle *from
+the quad*, ran it through the projection, and compared the result back
+— proving the projection's inverse of itself, nothing more. Deleted
+and replaced by the plan-level edge-sharing check above; the honest
+chain is the planner's own position pins, the pose-equivalence test,
+and the snap edge rule, which together imply the end-to-end property
+the fake test claimed to check.
+
+### Verification
+
+`./gradlew build` green; **959 tests, 0 failures** (was 954; +5:
+the half-pixel bound over a coordinate sweep, adjacency under
+fractional offsets, the round-half-toward-positive-infinity tie rule,
+pose ≡ projection across eight rotations, and plan-level edge
+sharing). Bytecode-verified against the 26.3 jar: the blit overload's
+normalized UVs, the GUI_TEXTURED pipeline under the view blit,
+`NativeImage.close`'s double-free guard, and `DynamicTexture`'s
+texture-then-view release order. In-game verification — the first
+tiles on screen — waits for the screen that will call this code.
+
+### Not done yet (next sessions)
+
+WorldMapScreen (the first caller of the drawer, with scissor and
+input), MinimapHud (HUD layer registration), MapEditorScreen, `/zeamap`
++ keybinds, lifecycle wiring (schedulers, world resolution, generation
+bumps), RepoMapClient, claim-command chat integration, and the visual
+checklist on the live server.
