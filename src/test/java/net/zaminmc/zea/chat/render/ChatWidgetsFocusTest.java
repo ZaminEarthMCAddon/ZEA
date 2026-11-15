@@ -18,20 +18,40 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Pins the chat widgets out of 26.3's keyboard focus navigation. Vanilla
- * screens move focus with Tab and the arrow keys; with the tab strip,
- * search bar and action buttons registered as ordinary focusable
- * children, a history-recall up-arrow while typing moved screen focus
- * onto them and silently ate every following keystroke — the live report
- * of losing the caret mid-sentence. All three widgets therefore override
- * {@code nextFocusPath} to return null. Instantiating the tab bar needs
- * a real {@code Font} (it measures its labels at construction), so this
- * reads the compiled bytecode instead — the same approach
- * ChatSubsystemWiringTest takes — and asserts the override exists and can
- * only answer null.
+ * Pins the chat widgets out of 26.3's focus machinery on both of its
+ * paths.
+ *
+ * <p><b>Keyboard</b> — vanilla screens move focus with Tab and the arrow
+ * keys; with the tab strip, search bar and action buttons registered as
+ * ordinary focusable children, a history-recall up-arrow while typing
+ * moved screen focus onto them and silently ate every following
+ * keystroke (the dev.24 live report). All widgets therefore override
+ * {@code nextFocusPath} to return null.
+ *
+ * <p><b>Mouse</b> — 26.3's container click handler moves screen focus
+ * onto whatever widget consumed a click ({@code
+ * shouldTakeFocusAfterInteraction}, true by default), which clears the
+ * chat input's focused flag: after one tab click, typed characters
+ * reached no widget until the input was clicked again (the dev.36 live
+ * report: "chat gets de-focused often"). Every mouse-driven widget
+ * therefore overrides it to return false — the caret belongs to the
+ * input through every click. The search bar is deliberately exempt:
+ * it is a text field, and clicking into it should focus it.
+ *
+ * <p>Instantiating the widgets needs a real {@code Font} (they measure
+ * their labels at construction), so this reads the compiled bytecode
+ * instead — the same approach ChatSubsystemWiringTest takes — and
+ * asserts the overrides exist and can only answer one way.
  */
 class ChatWidgetsFocusTest {
         private static final Path MAIN_CLASSES = Paths.get("build", "classes", "java", "main");
+
+        private static final String[] MOUSE_DRIVEN_WIDGETS = {
+                        "net/zaminmc/zea/chat/render/ChatTabBar.class",
+                        "net/zaminmc/zea/chat/render/ChatButtonBar.class",
+                        "net/zaminmc/zea/chat/render/TradeStatusIndicator.class",
+                        "net/zaminmc/zea/chat/render/TradeQueuePanel.class",
+        };
 
         @Test
         void theChatWidgetsNeverOfferThemselvesAsKeyboardFocusTargets() throws IOException {
@@ -39,22 +59,19 @@ class ChatWidgetsFocusTest {
                 refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatSearchBar.class");
                 refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatButtonBar.class");
                 refusesFocusNavigation("net/zaminmc/zea/chat/render/TradeStatusIndicator.class");
+                refusesFocusNavigation("net/zaminmc/zea/chat/render/TradeQueuePanel.class");
+        }
+
+        @Test
+        void theMouseDrivenWidgetsNeverTakeFocusFromTheChatInput() throws IOException {
+                for (String classFile : MOUSE_DRIVEN_WIDGETS) {
+                        refusesFocusAfterClick(classFile);
+                }
         }
 
         private static void refusesFocusNavigation(String classFile) throws IOException {
                 assumeTrue(Files.isDirectory(MAIN_CLASSES), "compiled classes not found — run through Gradle");
-                ClassNode node = new ClassNode(Opcodes.ASM9);
-                new ClassReader(Files.readAllBytes(MAIN_CLASSES.resolve(classFile))).accept(node, 0);
-
-                MethodNode override = null;
-                for (MethodNode method : node.methods) {
-                        if ("nextFocusPath".equals(method.name)) {
-                                override = method;
-                                break;
-                        }
-                }
-                assertNotNull(override, classFile + " does not override nextFocusPath — keyboard focus"
-                                + " navigation can move the caret onto it while the player types");
+                MethodNode override = method(classFile, "nextFocusPath");
 
                 boolean pushedNull = false;
                 for (AbstractInsnNode insn : override.instructions) {
@@ -67,9 +84,42 @@ class ChatWidgetsFocusTest {
                                 // Frame and line-number pseudo-instructions.
                         } else {
                                 fail(classFile + "#nextFocusPath does more than return null —"
-                                                + " it may answer a focus navigation request");
+                                                                + " it may answer a focus navigation request");
                         }
                 }
                 assertTrue(pushedNull, classFile + "#nextFocusPath returns something other than null");
+        }
+
+        private static void refusesFocusAfterClick(String classFile) throws IOException {
+                assumeTrue(Files.isDirectory(MAIN_CLASSES), "compiled classes not found — run through Gradle");
+                MethodNode override = method(classFile, "shouldTakeFocusAfterInteraction");
+
+                boolean pushedFalse = false;
+                for (AbstractInsnNode insn : override.instructions) {
+                        int opcode = insn.getOpcode();
+                        if (opcode == Opcodes.ICONST_0) {
+                                pushedFalse = true;
+                        } else if (opcode == Opcodes.IRETURN) {
+                                // The single return of a false-only method.
+                        } else if (opcode == -1) {
+                                // Frame and line-number pseudo-instructions.
+                        } else {
+                                fail(classFile + "#shouldTakeFocusAfterInteraction does more than return false —"
+                                                                + " a click can move the caret off the chat input");
+                        }
+                }
+                assertTrue(pushedFalse, classFile + "#shouldTakeFocusAfterInteraction returns true");
+        }
+
+        private static MethodNode method(String classFile, String name) throws IOException {
+                ClassNode node = new ClassNode(Opcodes.ASM9);
+                new ClassReader(Files.readAllBytes(MAIN_CLASSES.resolve(classFile))).accept(node, 0);
+                for (MethodNode method : node.methods) {
+                        if (name.equals(method.name)) {
+                                return method;
+                        }
+                }
+                fail(classFile + " does not override " + name + " — 26.3's focus machinery can reach it");
+                return null;
         }
 }

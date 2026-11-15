@@ -8,76 +8,82 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * The feed definitions. Default-visible tabs follow the Phase 1 spec:
- * General, Global, Local, Trade, Nation, Town, PMs; the remaining feeds
- * are accessible but hidden until enabled in configuration (Stage 3+
- * wiring).
+ * The feed definitions. Default-visible tabs: Global, Local, Trade,
+ * Nation, Town, PMs; the remaining feeds are accessible but hidden
+ * until enabled in configuration.
  *
- * <p>The aggregate tab is labeled "General" (the dev.26 live request —
- * "All" read like a channel you could write to): it shows every channel's
- * messages plus everything else, which is exactly what a general chat
- * view means. Feeds are data, not server channels — a feed never implies
- * a writable destination. When ZEA-REPO consumption lands, channel-derived
- * feeds are built from the channels dataset; category feeds (events,
- * system, unclassified) remain code-level.
+ * <p>Global is the aggregate — every category plus everything ZEA could
+ * not classify, exactly what a "general chat" view means — and the only
+ * aggregate: the former General tab was removed at the live player's
+ * request, and Global took over the job. What the aggregate hides is
+ * not baked here; it is the user's per-type choice
+ * ({@link GlobalVisibility}), because "show everything, but let me turn
+ * each kind off" was the request. Feeds are data, not server channels —
+ * a feed never implies a writable destination. When ZEA-REPO
+ * consumption lands, channel-derived feeds are built from the channels
+ * dataset; category feeds (events, system, unclassified) remain
+ * code-level.
  */
 public final class Feeds {
-        /** Aggregates every category, including unclassified. */
-        public static final Feed ALL = new Feed("all", "General", Set.of(MessageCategory.values()));
+	/**
+	 * The aggregate: every category, including unclassified. Typing on
+	 * this tab still sends to the Global channel ({@code /global <msg>})
+	 * — the feed is the view, the channel is the destination.
+	 */
+	public static final Feed GLOBAL = new Feed("global", "Global", Set.of(MessageCategory.values()));
 
-        public static final Feed GLOBAL = channelFeed(MessageCategory.GLOBAL);
-        public static final Feed LOCAL = channelFeed(MessageCategory.LOCAL);
-        public static final Feed TRADE = channelFeed(MessageCategory.TRADE);
-        public static final Feed NATION = channelFeed(MessageCategory.NATION);
-        public static final Feed TOWN = channelFeed(MessageCategory.TOWN);
-        public static final Feed PRIVATE_MESSAGES = new Feed("pms", "PMs",
-                        Set.of(MessageCategory.PRIVATE_MESSAGE));
-        public static final Feed DISCORD = new Feed("discord", "Discord", Set.of(MessageCategory.DISCORD));
-        public static final Feed VOTES = new Feed("votes", "Votes", Set.of(MessageCategory.VOTE));
-        public static final Feed CRATE_WINS = new Feed("crates", "Crate Wins", Set.of(MessageCategory.CRATE_WIN));
-        public static final Feed DEATHS = new Feed("deaths", "Deaths", Set.of(MessageCategory.DEATH));
-        public static final Feed SYSTEM = new Feed("system", "System", Set.of(MessageCategory.SYSTEM));
-        /** "Other", not "General": the aggregate tab owns that name. */
-        public static final Feed UNCLASSIFIED = new Feed("unclassified", "Other",
-                        Set.of(MessageCategory.UNCLASSIFIED));
+	public static final Feed LOCAL = channelFeed(MessageCategory.LOCAL);
+	public static final Feed TRADE = channelFeed(MessageCategory.TRADE);
+	public static final Feed NATION = channelFeed(MessageCategory.NATION);
+	public static final Feed TOWN = channelFeed(MessageCategory.TOWN);
+	public static final Feed PRIVATE_MESSAGES = new Feed("pms", "PMs",
+					Set.of(MessageCategory.PRIVATE_MESSAGE));
+	public static final Feed DISCORD = new Feed("discord", "Discord", Set.of(MessageCategory.DISCORD));
+	public static final Feed VOTES = new Feed("votes", "Votes", Set.of(MessageCategory.VOTE));
+	public static final Feed CRATE_WINS = new Feed("crates", "Crate Wins", Set.of(MessageCategory.CRATE_WIN));
+	public static final Feed DEATHS = new Feed("deaths", "Deaths", Set.of(MessageCategory.DEATH));
+	public static final Feed SYSTEM = new Feed("system", "System", Set.of(MessageCategory.SYSTEM));
+	/** "Other", not "Global": the aggregate tab owns that name. */
+	public static final Feed UNCLASSIFIED = new Feed("unclassified", "Other",
+					Set.of(MessageCategory.UNCLASSIFIED));
 
-        private static Feed channelFeed(MessageCategory category) {
-                return new Feed(category.name().toLowerCase(Locale.ROOT),
-                                category.name().charAt(0) + category.name().substring(1).toLowerCase(Locale.ROOT),
-                                Set.of(category));
-        }
+	private static Feed channelFeed(MessageCategory category) {
+		return new Feed(category.name().toLowerCase(Locale.ROOT),
+						category.name().charAt(0) + category.name().substring(1).toLowerCase(Locale.ROOT),
+						Set.of(category));
+	}
 
-        public static List<Feed> allFeeds() {
-                return List.of(ALL, GLOBAL, LOCAL, TRADE, NATION, TOWN, PRIVATE_MESSAGES,
-                                DISCORD, VOTES, CRATE_WINS, DEATHS, SYSTEM, UNCLASSIFIED);
-        }
+	public static List<Feed> allFeeds() {
+		return List.of(GLOBAL, LOCAL, TRADE, NATION, TOWN, PRIVATE_MESSAGES,
+						DISCORD, VOTES, CRATE_WINS, DEATHS, SYSTEM, UNCLASSIFIED);
+	}
 
-        /** Feeds shown as tabs before the user configures anything. */
-        public static List<Feed> defaultVisibleTabs() {
-                return List.of(ALL, GLOBAL, LOCAL, TRADE, NATION, TOWN, PRIVATE_MESSAGES);
-        }
+	/** Feeds shown as tabs before the user configures anything. */
+	public static List<Feed> defaultVisibleTabs() {
+		return List.of(GLOBAL, LOCAL, TRADE, NATION, TOWN, PRIVATE_MESSAGES);
+	}
 
-        public static List<Feed> extraFeeds() {
-                List<Feed> extras = new ArrayList<>(allFeeds());
-                extras.removeAll(defaultVisibleTabs());
-                return List.copyOf(extras);
-        }
+	public static List<Feed> extraFeeds() {
+		List<Feed> extras = new ArrayList<>(allFeeds());
+		extras.removeAll(defaultVisibleTabs());
+		return List.copyOf(extras);
+	}
 
-        /**
-         * The tabs the user sees: the default tabs plus the extra feeds whose
-         * ids were enabled in configuration. Unknown ids are ignored so a
-         * stale config cannot break rendering.
-         */
-        public static List<Feed> visibleTabs(Set<String> enabledExtraFeedIds) {
-                List<Feed> tabs = new ArrayList<>(defaultVisibleTabs());
-                for (Feed extra : extraFeeds()) {
-                        if (enabledExtraFeedIds.contains(extra.id())) {
-                                tabs.add(extra);
-                        }
-                }
-                return List.copyOf(tabs);
-        }
+	/**
+	 * The tabs the user sees: the default tabs plus the extra feeds whose
+	 * ids were enabled in configuration. Unknown ids are ignored so a
+	 * stale config cannot break rendering.
+	 */
+	public static List<Feed> visibleTabs(Set<String> enabledExtraFeedIds) {
+		List<Feed> tabs = new ArrayList<>(defaultVisibleTabs());
+		for (Feed extra : extraFeeds()) {
+			if (enabledExtraFeedIds.contains(extra.id())) {
+				tabs.add(extra);
+			}
+		}
+		return List.copyOf(tabs);
+	}
 
-        private Feeds() {
-        }
+	private Feeds() {
+	}
 }

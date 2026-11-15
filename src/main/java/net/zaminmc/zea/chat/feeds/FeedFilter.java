@@ -4,44 +4,48 @@ import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.zaminmc.zea.chat.classify.ClassificationCache;
 import net.zaminmc.zea.chat.model.MessageCategory;
+import net.zaminmc.zea.chat.model.TradeWait;
 
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Applies the selected display feed — and, while a chat search is open,
  * its query — to the vanilla chat as its official
  * {@code visibleMessageFilter}. Switching feeds and searches must be
- * reversible: every message stays retrievable, so returning to the General
- * tab (or any other feed) shows the full history again.
+ * reversible: every message stays retrievable, so returning to the
+ * Global aggregate (or any other feed) shows the full history again.
  *
  * <p>Vanilla, however, applies the filter as an <b>ingest gate</b>:
  * {@code ChatComponent.addMessage} returns before its store calls when
  * the filter rejects, so a message hidden by the selected feed would be
  * dropped from the chat entirely — nothing retains it, and switching
- * back to General could not restore it (verified against the 26.3 bytecode:
+ * back to Global could not restore it (verified against the 26.3 bytecode:
  * the reject branch skips both {@code addMessageToDisplayQueue} and
  * {@code addMessageToQueue}). ZEA therefore installs only
  * {@link Installed} predicates, and ChatComponentMixin's retention wrap
  * stores a message an {@code Installed} predicate rejected into
  * {@code allMessages} before vanilla drops it: hidden from the display
- * list now, retained for every later feed, search and the General
-  * aggregate. The wrap ignores any filter ZEA did not install —
+ * list now, retained for every later feed, search and the Global
+ * aggregate. The wrap ignores any filter ZEA did not install —
  * vanilla's own chat-trust filter and other mods' filters keep vanilla's
  * drop semantics untouched.
  *
- * <p>The General tab contributes no feed predicate of its own while the
- * broadcast filter is off, which also restores messages ZEA never
- * classified (shown by vanilla as usual); with it on, General hides the
- * server broadcast categories — votes, crate wins, deaths and system
- * lines — which otherwise dominate the aggregate. Those messages stay
- * retrievable exactly like any other hidden message (the retention wrap
- * above), they still show in their own tabs, and anything unclassified
- * is never hidden: an unknown format must not vanish from General just
- * because it arrived untagged. A search, however, filters even on All.
+ * <p>The Global tab is the aggregate, so its predicate is the user's
+ * per-type choice ({@link GlobalVisibility} — read live, so a settings
+ * change applies to the next message without re-selecting anything);
+ * with nothing hidden the predicate disappears entirely and vanilla
+ * shows everything, unclassified formats included. A feed without the
+ * full set shows only its categories. And while trade pacing is on,
+ * the server's trade-cooldown rejection lines
+ * ({@code » You must wait another ...}) are hidden everywhere — the
+ * client answers them itself by queueing the rejected message and
+ * counting down in the status line, so the raw refusal is noise; they
+ * stay retained like any other hidden message and reappear if pacing
+ * is turned off.
  *
  * <p>Vanilla requires the installed filter to be non-null: the field
  * starts as an always-true predicate and neither {@code addMessage} nor
@@ -64,120 +68,122 @@ import java.util.function.Predicate;
  * is closed; an empty string means open but not narrowing anything yet.
  */
 public final class FeedFilter {
-        /** What vanilla itself installs when nothing should be hidden. */
-        private static final Predicate<GuiMessage> SHOW_EVERYTHING = message -> true;
+	/** What vanilla itself installs when nothing should be hidden. */
+	private static final Predicate<GuiMessage> SHOW_EVERYTHING = message -> true;
 
-        /**
-         * The server-spoken categories the General tab can hide: vote
-         * reminders, crate wins, deaths and system lines. Conversational
-         * categories (channels, PMs, Discord) stay, and UNCLASSIFIED is
-         * deliberately absent — an unknown format must never be swallowed.
-         */
-        public static final Set<MessageCategory> SERVER_BROADCASTS = Set.of(
-                        MessageCategory.VOTE, MessageCategory.CRATE_WIN,
-                        MessageCategory.DEATH, MessageCategory.SYSTEM);
+	private final ClassificationCache cache;
+	private final FeedSelection selection;
+	private final Supplier<GlobalVisibility> globalVisibility;
+	private final BooleanSupplier hideTradeWaitLines;
+	private String searchQuery;
 
-        private final ClassificationCache cache;
-        private final FeedSelection selection;
-        private final BooleanSupplier hideServerBroadcasts;
-        private String searchQuery;
+	public FeedFilter(ClassificationCache cache, FeedSelection selection,
+					Supplier<GlobalVisibility> globalVisibility, BooleanSupplier hideTradeWaitLines) {
+		this.cache = Objects.requireNonNull(cache, "cache must not be null");
+		this.selection = Objects.requireNonNull(selection, "selection must not be null");
+		this.globalVisibility = Objects.requireNonNull(globalVisibility,
+						"globalVisibility must not be null");
+		this.hideTradeWaitLines = Objects.requireNonNull(hideTradeWaitLines,
+						"hideTradeWaitLines must not be null");
+	}
 
-        public FeedFilter(ClassificationCache cache, FeedSelection selection,
-                        BooleanSupplier hideServerBroadcasts) {
-                this.cache = Objects.requireNonNull(cache, "cache must not be null");
-                this.selection = Objects.requireNonNull(selection, "selection must not be null");
-                this.hideServerBroadcasts = Objects.requireNonNull(hideServerBroadcasts,
-                                "hideServerBroadcasts must not be null");
-        }
+	/** The active search query, or {@code null} when the search is closed. */
+	public String searchQuery() {
+		return searchQuery;
+	}
 
-        /** The active search query, or {@code null} when the search is closed. */
-        public String searchQuery() {
-                return searchQuery;
-        }
+	/**
+	 * Sets the search query. {@code null} closes the search; a blank
+	 * query keeps it open without filtering. Callers re-apply the filter
+	 * through {@link #apply(ChatComponent)} for the change to take
+	 * effect.
+	 */
+	public void setSearchQuery(String query) {
+		this.searchQuery = query;
+	}
 
-        /**
-         * Sets the search query. {@code null} closes the search; a blank
-         * query keeps it open without filtering. Callers re-apply the filter
-         * through {@link #apply(ChatComponent)} for the change to take
-         * effect.
-         */
-        public void setSearchQuery(String query) {
-                this.searchQuery = query;
-        }
+	/**
+	 * The predicate for the selected feed composed with the search
+	 * query and the wait-line hide, or {@code null} when none of them
+	 * filters anything.
+	 */
+	public Predicate<GuiMessage> currentFilter() {
+		Predicate<GuiMessage> filter = feedPredicate();
+		Predicate<GuiMessage> bySearch = searchPredicate(searchQuery);
+		if (filter == null) {
+			filter = bySearch;
+		} else if (bySearch != null) {
+			filter = filter.and(bySearch);
+		}
+		if (hideTradeWaitLines.getAsBoolean()) {
+			Predicate<GuiMessage> notWaitLine = message ->
+							!(cache.classificationOf(message.content()).payload() instanceof TradeWait);
+			filter = filter == null ? notWaitLine : notWaitLine.and(filter);
+		}
+		return filter;
+	}
 
-        /**
-         * The predicate for the selected feed composed with the search
-         * query, or {@code null} when neither filters anything.
-         */
-        public Predicate<GuiMessage> currentFilter() {
-                Predicate<GuiMessage> byFeed = feedPredicate();
-                Predicate<GuiMessage> bySearch = searchPredicate(searchQuery);
-                if (byFeed == null) {
-                        return bySearch;
-                }
-                if (bySearch == null) {
-                        return byFeed;
-                }
-                return byFeed.and(bySearch);
-        }
+	/**
+	 * The predicate {@link #apply(ChatComponent)} installs — like
+	 * {@link #currentFilter()}, except "nothing filters" becomes an
+	 * always-true predicate instead of {@code null}, because vanilla's
+	 * chat crashes on a null filter when the next message arrives.
+	 * Always an {@link Installed} wrapper so the retention wrap in
+	 * ChatComponentMixin can recognize ZEA's filters.
+	 */
+	public Installed installableFilter() {
+		Predicate<GuiMessage> filter = currentFilter();
+		return new Installed(filter != null ? filter : SHOW_EVERYTHING);
+	}
 
-        /**
-         * The predicate {@link #apply(ChatComponent)} installs — like
-         * {@link #currentFilter()}, except "nothing filters" becomes an
-         * always-true predicate instead of {@code null}, because vanilla's
-         * chat crashes on a null filter when the next message arrives.
-         * Always an {@link Installed} wrapper so the retention wrap in
-         * ChatComponentMixin can recognize ZEA's filters.
-         */
-        public Installed installableFilter() {
-                Predicate<GuiMessage> filter = currentFilter();
-                return new Installed(filter != null ? filter : SHOW_EVERYTHING);
-        }
+	/** Installs (or clears) the filter on the live chat component. */
+	public void apply(ChatComponent chat) {
+		chat.setVisibleMessageFilter(installableFilter());
+	}
 
-        /** Installs (or clears) the filter on the live chat component. */
-        public void apply(ChatComponent chat) {
-                chat.setVisibleMessageFilter(installableFilter());
-        }
+	private Predicate<GuiMessage> feedPredicate() {
+		Feed feed = selection.selected();
+		if (feed.showsEverything()) {
+			GlobalVisibility visibility = globalVisibility.get();
+			if (visibility.showsEverything()) {
+				return null;
+			}
+			return message -> !visibility.hides(categoryOf(message));
+		}
+		return message -> feed.shows(cache.classificationOf(message.content()));
+	}
 
-        private Predicate<GuiMessage> feedPredicate() {
-                Feed feed = selection.selected();
-                if (feed.showsEverything()) {
-                        if (!hideServerBroadcasts.getAsBoolean()) {
-                                return null;
-                        }
-                        return message -> !SERVER_BROADCASTS.contains(
-                                        cache.classificationOf(message.content()).category());
-                }
-                return message -> feed.shows(cache.classificationOf(message.content()));
-        }
+	private MessageCategory categoryOf(GuiMessage message) {
+		return cache.classificationOf(message.content()).category();
+	}
 
-        /** Case-insensitive substring match over the flattened message text. */
-        private static Predicate<GuiMessage> searchPredicate(String query) {
-                if (query == null || query.isBlank()) {
-                        return null;
-                }
-                String needle = query.toLowerCase(Locale.ROOT);
-                return message -> message.content().getString().toLowerCase(Locale.ROOT).contains(needle);
-        }
+	/** Case-insensitive substring match over the flattened message text. */
+	private static Predicate<GuiMessage> searchPredicate(String query) {
+		if (query == null || query.isBlank()) {
+			return null;
+		}
+		String needle = query.toLowerCase(Locale.ROOT);
+		return message -> message.content().getString().toLowerCase(Locale.ROOT).contains(needle);
+	}
 
-        /**
-         * The predicate shape ZEA installs as the vanilla chat filter. A
-         * plain delegating wrapper: its only job is to be recognizably
-         * ZEA's, so the retention wrap in ChatComponentMixin can store away
-         * the messages these predicates reject without touching the drop
-         * semantics of any other filter that ever occupies the field
-         * (vanilla's chat-trust filter, other mods').
-         */
-        public static final class Installed implements Predicate<GuiMessage> {
-                private final Predicate<GuiMessage> delegate;
+	/**
+	 * The predicate shape ZEA installs as the vanilla chat filter. A
+	 * plain delegating wrapper: its only job is to be recognizably
+	 * ZEA's, so the retention wrap in ChatComponentMixin can store away
+	 * the messages these predicates reject without touching the drop
+	 * semantics of any other filter that ever occupies the field
+	 * (vanilla's chat-trust filter, other mods').
+	 */
+	public static final class Installed implements Predicate<GuiMessage> {
+		private final Predicate<GuiMessage> delegate;
 
-                Installed(Predicate<GuiMessage> delegate) {
-                        this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-                }
+		Installed(Predicate<GuiMessage> delegate) {
+			this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
+		}
 
-                @Override
-                public boolean test(GuiMessage message) {
-                        return delegate.test(message);
-                }
-        }
+		@Override
+		public boolean test(GuiMessage message) {
+			return delegate.test(message);
+		}
+	}
 }

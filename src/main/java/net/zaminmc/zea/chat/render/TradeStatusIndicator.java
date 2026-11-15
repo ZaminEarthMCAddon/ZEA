@@ -22,18 +22,19 @@ import java.util.function.Supplier;
 /**
  * The trade pacing status line: a small yellow "Trade 4:12 · 2 queued"
  * tag on its own row above the chat tab strip, right-aligned to the
- * screen. It appears whenever there is something to say — the
- * five-minute cooldown running, messages waiting for the auto-send
- * drain, or both — and clicking it toggles auto-send, so the player
- * never has to open the settings to change the one thing they would
- * want to change mid-conversation.
+ * screen. It appears whenever there is something to say — a
+ * server-reported cooldown running, messages waiting for the
+ * auto-send drain, or both — and clicking it opens the queue panel
+ * (the held messages, delete buttons, the auto-send toggle), so the
+ * player never has to open the settings to manage what waits.
  *
  * <p>The label is recomputed every frame (the countdown moves), so the
  * widget hugs its text: width and x are re-set per frame from the
  * measured label, keeping the right edge fixed. Rendering speaks the
  * tab strip's language — one flat translucent box, yellow text — and
- * like every ZEA chat widget it is mouse-driven and refuses keyboard
- * focus navigation, so it can never steal the caret from the chat input.
+ * like every ZEA chat widget it is mouse-driven, refuses keyboard
+ * focus navigation, and never takes focus from the chat input on
+ * click, so typing continues after a click.
  *
  * <p>Visibility is the chat screen's call, polled per frame: the widget
  * itself has no way back into rendering once invisible, so the screen
@@ -52,31 +53,27 @@ public final class TradeStatusIndicator extends AbstractWidget {
         private final Font font;
         private final BooleanSupplier pacingEnabled;
         private final Supplier<TradeGate.Snapshot> state;
-        private final BooleanSupplier autoSend;
-        private final Runnable onToggleAutoSend;
+        private final Runnable onOpenQueue;
         private final int rightEdge;
 
         /**
-         * @param rightEdge        the screen x the tag's right edge stays glued to
-         * @param y                the row's top edge (the tab strip's top minus HEIGHT)
-         * @param font             the text renderer that measures and draws the label
-         * @param pacingEnabled    whether trade pacing is on at all
-         * @param state            the gate's snapshot, sampled per frame
-         * @param autoSend         whether auto-send is currently on (the tooltip shows it)
-         * @param onToggleAutoSend run when the tag is clicked
+         * @param rightEdge   the screen x the tag's right edge stays glued to
+         * @param y           the row's top edge (the tab strip's top minus HEIGHT)
+         * @param font        the text renderer that measures and draws the label
+         * @param pacingEnabled whether trade pacing is on at all
+         * @param state       the gate's snapshot, sampled per frame
+         * @param onOpenQueue run when the tag is clicked
          */
         public TradeStatusIndicator(int rightEdge, int y, Font font, BooleanSupplier pacingEnabled,
-                        Supplier<TradeGate.Snapshot> state, BooleanSupplier autoSend, Runnable onToggleAutoSend) {
+                        Supplier<TradeGate.Snapshot> state, Runnable onOpenQueue) {
                 super(rightEdge - 60, y, 60, HEIGHT, Component.translatable("zea.chat.trade.title"));
-                if (font == null || pacingEnabled == null || state == null || autoSend == null
-                                        || onToggleAutoSend == null) {
+                if (font == null || pacingEnabled == null || state == null || onOpenQueue == null) {
                         throw new NullPointerException("callbacks must not be null");
                 }
                 this.font = font;
                 this.pacingEnabled = pacingEnabled;
                 this.state = state;
-                this.autoSend = autoSend;
-                this.onToggleAutoSend = onToggleAutoSend;
+                this.onOpenQueue = onOpenQueue;
                 this.rightEdge = rightEdge;
                 setHeight(HEIGHT);
         }
@@ -105,8 +102,7 @@ public final class TradeStatusIndicator extends AbstractWidget {
                                                 label.copy().withStyle(ChatFormatting.YELLOW));
                 if (isMouseOver(mouseX, mouseY)) {
                         setTooltip(Tooltip.create(
-                                        Component.translatable("zea.chat.trade.tooltip").withStyle(ChatFormatting.YELLOW),
-                                        Component.translatable(autoSendKey())));
+                                        Component.translatable("zea.chat.trade.tooltip").withStyle(ChatFormatting.YELLOW)));
                 } else {
                         setTooltip(null);
                 }
@@ -122,16 +118,12 @@ public final class TradeStatusIndicator extends AbstractWidget {
                                 : Component.translatable("zea.chat.trade.status", remaining);
         }
 
-        private String autoSendKey() {
-                return autoSend.getAsBoolean() ? "zea.chat.trade.auto_on" : "zea.chat.trade.auto_off";
-        }
-
         @Override
         public void onClick(MouseButtonEvent event, boolean doubleClick) {
                 if (event.button() != InputConstants.MOUSE_BUTTON_LEFT || !shouldShow()) {
                         return;
                 }
-                onToggleAutoSend.run();
+                onOpenQueue.run();
         }
 
         @Override
@@ -143,6 +135,12 @@ public final class TradeStatusIndicator extends AbstractWidget {
         @Override
         public ComponentPath nextFocusPath(FocusNavigationEvent navigationEvent) {
                 return null;
+        }
+
+        /** Never takes the caret from the chat input on click; see the class javadoc. */
+        @Override
+        public boolean shouldTakeFocusAfterInteraction() {
+                return false;
         }
 
         @Override

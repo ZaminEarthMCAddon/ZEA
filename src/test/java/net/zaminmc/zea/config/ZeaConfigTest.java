@@ -2,6 +2,8 @@ package net.zaminmc.zea.config;
 
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.chat.feeds.Feed;
+import net.zaminmc.zea.chat.feeds.GlobalVisibility;
+import net.zaminmc.zea.chat.model.MessageCategory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -32,10 +34,36 @@ class ZeaConfigTest {
                 assertEquals(7, config.historyRetentionDays());
                 assertEquals(7L * 86_400_000L, config.historyRetentionMillis());
                 assertEquals(ZeaConfig.DEFAULT_HISTORY_ENTRIES, config.historyMaxEntries());
-                assertFalse(config.hideServerBroadcastsInGeneral(),
-                        "General keeps its broadcasts until the player asks to hide them");
                 assertTrue(config.tradePacingEnabled(), "trade pacing defaults to on");
                 assertTrue(config.tradeAutoSend(), "queued trade messages auto-send by default");
+        }
+
+        @Test
+        void globalVisibilityDefaultsToShowEverything() {
+                ZeaConfig config = new ZeaConfig();
+                assertEquals(GlobalVisibility.SHOW_EVERYTHING, config.globalVisibility());
+        }
+
+        @Test
+        void everyToggleableKindHidesWhenSwitchedOff() {
+                ZeaConfig config = new ZeaConfig();
+                config.chat.globalTab.local = false;
+                config.chat.globalTab.trade = false;
+                config.chat.globalTab.nation = false;
+                config.chat.globalTab.town = false;
+                config.chat.globalTab.privateMessages = false;
+                config.chat.globalTab.discord = false;
+                config.chat.globalTab.votes = false;
+                config.chat.globalTab.crateWins = false;
+                config.chat.globalTab.deaths = false;
+                config.chat.globalTab.system = false;
+
+                GlobalVisibility visibility = config.globalVisibility();
+                for (MessageCategory category : GlobalVisibility.TOGGLEABLE) {
+                        assertTrue(visibility.hides(category), category + " must hide when switched off");
+                }
+                assertFalse(visibility.hides(MessageCategory.GLOBAL));
+                assertFalse(visibility.hides(MessageCategory.UNCLASSIFIED));
         }
 
         @Test
@@ -195,6 +223,43 @@ class ZeaConfigTest {
                 var tree = com.google.gson.JsonParser.parseString(rewritten).getAsJsonObject();
                 assertFalse(tree.has("tabs"), "the flat layout must not survive the rewrite");
                 assertTrue(tree.getAsJsonObject("chat").has("tabs"));
+        }
+
+        @Test
+        void versionTwoHidingBroadcastsBecomesTheGlobalTabOptOuts(@TempDir Path dir) throws IOException {
+                // A dev.33-era file: the General tab's single switch, on. Version
+                // 3 replaces it with Global's per-type toggles - hiding votes,
+                // crate wins, deaths and system lines there, exactly what the
+                // old switch meant, with every other kind staying on.
+                Path file = dir.resolve("zea.json");
+                Files.writeString(file, """
+                                {"configVersion": 2, "chat": {"hideServerBroadcastsInGeneral": true,
+                                  "multiSendEnabled": true}}
+                                """);
+                ZeaConfig config = new ZeaConfigStore(file).load();
+                assertEquals(ZeaConfig.CURRENT_VERSION, config.configVersion());
+                GlobalVisibility visibility = config.globalVisibility();
+                assertTrue(visibility.hides(MessageCategory.VOTE));
+                assertTrue(visibility.hides(MessageCategory.CRATE_WIN));
+                assertTrue(visibility.hides(MessageCategory.DEATH));
+                assertTrue(visibility.hides(MessageCategory.SYSTEM));
+                assertFalse(visibility.hides(MessageCategory.LOCAL), "conversational kinds stay on");
+                assertFalse(visibility.hides(MessageCategory.PRIVATE_MESSAGE));
+                assertTrue(config.multiSendEnabled(), "unrelated values survive the migration");
+                String rewritten = Files.readString(file);
+                assertFalse(rewritten.contains("hideServerBroadcastsInGeneral"),
+                                "the old switch must not survive the rewrite");
+        }
+
+        @Test
+        void versionTwoWithBroadcastsVisibleKeepsTheEveryMessageDefault(@TempDir Path dir) throws IOException {
+                Path file = dir.resolve("zea.json");
+                Files.writeString(file, """
+                                {"configVersion": 2, "chat": {"hideServerBroadcastsInGeneral": false}}
+                                """);
+                ZeaConfig config = new ZeaConfigStore(file).load();
+                assertEquals(ZeaConfig.CURRENT_VERSION, config.configVersion());
+                assertEquals(GlobalVisibility.SHOW_EVERYTHING, config.globalVisibility());
         }
 
         @Test

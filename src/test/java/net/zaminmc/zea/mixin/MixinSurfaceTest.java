@@ -10,6 +10,9 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
+import net.minecraft.client.gui.Hud;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
@@ -118,6 +121,10 @@ class MixinSurfaceTest {
                 declaredField(ChatScreen.class, CommandSuggestions.class, "commandSuggestions");
                 declaredMethod(CommandSuggestions.class, "setAllowSuggestions", boolean.class);
                 declaredMethod(CommandSuggestions.class, "updateCommandInfo");
+                // The focus-navigation entry the Tab consumption sits in front of:
+                // vanilla calls the parent's keyPressed after command completion,
+                // and the injection point names that call.
+                declaredMethod(Screen.class, "keyPressed", KeyEvent.class);
         }
 
         @Test
@@ -126,6 +133,16 @@ class MixinSurfaceTest {
                 // own typing and recall, ZEA's channel routing and the trade
                 // auto-send drain — where the trade pacing gate is enforced.
                 declaredMethod(ClientPacketListener.class, "sendCommand", String.class);
+        }
+
+        @Test
+        void hotbarSlotPassTargetedByHudMixinIsDeclaredByHud() {
+                // The private slot pass the HUD draws every hotbar and off-hand
+                // item through — the rarity wash hooks its head so the item,
+                // count and durability bar stay on top.
+                declaredMethod(Hud.class, "extractSlot", GuiGraphicsExtractor.class,
+                                int.class, int.class, DeltaTracker.class, Player.class,
+                                ItemStack.class, int.class);
         }
 
         @Test

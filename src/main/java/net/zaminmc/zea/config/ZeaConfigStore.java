@@ -73,10 +73,23 @@ public final class ZeaConfigStore {
          */
         private JsonObject migrateTree(JsonObject tree, boolean[] migrated) {
                 int version = versionOf(tree);
-                if (version >= 2) {
+                if (version >= ZeaConfig.CURRENT_VERSION) {
                         return tree;
                 }
                 LOGGER.info("Migrating configuration from version {}", version);
+                if (version < 2) {
+                        migrateV1ToV2(tree);
+                }
+                if (version < 3) {
+                        migrateV2ToV3(tree);
+                }
+                tree.addProperty("configVersion", ZeaConfig.CURRENT_VERSION);
+                migrated[0] = true;
+                return tree;
+        }
+
+        /** Version 1 → 2: hoist the chat-related categories under {@code chat}. */
+        private static void migrateV1ToV2(JsonObject tree) {
                 JsonObject chat = tree.has("chat") && tree.get("chat").isJsonObject()
                                 ? tree.getAsJsonObject("chat")
                                 : new JsonObject();
@@ -86,9 +99,32 @@ public final class ZeaConfigStore {
                         }
                 }
                 tree.add("chat", chat);
-                tree.addProperty("configVersion", 2);
-                migrated[0] = true;
-                return tree;
+        }
+
+        /**
+         * Version 2 → 3: the General tab is gone and Global is the
+         * aggregate, so its single "hide server broadcasts in General"
+         * switch becomes the Global tab's per-type toggles. A player who
+         * had the switch on (hide votes, crate wins, deaths and system
+         * lines in the aggregate) keeps exactly that: those four kinds
+         * turn off on Global and everything else stays on. A player who
+         * had it off keeps the every-message default — nothing to write.
+         */
+        private static void migrateV2ToV3(JsonObject tree) {
+                JsonObject chat = tree.has("chat") && tree.get("chat").isJsonObject()
+                                ? tree.getAsJsonObject("chat")
+                                : null;
+                if (chat == null || !chat.has("hideServerBroadcastsInGeneral")) {
+                        return;
+                }
+                if (chat.remove("hideServerBroadcastsInGeneral").getAsBoolean()) {
+                        JsonObject globalTab = new JsonObject();
+                        globalTab.addProperty("votes", false);
+                        globalTab.addProperty("crateWins", false);
+                        globalTab.addProperty("deaths", false);
+                        globalTab.addProperty("system", false);
+                        chat.add("globalTab", globalTab);
+                }
         }
 
         /** The schema version a tree declares; files before versioning read as 0. */

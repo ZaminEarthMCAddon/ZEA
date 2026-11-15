@@ -24,6 +24,8 @@ import net.zaminmc.zea.chat.render.ChatTabBar;
 import net.zaminmc.zea.chat.render.ClearHistoryToast;
 import net.zaminmc.zea.chat.render.CopyToast;
 import net.zaminmc.zea.chat.render.MultiSendToast;
+import net.zaminmc.zea.chat.render.PrivateMessageToast;
+import net.zaminmc.zea.chat.render.TradeQueuePanel;
 import net.zaminmc.zea.chat.render.TradeStatusIndicator;
 import net.zaminmc.zea.chat.render.TradeToast;
 import net.zaminmc.zea.config.ZeaConfig;
@@ -69,6 +71,18 @@ import java.util.stream.Collectors;
  * composes with the selected feed and checking another feed mid-search
  * is a normal move — Chatting's tabs are not widgets, so its focus-loss
  * close never sees this case.
+ *
+ * <p>Focus discipline (the dev.36 live report: "chat gets de-focused
+ * often"): every ZEA row widget overrides
+ * {@code shouldTakeFocusAfterInteraction} to false, because 26.3's
+ * container click handler moves screen focus onto whatever widget
+ * consumed a click — clearing the chat input's focused flag and sending
+ * every following keystroke nowhere until the input was clicked again.
+ * ZEA's widgets are mouse-driven; the caret belongs to the input through
+ * every tab click and button press. Tab itself is handled at the point
+ * vanilla would start focus navigation, after command completion had
+ * its chance (see {@code zea$consumeTabAfterCompletion}), so completion
+ * works and the caret survives.
  */
 @Mixin(ChatScreen.class)
 public abstract class ChatScreenMixin {
@@ -122,6 +136,10 @@ public abstract class ChatScreenMixin {
         private ChatButtonBar zea$buttonBar;
         /** The trade pacing status line above the tab row; always built, shown when active. */
         private TradeStatusIndicator zea$tradeIndicator;
+        /** The trade queue panel the status line opens; rebuilt with the screen. */
+        private TradeQueuePanel zea$queuePanel;
+        /** Whether the queue panel is open; resets when the screen rebuilds. */
+        private boolean zea$queuePanelOpen;
 
         @Inject(method = "init", at = @At("TAIL"))
         private void zea$addChatTabs(CallbackInfo ci) {
@@ -214,31 +232,48 @@ public abstract class ChatScreenMixin {
                 // The trade pacing status line: one small yellow tag on its own
                 // row above the strip, right-aligned. Built unconditionally and
                 // hidden by default; the per-frame poll below flips it on the
-                // moment the cooldown or queue says something.
+                // moment the cooldown or queue says something. Clicking it opens
+                // the queue panel below.
                 zea$tradeIndicator = new TradeStatusIndicator(
                                 screen.width - 2,
                                 tabRowY - TradeStatusIndicator.HEIGHT,
                                 minecraft.font,
                                 ZeaClient.config()::tradePacingEnabled,
                                 () -> chat.tradeGate().snapshot(System.currentTimeMillis()),
-                                ZeaClient.config()::tradeAutoSend,
-                                () -> zea$toggleTradeAutoSend(minecraft));
+                                () -> zea$toggleQueuePanel());
                 zea$tradeIndicator.visible = false;
                 ((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(zea$tradeIndicator);
+
+                // The queue panel: what the pacing holds, with delete buttons and
+                // the auto-send toggle. Hidden until the status line opens it; the
+                // open state resets on every rebuild (resize, reopen).
+                zea$queuePanelOpen = false;
+                zea$queuePanel = new TradeQueuePanel(
+                                minecraft.font,
+                                screen.width - 2,
+                                tabRowY - TradeStatusIndicator.HEIGHT - 2,
+                                () -> chat.tradeGate().queuedSnapshot(),
+                                ZeaClient.config()::tradeAutoSend,
+                                () -> zea$toggleTradeAutoSend(minecraft),
+                                index -> chat.tradeGate().removeQueued(index),
+                                () -> zea$closeQueuePanel());
+                zea$queuePanel.visible = false;
+                ((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(zea$queuePanel);
         }
 
         /**
-         * Ctrl+F toggles the search field. Escape closes an open search before
-         * it closes the screen; so does Enter while the search field is focused —
+         * Ctrl+F toggles the search field. Escape closes an open search — or
+         * the trade queue panel, whichever is on top — before it closes the
+         * screen; Enter while the search field is focused closes the search —
          * the player has finished asking, and with the focus-loss close below,
          * anything that hands the caret back to the input ends the search anyway,
-         * so the key does it outright instead of a frame later. Tab is consumed
-         * outright: 26.3 screens treat it as focus navigation, and even when that
-         * navigation finds no target (all of ZEA's chat widgets refuse it, and
-         * vanilla's input is guarded by canLoseFocus=false) the search for one
-         * still clears the screen's focus — after which typed characters reach
-         * no widget until the player clicks the input again. A chat box has no
-         * Tab semantics worth that trap.
+         * so the key does it outright instead of a frame later.
+         *
+         * <p>Tab is deliberately NOT consumed here. Vanilla's first act in
+         * {@code keyPressed} is command-suggestion completion, and eating Tab
+         * at the head killed it (the dev.36 live report: "tab-completion
+         * doesn't really quite work"); the focus-cycle trap Tab used to spring
+         * is defused one call later, at the injection point below.
          */
         @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
         private void zea$handleSearchKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
@@ -250,7 +285,8 @@ public abstract class ChatScreenMixin {
                 ChatScreen screen = (ChatScreen) (Object) this;
                 Minecraft minecraft = Minecraft.getInstance();
 
-                if (event.isCycleFocus()) {
+                if (zea$queuePanelOpen && event.isEscape()) {
+                        zea$closeQueuePanel();
                         cir.setReturnValue(true);
                         return;
                 }
@@ -268,6 +304,31 @@ public abstract class ChatScreenMixin {
                 if (filter.searchQuery() != null && event.isConfirmation()
                                 && zea$searchBar != null && screen.getFocused() == zea$searchBar) {
                         zea$closeSearch(screen, filter, minecraft);
+                        cir.setReturnValue(true);
+                }
+        }
+
+        /**
+         * Tab is consumed only after vanilla's command-suggestion completion
+         * had its chance — this runs at the call to {@code Screen.keyPressed},
+         * which sits after {@code commandSuggestions.keyPressed} in vanilla's
+         * own order but before the screen's focus navigation. Reaching this
+         * point means completion did not want the key (nothing to complete),
+         * so Tab's only remaining effect would be 26.3's focus cycle: the
+         * search for a focus target clears the screen's focus even when no
+         * widget takes it, after which typed characters reach no widget
+         * until the input is clicked again. Consumed here, completion keeps
+         * working and the caret never dies.
+         */
+        @Inject(method = "keyPressed", at = @At(value = "INVOKE",
+                        target = "Lnet/minecraft/client/gui/screens/Screen;keyPressed"
+                                        + "(Lnet/minecraft/client/input/KeyEvent;)Z"),
+                        cancellable = true)
+        private void zea$consumeTabAfterCompletion(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
+                if (ZeaClient.chat() == null || !ZeaClient.lifecycle().onEarthMc()) {
+                        return;
+                }
+                if (event.isCycleFocus()) {
                         cir.setReturnValue(true);
                 }
         }
@@ -331,6 +392,8 @@ public abstract class ChatScreenMixin {
          * The widget cannot poll itself back to life once invisible — its
          * render path only runs while visible — so the screen does it here,
          * the same per-frame hook that watches the search field's focus.
+         * The queue panel rides along: open while the panel flag says so and
+         * pacing stays on, so turning pacing off mid-inspection closes it.
          */
         @Inject(method = "extractRenderState", at = @At("TAIL"))
         private void zea$updateTradeIndicator(GuiGraphicsExtractor extractor, int mouseX, int mouseY,
@@ -338,6 +401,32 @@ public abstract class ChatScreenMixin {
                 if (zea$tradeIndicator != null) {
                         zea$tradeIndicator.visible = zea$tradeIndicator.shouldShow();
                 }
+                if (zea$queuePanel != null) {
+                        zea$queuePanel.visible = zea$queuePanelOpen
+                                        && ZeaClient.config() != null
+                                        && ZeaClient.config().tradePacingEnabled();
+                }
+        }
+
+        /**
+         * Left-clicks land on the trade queue panel before vanilla turns
+         * them on the chat underneath. Vanilla's chat screen handles
+         * clickable message components ahead of its widgets, so without
+         * this a click on the panel could open a link hidden under it;
+         * the panel is drawn above the chat, so its clicks belong to it.
+         * Right-clicks keep falling through — message copying stays.
+         */
+        @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
+        private void zea$queuePanelClicksFirst(MouseButtonEvent event, boolean doubled,
+                        CallbackInfoReturnable<Boolean> cir) {
+                if (event.button() != InputConstants.MOUSE_BUTTON_LEFT
+                                || zea$queuePanel == null || !zea$queuePanel.visible
+                                || !zea$queuePanelOpen
+                                || !zea$queuePanel.isMouseOver(event.x(), event.y())) {
+                        return;
+                }
+                zea$queuePanel.mouseClicked(event, doubled);
+                cir.setReturnValue(true);
         }
 
         /**
@@ -378,14 +467,20 @@ public abstract class ChatScreenMixin {
          * typed on a channel tab goes to that tab's channel —
          * {@code /global <msg>} on Global, {@code /nc <msg>} on Nation, and
          * so on — instead of to whatever channel the server currently has
-         * the player writing to. On feeds without a channel (General, PMs,
-         * events) nothing is intercepted and vanilla plain chat stands.
+         * the player writing to. The PMs tab sends {@code /r <msg>} once a
+         * PM exchange exists; used before that, the send is refused with a
+         * toast and never falls through to plain chat (the live crash
+         * report's path — plain chat on a PMs tab went to the writing
+         * channel and took the client down with it). On feeds without a
+         * destination (events) nothing is intercepted and vanilla plain
+         * chat stands.
          *
          * <p>Slash commands stay vanilla in both branches — a player typing
-         * a command means the command. The interception mirrors what
-         * vanilla does next: the normalized text enters the up-arrow
-         * recall, and cancelling lets the caller's close-or-clear behavior
-         * run unchanged.
+         * a command means the command (and a manual {@code /msg} still
+         * works: its echo lands on the PMs tab and becomes the reply
+         * target). The interception mirrors what vanilla does next: the
+         * normalized text enters the up-arrow recall, and cancelling lets
+         * the caller's close-or-clear behavior run unchanged.
          */
         @Inject(method = "handleChatInput", at = @At("HEAD"), cancellable = true)
         private void zea$sendToTargets(String text, boolean addRecent, CallbackInfo ci) {
@@ -410,11 +505,18 @@ public abstract class ChatScreenMixin {
                         ci.cancel();
                         return;
                 }
-                if (message != null && !message.isBlank() && !message.startsWith("/")
-                                && chat.sendToSelectedChannel(chat.feedSelection().selected(), message)) {
+                if (message == null || message.isBlank() || message.startsWith("/")) {
+                        return;
+                }
+                ChatSubsystem.ChannelSend outcome =
+                                chat.sendToSelectedChannel(chat.feedSelection().selected(), message);
+                if (outcome == ChatSubsystem.ChannelSend.ROUTED) {
                         if (addRecent) {
                                 Minecraft.getInstance().gui.hud.getChat().addRecentChat(message);
                         }
+                        ci.cancel();
+                } else if (outcome == ChatSubsystem.ChannelSend.NO_PM_PARTNER) {
+                        PrivateMessageToast.showNoPartner(Minecraft.getInstance());
                         ci.cancel();
                 }
         }
@@ -515,9 +617,9 @@ public abstract class ChatScreenMixin {
         }
 
         /**
-         * The status line's click: flip auto-send, persist it, and confirm
-         * with a toast — the one mid-conversation control the pacing feature
-         * needs, without opening the settings.
+         * The queue panel's auto-send row: flip auto-send, persist it, and
+         * confirm with a toast — the one mid-conversation control the pacing
+         * feature needs, without opening the settings.
          */
         private static void zea$toggleTradeAutoSend(Minecraft minecraft) {
                 ZeaConfig config = ZeaClient.config();
@@ -529,6 +631,16 @@ public abstract class ChatScreenMixin {
                 if (minecraft.gui != null) {
                         TradeToast.showAutoSendToggled(minecraft, config.tradeAutoSend());
                 }
+        }
+
+        /** The status line's click: show the held messages, or hide them again. */
+        private void zea$toggleQueuePanel() {
+                zea$queuePanelOpen = !zea$queuePanelOpen;
+        }
+
+        /** Closes the queue panel — its close button, or Escape. */
+        private void zea$closeQueuePanel() {
+                zea$queuePanelOpen = false;
         }
 
         /**

@@ -18,10 +18,13 @@ import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.map.config.MapConfig;
 import net.zaminmc.zea.market.config.MarketConfig;
 import net.zaminmc.zea.chat.feeds.Feeds;
+import net.zaminmc.zea.chat.feeds.GlobalVisibility;
+import net.zaminmc.zea.chat.model.MessageCategory;
 import net.zaminmc.zea.notify.Notification;
 import net.zaminmc.zea.search.SearchOverlay;
 import net.zaminmc.zea.ZeaClient;
 
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -49,11 +52,14 @@ import java.util.Set;
  * version; fields the old file omits keep their defaults; unknown fields
  * are dropped on the next save. Version 2 hoists the five chat-related
  * category objects under {@code chat} — the values themselves carry over
- * unchanged.
+ * unchanged. Version 3 replaces the General tab's single
+ * "hide server broadcasts" switch with the Global tab's per-type
+ * toggles (the General tab itself was removed; Global is the aggregate
+ * now).
  */
 public final class ZeaConfig extends Config {
         /** Bump when fields change shape; add the matching migration in the store. */
-        public static final int CURRENT_VERSION = 2;
+        public static final int CURRENT_VERSION = 3;
 
         /** Slider bounds, mirrored here so tests can pin the accessible range. */
         public static final int MIN_DISPATCH_INTERVAL_MILLIS = 500;
@@ -113,13 +119,14 @@ public final class ZeaConfig extends Config {
                 @ConfigOrder(2)
                 public boolean channelTint = true;
 
-                @ConfigOption(name = "Hide server broadcasts in General", desc = "Hide votes, crate "
-                                + "wins, deaths and system messages in the General tab — they pile up "
-                                + "fast there. They still show in their own tabs, and messages ZEA "
-                                + "could not classify are never hidden.")
-                @ConfigEditorBoolean
+                @Category(name = "Global tab", desc = "What the Global tab shows. Global is the "
+                                + "every-message view: every kind of message shows there by default — "
+                                + "channels, PMs, votes, deaths, wins, server lines. Turn off the kinds "
+                                + "you do not want in it; each kind has its own switch, and everything "
+                                + "you hide stays available on its own tab. Messages ZEA cannot classify "
+                                + "always show on Global, so a new server format can never vanish.")
                 @ConfigOrder(3)
-                public boolean hideServerBroadcastsInGeneral = false;
+                public GlobalTab globalTab = new GlobalTab();
 
                 @Category(name = "Tabs", desc = "Which additional chat tabs are shown. The default tabs are always visible.")
                 @ConfigOrder(4)
@@ -302,18 +309,20 @@ public final class ZeaConfig extends Config {
 
         /** Trade channel pacing. */
         public static final class TradeChat {
-                @ConfigOption(name = "Trade pacing", desc = "Hold trade messages the server would "
-                                + "reject: while the five-minute cooldown runs, new trade messages queue "
-                                + "(or are refused, with auto-send off). A status line above the chat "
-                                + "tabs shows the cooldown and the queue.")
+                @ConfigOption(name = "Trade pacing", desc = "Handle the trade channel's "
+                                + "five-minute limit the way the server reports it: a rejected "
+                                + "message is held (with auto-send below) and the red wait line is "
+                                + "hidden — the client shows the countdown instead, synced to the "
+                                + "server's own numbers. Nothing is ever blocked speculatively: "
+                                + "while no cooldown is known, trade messages go straight out.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
                 public boolean pacing = true;
 
-                @ConfigOption(name = "Auto-send queued messages", desc = "Send queued trade messages "
-                                + "automatically when the cooldown expires. Click the status line above "
-                                + "the chat tabs to toggle this mid-conversation. Queued messages wait, "
-                                + "never lost, until sent or you disconnect.")
+                @ConfigOption(name = "Auto-send queued messages", desc = "Send held trade messages "
+                                + "automatically when the server's cooldown expires. Queued messages "
+                                + "wait, never lost, until sent, deleted from the queue (click the "
+                                + "status line above the chat tabs) or you disconnect.")
                 @ConfigEditorBoolean
                 @ConfigOrder(1)
                 public boolean autoSend = true;
@@ -363,6 +372,67 @@ public final class ZeaConfig extends Config {
                 @ConfigEditorBoolean
                 @ConfigOrder(5)
                 public boolean clearHistoryButton = true;
+        }
+
+        /** What the Global aggregate tab shows; see {@link Chat.GlobalTab}. */
+        public static final class GlobalTab {
+                @ConfigOption(name = "Local messages", desc = "Show messages sent in the Local "
+                                + "channel on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean local = true;
+
+                @ConfigOption(name = "Trade messages", desc = "Show messages sent in the Trade "
+                                + "channel on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean trade = true;
+
+                @ConfigOption(name = "Nation messages", desc = "Show messages sent in the Nation "
+                                + "channel on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean nation = true;
+
+                @ConfigOption(name = "Town messages", desc = "Show messages sent in the Town "
+                                + "channel on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(3)
+                public boolean town = true;
+
+                @ConfigOption(name = "Private messages", desc = "Show private messages on the "
+                                + "Global tab. They always show on the PMs tab too.")
+                @ConfigEditorBoolean
+                @ConfigOrder(4)
+                public boolean privateMessages = true;
+
+                @ConfigOption(name = "Discord messages", desc = "Show messages relayed from "
+                                + "Discord on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(5)
+                public boolean discord = true;
+
+                @ConfigOption(name = "Votes", desc = "Show vote notifications on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(6)
+                public boolean votes = true;
+
+                @ConfigOption(name = "Crate wins", desc = "Show crate win announcements on the "
+                                + "Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(7)
+                public boolean crateWins = true;
+
+                @ConfigOption(name = "Deaths", desc = "Show death messages on the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(8)
+                public boolean deaths = true;
+
+                @ConfigOption(name = "System messages", desc = "Show server system messages on "
+                                + "the Global tab.")
+                @ConfigEditorBoolean
+                @ConfigOrder(9)
+                public boolean system = true;
         }
 
         /** Chat tab visibility. The default tabs are always present. */
@@ -496,31 +566,39 @@ public final class ZeaConfig extends Config {
         /** Rarity appearance: slot tint, name coloring, tooltip label. */
         public static final class Appearance {
                 @ConfigOption(name = "Slot tint", desc = "Give the slot of a rated item a subtle "
-                                + "background wash in its rarity color. Items, counts, durability "
-                                + "bars and enchantment glints draw on top of it untouched.")
+                                + "background wash in its rarity color inside inventory and "
+                                + "container screens. Items, counts, durability bars and enchantment "
+                                + "glints draw on top of it untouched.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
                 public boolean slotTint = true;
 
-                @ConfigOption(name = "Tint intensity", desc = "How strong the slot tint is, in "
+                @ConfigOption(name = "Hotbar tint", desc = "Show the same rarity wash under the "
+                                + "items in your hotbar (and the off-hand slot) in the world, not "
+                                + "only inside inventory screens.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean hotbarTint = true;
+
+                @ConfigOption(name = "Tint intensity", desc = "How strong the rarity wash is, in "
                                 + "percent. Lower is subtler.")
                 @ConfigEditorSlider(minValue = MIN_TINT_OPACITY, maxValue = MAX_TINT_OPACITY,
                                 minStep = 5)
-                @ConfigOrder(1)
+                @ConfigOrder(2)
                 public int tintOpacity = 25;
 
                 @ConfigOption(name = "Rarity-colored names", desc = "Color an item's tooltip name "
                                 + "in its rarity color. Items with a custom name keep that name and "
                                 + "its colors — rarity never overwrites a name you gave the item.")
                 @ConfigEditorBoolean
-                @ConfigOrder(2)
+                @ConfigOrder(3)
                 public boolean nameColoring = false;
 
                 @ConfigOption(name = "Rarity in tooltip", desc = "Show the rarity (COMMON, "
                                 + "UNCOMMON, EPIC, LEGENDARY) at the bottom of supported items' "
                                 + "tooltips, in the rarity color.")
                 @ConfigEditorBoolean
-                @ConfigOrder(3)
+                @ConfigOrder(4)
                 public boolean loreRarity = true;
 
                 @ConfigOption(name = "RPG-style stats", desc = "Replace the vanilla 'When in "
@@ -702,12 +780,54 @@ public final class ZeaConfig extends Config {
                 return chat.channelTint;
         }
 
-        /** Whether General hides vote, crate, death and system messages; off by default. */
-        public boolean hideServerBroadcastsInGeneral() {
-                return chat.hideServerBroadcastsInGeneral;
+        /**
+         * What the Global aggregate tab hides, built live from the Global-tab
+         * switches. Never null, and never hides Global's own channel or
+         * unclassified messages — those two are not user-toggleable.
+         */
+        public GlobalVisibility globalVisibility() {
+                GlobalTab global = chat.globalTab;
+                if (global == null) {
+                        return GlobalVisibility.SHOW_EVERYTHING;
+                }
+                Set<MessageCategory> hidden = EnumSet.noneOf(MessageCategory.class);
+                if (!global.local) {
+                        hidden.add(MessageCategory.LOCAL);
+                }
+                if (!global.trade) {
+                        hidden.add(MessageCategory.TRADE);
+                }
+                if (!global.nation) {
+                        hidden.add(MessageCategory.NATION);
+                }
+                if (!global.town) {
+                        hidden.add(MessageCategory.TOWN);
+                }
+                if (!global.privateMessages) {
+                        hidden.add(MessageCategory.PRIVATE_MESSAGE);
+                }
+                if (!global.discord) {
+                        hidden.add(MessageCategory.DISCORD);
+                }
+                if (!global.votes) {
+                        hidden.add(MessageCategory.VOTE);
+                }
+                if (!global.crateWins) {
+                        hidden.add(MessageCategory.CRATE_WIN);
+                }
+                if (!global.deaths) {
+                        hidden.add(MessageCategory.DEATH);
+                }
+                if (!global.system) {
+                        hidden.add(MessageCategory.SYSTEM);
+                }
+                if (hidden.isEmpty()) {
+                        return GlobalVisibility.SHOW_EVERYTHING;
+                }
+                return new GlobalVisibility(hidden);
         }
 
-        /** Whether the trade channel's sends are paced against the server's cooldown; on by default. */
+        /** Whether the trade channel's sends are paced against the server's reported cooldown; on by default. */
         public boolean tradePacingEnabled() {
                 return chat.tradeChat.pacing;
         }
@@ -899,6 +1019,11 @@ public final class ZeaConfig extends Config {
         /** Whether supported items' slots receive the rarity background tint. */
         public boolean raritySlotTintEnabled() {
                 return rarityEnabled() && rarity.appearance.slotTint;
+        }
+
+        /** Whether the hotbar shows the rarity wash under its items; on by default. */
+        public boolean rarityHotbarTintEnabled() {
+                return rarityEnabled() && rarity.appearance.hotbarTint;
         }
 
         /** The slot-tint intensity, clamped to the slider range. */

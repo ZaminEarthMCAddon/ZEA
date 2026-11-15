@@ -6,9 +6,10 @@ package net.zaminmc.zea.chat.feeds;
  * the outcomes into feedback, this class never touches UI.
  *
  * <p>The two rules that matter: a feed without a writable server
- * channel (General, PMs, the event feeds) is never a target — General
- * stays read-only — and a slash command typed with targets selected
- * stays vanilla, because a player typing a command means the command.
+ * channel (PMs, the event feeds) is never a target — plain tabs stay
+ * read-only destinations — and a slash command typed with targets
+ * selected stays vanilla, because a player typing a command means the
+ * command.
  */
 public final class MultiSendInteraction {
         private MultiSendInteraction() {

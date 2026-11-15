@@ -3481,3 +3481,139 @@ server's real component tree for the shop response. The parser and
 correlator were built to tolerate all of that being different on first
 contact; the field-test capture tool (`/zea capture`) is the ready
 instrument for the real session.
+
+## 2026-11-16 (session 18) — The dev.36 QOL batch: Global as the aggregate, server-synced trade pacing, PM replies, the caret, Tab, and the hotbar wash
+
+### The live report
+
+Six asks in one message: remove the General channel and let Global show
+everything with per-type switches; stop the PMs tab from crashing and
+make it reply instead; pace trade sends by the server's own wait lines
+(not a forced client window) with a visible, deletable queue; keep the
+chat focused while typing; restore Tab completion; show the rarity wash
+in the hotbar; and the tab palette — yellow selected, white unread,
+gray unselected-and-read.
+
+### General is gone; Global is the aggregate
+
+`Feeds.ALL` is deleted. `Feeds.GLOBAL` now carries every category
+(unclassified included) — the aggregate the player asked for — and what
+it hides is the user's per-type choice: a new **Global tab** subcategory
+with one switch per kind of message (Local, Trade, Nation, Town, PMs,
+Discord, votes, crate wins, deaths, system), all on by default. Two
+kinds are deliberately not switchable: Global's own channel, and
+UNCLASSIFIED — the "an unknown format must never vanish from the
+aggregate" rule survives the redesign (a new server format that
+disappears reads as messages being eaten). The choice lives in a new
+pure model, `GlobalVisibility`, read live by both the feed filter (so a
+settings change applies to the next message without re-selecting
+anything) and the unread tracker (a hidden type does not light the
+Global tab — a yellow tab with nothing new behind it is a lie). Config
+version 3 migrates the old single "hide server broadcasts in General"
+switch into the four per-type opt-outs it actually meant; everything
+else carries over. Default selection and the disconnect reset now land
+on Global.
+
+### The PMs tab replies instead of crashing
+
+The live crash: a plain message typed on the PMs tab fell through ZEA's
+routing (PMs has no channel) into vanilla plain chat — which on EarthMC
+writes to the writing channel, never what a PMs tab means, and took the
+client down in the live session. The tab no longer falls through at
+all: a new `PrivateMessaging` model tracks the partner of the last
+exchange (an incoming PM sets the sender; the echo of the player's own
+PM — sent from the tab or typed as `/msg` — sets the recipient, exactly
+the server's `/r` rule), and the PMs tab sends `/r <msg>` through the
+interval-spaced dispatcher once a partner exists. Before that the send
+is refused with a toast ("No one to reply to yet"), and vanilla plain
+chat is never reached from that tab. A manual `/msg <player> <msg>`
+keeps working exactly as typed — vanilla command path — and its echo
+lands on the PMs tab and becomes the reply target.
+
+### Trade pacing: the server's clock, not the client's guess
+
+The old gate forced a five-minute window from the moment a send went
+out. The new `TradeGate` holds no opinion until the server speaks: with
+no window known, a trade send goes straight out and is remembered as
+unresolved. EarthMC's rejection — `» You must wait another 4 seconds
+before sending your next message in Trade.` (minutes-and-seconds form
+included) — is now classified (`TradeWaitClassifier`, SYSTEM category,
+`TradeWait` payload; added to the sealed `MessagePayload` permits), and
+that one line drives everything: the window syncs to the reported
+remaining time, the refused message moves into the queue (the player's
+words are never lost), and the line itself is hidden from every feed
+while pacing is on (retained like anything ZEA hides; it reappears if
+pacing is turned off). The status line counts down the server's
+numbers.
+
+Resolution closes the loop from both ends: the player's own trade
+message echoing back (TaggedChannelChat with the local name) resolves
+the oldest unresolved send as accepted, and entries older than fifteen
+seconds settle as accepted on their own — display names can be
+nicknames, so the echo check must have a net under it. While a window
+runs, new trade messages queue (auto-send on) or are refused with the
+server-reported wait (off) — the old behavior, but timed by the server.
+The drain's sends pass the same choke point, so a re-rejected auto-send
+re-syncs and re-queues itself; the loop converges on the server's own
+clock.
+
+### The queue is visible and editable
+
+Clicking the status line now opens a `TradeQueuePanel` above it: one
+row per held message with a delete button, the auto-send toggle (the
+status line's old click action, moved where it has room to explain
+itself), and a close button. Rows re-read the queue every frame, so
+deletions and the drain reflow live; long messages truncate with an
+ellipsis and carry the full text as a tooltip. Left-clicks on the panel
+are routed to it ahead of vanilla's clickable-chat pass (vanilla checks
+message components before widgets, and a link under the panel must not
+win); Escape closes the panel before it closes the screen.
+
+### The caret, and Tab completion — one root, two bugs
+
+26.3's container click handler moves screen focus onto whatever widget
+consumed a click (`shouldTakeFocusAfterInteraction`, true by default),
+which clears the chat input's focused flag — after one tab click, typed
+characters reached no widget until the input was clicked again. The
+dev.24 fix (refusing `nextFocusPath`) covered only the keyboard path.
+Every mouse-driven chat widget now overrides
+`shouldTakeFocusAfterInteraction` to false; the search bar keeps the
+default, because clicking into a text field should focus it.
+
+Tab had the opposite problem: the HEAD injection consumed it to spare
+the focus cycle, which sat **ahead of vanilla's command-suggestion
+completion** — the first act of `ChatScreen.keyPressed` — so completion
+never saw the key ("tab-completion doesn't really quite work"). The
+consumption moved to an injection at the `Screen.keyPressed` call site:
+completion runs first, and only a Tab it did not want is consumed,
+before the focus navigation that would clear the screen's focus.
+
+### The rarity wash in the hotbar
+
+The tint was injected into `AbstractContainerScreen.extractSlot` —
+containers only. The HUD draws every hotbar and off-hand item through
+one private slot pass, `Hud.extractSlot`; a new `HudMixin` draws the
+same `RarityEngine` wash at its head, so texture, count, durability bar
+and glint stay on top. Gated by the rarity master switch and a new
+"Hotbar tint" switch (on by default) beside the slot tint.
+
+### The palette
+
+`ChatTabBar.labelColor`: yellow selected, white unread, gray
+unselected-and-read. The multi-send target's thin marker strip stays —
+it carries the targeting state the aqua label used to.
+
+### Verification
+
+`./gradlew build` green after rebasing over the dev.36–dev.54 map and
+market work: **1,150 tests, 0 failures** — this batch contributed 37
+(the trade
+gate's server-synced suite, the wait-line classifier's shapes and
+near-misses, GlobalVisibility's toggleable set and never-hidden pair,
+PrivateMessaging's partner rules, the Global-tab filter and unread
+suites, the v3 migrations both ways, and the bytecode pins for
+`shouldTakeFocusAfterInteraction` and `Hud.extractSlot`). The live
+checklist for the next session: the PMs tab before and after a PM
+arrives; a trade send that gets rejected (wait line hidden, message
+queued, status line counting the server's time, panel delete working);
+typing after clicking a tab; `/tr` + Tab; the hotbar wash in the world.

@@ -2,155 +2,193 @@ package net.zaminmc.zea.chat.feeds;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * The server-synced trade pacing. The old model forced a client-side
+ * five-minute window on every send; the dev.36 live request replaced it
+ * with the server's own numbers: nothing is held speculatively, a send
+ * goes out and is remembered, and only the server's rejection line —
+ * "You must wait another N seconds before sending your next message in
+ * Trade." — starts a window (and queues the message it refused).
+ */
 class TradeGateTest {
-        /** A one-second cooldown: fast to walk through, same semantics. */
-        private static final long COOLDOWN = 1_000L;
+        private static final long SETTLE = 1_000L;
 
-        private final TradeGate gate = new TradeGate(COOLDOWN);
+        private final TradeGate gate = new TradeGate(SETTLE);
 
         @Test
-        void theFirstOfferOutsideACooldownSendsNow() {
-                assertEquals(TradeGate.Outcome.SEND_NOW, gate.offer("tradechat hello", 100L, true));
-                assertEquals(TradeGate.Outcome.SEND_NOW, gate.offer("tradechat hello", 100L, false));
-                assertFalse(gate.isCoolingDown(100L));
+        void tradeMessagesAreRecognized() {
+                assertTrue(TradeGate.isTradeMessage("tradechat selling dirt"));
+                assertTrue(TradeGate.isTradeMessage("TRADECHAT selling dirt"));
+                assertFalse(TradeGate.isTradeMessage("tradechat"));
+                assertFalse(TradeGate.isTradeMessage("tradechat "));
+                assertFalse(TradeGate.isTradeMessage("global hello"));
+                assertFalse(TradeGate.isTradeMessage(null));
         }
 
         @Test
-        void aSendStartsTheCountdown() {
-                gate.onSent(1_000L);
+        void aFirstSendGoesStraightOutAndIsRemembered() {
+                assertEquals(TradeGate.Outcome.SEND_NOW, gate.offer("tradechat hello", 0L, true));
 
-                assertTrue(gate.isCoolingDown(1_500L));
-                assertEquals(COOLDOWN - 500L, gate.remainingMillis(1_500L));
-                assertFalse(gate.isCoolingDown(1_000L + COOLDOWN));
-                assertEquals(0L, gate.remainingMillis(1_000L + COOLDOWN));
+                assertFalse(gate.snapshot(0L).active(), "no window is known before the server speaks");
+                assertFalse(gate.isCoolingDown(0L), "no window is known before the server speaks");
         }
 
         @Test
-        void offersInsideTheCooldownQueueWhenAutoSendIsOn() {
-                gate.onSent(0L);
+        void theServersWaitLineStartsTheWindowAndQueuesTheRefusedMessage() {
+                gate.offer("tradechat hello", 0L, true);
 
-                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat one", 100L, true));
-                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat two", 200L, true));
-                assertEquals(2, gate.queuedCount());
-                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat three", 300L, true));
-                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat four", 400L, true));
-                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat five", 500L, true));
-                assertEquals(5, gate.queuedCount());
-                assertEquals(TradeGate.Outcome.FULL, gate.offer("tradechat six", 600L, true));
-                assertEquals(5, gate.queuedCount(), "the refused message is not kept");
+                gate.onServerWait(1_000L, 298_000L);
+
+                assertTrue(gate.isCoolingDown(2_000L));
+                assertEquals(1, gate.queuedCount());
+                assertEquals(List.of("tradechat hello"), gate.queuedSnapshot());
+                assertEquals(297_000L, gate.remainingMillis(2_000L));
         }
 
         @Test
-        void offersInsideTheCooldownAreBlockedWhenAutoSendIsOff() {
-                gate.onSent(0L);
+        void aWaitLineWithoutAnUnresolvedSendStillSyncsTheWindow() {
+                // A rejection the client did not send — a macro, a pre-gate message.
+                gate.onServerWait(0L, 60_000L);
 
-                assertEquals(TradeGate.Outcome.BLOCKED, gate.offer("tradechat hello", 100L, false));
+                assertTrue(gate.isCoolingDown(1L));
                 assertEquals(0, gate.queuedCount());
         }
 
         @Test
-        void theQueueDrainsOneMessagePerWindow() {
-                gate.onSent(0L);
-                gate.offer("tradechat one", 100L, true);
-                gate.offer("tradechat two", 200L, true);
+        void whileAWindowRunsNewSendsQueueOrAreRefused() {
+                gate.onServerWait(0L, 60_000L);
 
-                assertNull(gate.pollDue(500L), "the window is still running");
+                assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat two", 1L, true));
+                assertEquals(TradeGate.Outcome.BLOCKED, gate.offer("tradechat three", 2L, false));
+                assertEquals(List.of("tradechat two"), gate.queuedSnapshot());
+        }
 
-                // The window expires; the oldest message goes out.
-                assertEquals("tradechat one", gate.pollDue(COOLDOWN + 1L));
+        @Test
+        void theQueueRefusesMoreThanTheMaximum() {
+                gate.onServerWait(0L, 60_000L);
+
+                for (int i = 0; i < TradeGate.MAX_QUEUED; i++) {
+                        assertEquals(TradeGate.Outcome.QUEUED, gate.offer("tradechat m" + i, 1L, true));
+                }
+                assertEquals(TradeGate.Outcome.FULL, gate.offer("tradechat overflow", 2L, true));
+                assertEquals(TradeGate.MAX_QUEUED, gate.queuedCount());
+        }
+
+        @Test
+        void theDrainSendsOnlyWhenTheServerSaysTheWindowIsOver() {
+                gate.onServerWait(0L, 60_000L);
+                gate.offer("tradechat two", 1L, true);
+
+                assertNull(gate.pollDue(59_999L));
+                assertEquals("tradechat two", gate.pollDue(60_000L));
+                assertEquals(0, gate.queuedCount());
+        }
+
+        @Test
+        void queuedMessagesCanBeDeleted() {
+                gate.onServerWait(0L, 60_000L);
+                gate.offer("tradechat one", 1L, true);
+                gate.offer("tradechat two", 2L, true);
+                gate.offer("tradechat three", 3L, true);
+
+                assertTrue(gate.removeQueued(1));
+                assertEquals(List.of("tradechat one", "tradechat three"), gate.queuedSnapshot());
+                assertTrue(gate.removeQueued(0));
+                assertEquals(List.of("tradechat three"), gate.queuedSnapshot());
+                assertTrue(gate.removeQueued(0));
+                assertEquals(0, gate.queuedCount());
+        }
+
+        @Test
+        void deletingOutOfRangeIndexesRefusesInsteadOfThrowing() {
+                gate.onServerWait(0L, 60_000L);
+                gate.offer("tradechat one", 1L, true);
+
+                assertFalse(gate.removeQueued(-1));
+                assertFalse(gate.removeQueued(1));
+                assertFalse(gate.removeQueued(99));
                 assertEquals(1, gate.queuedCount());
-                // The send itself restarts the window (reported through onSent).
-                gate.onSent(COOLDOWN + 1L);
-                assertNull(gate.pollDue(COOLDOWN + 2L));
-                assertEquals("tradechat two", gate.pollDue(2 * COOLDOWN + 1L));
-                assertNull(gate.pollDue(3 * COOLDOWN), "nothing waits anymore");
         }
 
         @Test
-        void polledMessagesKeepTheirExactCommandLine() {
-                gate.onSent(0L);
-                gate.offer("tradechat selling diamonds, 5g each  ", 100L, true);
+        void thePlayersOwnEchoResolvesTheOldestSendAsAccepted() {
+                gate.offer("tradechat accepted", 0L, true);
 
-                assertEquals("tradechat selling diamonds, 5g each  ",
-                                gate.pollDue(COOLDOWN + 1L));
+                gate.onOwnTradeAccepted();
+
+                // A later rejection has nothing unresolved to queue: the accepted
+                // message must not come back as a duplicate.
+                gate.onServerWait(1_000L, 60_000L);
+                assertEquals(0, gate.queuedCount());
         }
 
         @Test
-        void clearResetsTheWindowAndTheQueue() {
-                gate.onSent(0L);
-                gate.offer("tradechat one", 100L, true);
-                gate.offer("tradechat two", 200L, true);
+        void unsettledSendsArePresumedAcceptedAfterTheSettleWindow() {
+                gate.offer("tradechat accepted", 0L, true);
+
+                gate.settleUnresolved(SETTLE - 1);
+                gate.onServerWait(SETTLE - 1, 60_000L);
+                assertEquals(1, gate.queuedCount(), "the send is still unresolved");
+
+                // New gate, same scenario past the settle window.
+                TradeGate settling = new TradeGate(SETTLE);
+                settling.offer("tradechat accepted", 0L, true);
+                settling.settleUnresolved(SETTLE);
+                settling.onServerWait(SETTLE, 60_000L);
+                assertEquals(0, settling.queuedCount(), "a settled send is accepted, never re-queued");
+        }
+
+        @Test
+        void aRejectedAutoSendReQueuesItself() {
+                // The drain's send goes through the same choke point, so its
+                // rejection re-queues it with the fresh server time.
+                gate.onServerWait(0L, 60_000L);
+                gate.offer("tradechat held", 1L, true);
+                String due = gate.pollDue(60_000L);
+                assertEquals("tradechat held", due);
+
+                // The drain sends it; the server says two more seconds.
+                gate.offer(due, 61_000L, true);
+                gate.onServerWait(61_500L, 2_000L);
+
+                assertTrue(gate.isCoolingDown(62_000L));
+                assertEquals(List.of("tradechat held"), gate.queuedSnapshot());
+                assertEquals("tradechat held", gate.pollDue(63_500L));
+        }
+
+        @Test
+        void theNewestServerReportWins() {
+                gate.onServerWait(0L, 300_000L);
+                gate.onServerWait(1_000L, 4_000L);
+
+                assertEquals(3_000L, gate.remainingMillis(2_000L));
+        }
+
+        @Test
+        void clearForgetsEverything() {
+                gate.onServerWait(0L, 60_000L);
+                gate.offer("tradechat held", 1L, true);
+                gate.offer("tradechat out", 2L, true);
 
                 gate.clear();
 
+                assertFalse(gate.isCoolingDown(3L));
                 assertEquals(0, gate.queuedCount());
-                assertFalse(gate.isCoolingDown(300L));
-                assertEquals(TradeGate.Outcome.SEND_NOW, gate.offer("tradechat hello", 300L, true));
-        }
-
-        @Test
-        void snapshotsReportWhatTheStatusLineShows() {
-                TradeGate.Snapshot idle = gate.snapshot(0L);
-                assertFalse(idle.active());
-                assertFalse(idle.coolingDown());
-
-                gate.onSent(0L);
-                TradeGate.Snapshot cooling = gate.snapshot(500L);
-                assertTrue(cooling.active());
-                assertTrue(cooling.coolingDown());
-                assertEquals(500L, cooling.remainingMillis());
-                assertEquals(0, cooling.queued());
-
-                gate.offer("tradechat one", 100L, true);
-                TradeGate.Snapshot waiting = gate.snapshot(500L);
-                assertTrue(waiting.active());
-                assertEquals(1, waiting.queued());
-
-                // Auto-send off, cooldown over, messages parked: still worth showing.
-                TradeGate parked = new TradeGate(COOLDOWN);
-                parked.onSent(0L);
-                parked.offer("tradechat one", 100L, true);
-                TradeGate.Snapshot afterWindow = parked.snapshot(2 * COOLDOWN);
-                assertFalse(afterWindow.coolingDown());
-                assertEquals(1, afterWindow.queued());
-                assertTrue(afterWindow.active());
-        }
-
-        @Test
-        void aBareTradeChatCommandIsNotAMessage() {
-                assertFalse(TradeGate.isTradeMessage("tradechat"));
-                assertFalse(TradeGate.isTradeMessage("tradechat "));
-                assertFalse(TradeGate.isTradeMessage("tradechat   "));
-                assertFalse(TradeGate.isTradeMessage("g hello"));
-                assertFalse(TradeGate.isTradeMessage("tradechathello"));
-                assertFalse(TradeGate.isTradeMessage(""));
-                assertFalse(TradeGate.isTradeMessage(null));
-
-                assertTrue(TradeGate.isTradeMessage("tradechat hello"));
-                assertTrue(TradeGate.isTradeMessage("TradeChat selling diamonds"));
-                assertTrue(TradeGate.isTradeMessage("TRADECHAT x"));
+                assertEquals(TradeGate.Outcome.SEND_NOW, gate.offer("tradechat fresh", 4L, true));
         }
 
         @Test
         void remainingTimeFormatsAsMinutesAndSeconds() {
-                assertEquals("5:00", TradeGate.formatRemaining(300_000L));
                 assertEquals("4:59", TradeGate.formatRemaining(299_999L));
-                assertEquals("4:12", TradeGate.formatRemaining(252_000L));
-                assertEquals("1:05", TradeGate.formatRemaining(65_000L));
-                assertEquals("0:12", TradeGate.formatRemaining(12_345L));
+                assertEquals("0:12", TradeGate.formatRemaining(12_000L));
                 assertEquals("0:00", TradeGate.formatRemaining(0L));
                 assertEquals("0:00", TradeGate.formatRemaining(-5_000L));
-        }
-
-        @Test
-        void theCooldownMustBePositive() {
-                assertThrows(IllegalArgumentException.class, () -> new TradeGate(0L));
-                assertThrows(IllegalArgumentException.class, () -> new TradeGate(-1L));
         }
 }

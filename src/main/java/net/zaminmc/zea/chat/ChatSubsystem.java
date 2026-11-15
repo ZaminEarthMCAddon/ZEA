@@ -14,11 +14,13 @@ import net.zaminmc.zea.chat.feeds.Feed;
 import net.zaminmc.zea.chat.feeds.FeedFilter;
 import net.zaminmc.zea.chat.feeds.FeedSelection;
 import net.zaminmc.zea.chat.feeds.Feeds;
+import net.zaminmc.zea.chat.feeds.GlobalVisibility;
 import net.zaminmc.zea.chat.feeds.MultiChannelDispatcher;
 import net.zaminmc.zea.chat.feeds.MultiSendInteraction;
 import net.zaminmc.zea.chat.feeds.MultiSendResult;
 import net.zaminmc.zea.chat.feeds.OutgoingMessage;
 import net.zaminmc.zea.chat.feeds.OutgoingRouter;
+import net.zaminmc.zea.chat.feeds.PrivateMessaging;
 import net.zaminmc.zea.chat.feeds.SendTargets;
 import net.zaminmc.zea.chat.feeds.TradeGate;
 import net.zaminmc.zea.chat.feeds.UnreadTracker;
@@ -28,6 +30,10 @@ import net.zaminmc.zea.chat.history.HistoryEntry;
 import net.zaminmc.zea.chat.history.HistoryRecorder;
 import net.zaminmc.zea.chat.model.CapturedMessage;
 import net.zaminmc.zea.chat.model.ClassifiedMessage;
+import net.zaminmc.zea.chat.model.MessageCategory;
+import net.zaminmc.zea.chat.model.PrivateMessage;
+import net.zaminmc.zea.chat.model.TaggedChannelChat;
+import net.zaminmc.zea.chat.model.TradeWait;
 import net.zaminmc.zea.chat.model.WritingChannelReport;
 import net.zaminmc.zea.chat.render.MultiSendToast;
 import net.zaminmc.zea.chat.render.TradeToast;
@@ -55,7 +61,7 @@ public final class ChatSubsystem {
         private final ZeaConfig config;
         private final OutgoingRouter router = new OutgoingRouter();
         private final ChannelState channelState = new ChannelState();
-        private final FeedSelection feedSelection = new FeedSelection(Feeds.ALL);
+        private final FeedSelection feedSelection = new FeedSelection(Feeds.GLOBAL);
         private final SendTargets sendTargets = new SendTargets();
         private final FeedFilter feedFilter;
         private final MultiChannelDispatcher dispatcher;
@@ -67,6 +73,7 @@ public final class ChatSubsystem {
         private final CaptureRecorder capture;
         private final UnreadTracker unread;
         private final TradeGate tradeGate;
+        private final PrivateMessaging privateMessaging = new PrivateMessaging();
 
         public ChatSubsystem(ClientLifecycle lifecycle, ClassificationPipeline classification, ZeaConfig config,
                         CaptureRecorder capture, Path historyDirectory, Executor historyExecutor) {
@@ -87,7 +94,7 @@ public final class ChatSubsystem {
                 // (the dev.23 live crash; ChatSubsystemWiringTest pins the
                 // compiled order).
                 this.feedFilter = new FeedFilter(this.classifications, this.feedSelection,
-                                config::hideServerBroadcastsInGeneral);
+                                config::globalVisibility, config::tradePacingEnabled);
                 this.dispatcher = new MultiChannelDispatcher(
                                 this::sendCommand,
                                 new DispatchFeedback(),
@@ -105,10 +112,10 @@ public final class ChatSubsystem {
                                 new UiNotificationSound(),
                                 config,
                                 autoResponder);
-                // Unread and trade pacing are display/flow state, not wiring:
-                // built after the collaborators they read.
+                // Unread, trade pacing and PM replies are display/flow state,
+                // not wiring: built after the collaborators they read.
                 this.unread = new UnreadTracker();
-                this.tradeGate = new TradeGate(TradeGate.COOLDOWN_MILLIS);
+                this.tradeGate = new TradeGate();
 
                 ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                         // Registered after ClientLifecycle (constructed first in
@@ -133,10 +140,11 @@ public final class ChatSubsystem {
                         historyRecorder.stop();
                         // Display state is EarthMC context; leaving resets it so the
                         // vanilla chat is untouched on other servers.
-                        feedSelection.select(Feeds.ALL);
+                        feedSelection.select(Feeds.GLOBAL);
                         sendTargets.clear();
                         unread.clear();
                         tradeGate.clear();
+                        privateMessaging.clear();
                         feedFilter.setSearchQuery(null);
                         feedFilter.apply(client.gui.hud.getChat());
                 });
@@ -150,15 +158,38 @@ public final class ChatSubsystem {
                 if (classified.payload() instanceof WritingChannelReport report) {
                         channelState.applyReport(report);
                 }
+                // The server's trade-cooldown report syncs the pacing window; the
+                // line itself never reaches the history — the client has already
+                // answered it (the rejected message queued, the countdown shown).
+                boolean tradeWaitLine = classified.payload() instanceof TradeWait;
+                if (classified.payload() instanceof TradeWait waitLine) {
+                        tradeGate.onServerWait(System.currentTimeMillis(), waitLine.remainingMillis());
+                }
+                // The player's own trade message echoing back resolves the oldest
+                // unresolved send as accepted. Display names can be nicknames, so
+                // the gate also settles old entries by time; this is the fast path.
+                if (classified.category() == MessageCategory.TRADE
+                                && classified.payload() instanceof TaggedChannelChat chat
+                                && chat.displayName().equals(ownName())) {
+                        tradeGate.onOwnTradeAccepted();
+                }
+                if (classified.payload() instanceof PrivateMessage pm) {
+                        privateMessaging.onPrivateMessage(pm);
+                }
                 notifications.onClassified(classified, System.currentTimeMillis());
                 mentions.onClassified(classified, System.currentTimeMillis());
                 unread.onMessage(classified, feedSelection.selected(),
-                                Feeds.visibleTabs(config.enabledExtraFeedIds()));
-                if (!captured.text().isBlank()) {
+                                Feeds.visibleTabs(config.enabledExtraFeedIds()), config.globalVisibility());
+                if (!captured.text().isBlank() && !tradeWaitLine) {
                         history.append(HistoryEntry.of(classified));
                         historyRecorder.markDirty();
                 }
                 ZeaClient.LOGGER.debug("Classified [{}] {}", classified.category(), captured.text());
+        }
+
+        /** The local player's account name; the trade echo check. */
+        private static String ownName() {
+                return Minecraft.getInstance().getUser().getName();
         }
 
         /**
@@ -177,26 +208,51 @@ public final class ChatSubsystem {
                 return MultiSendResult.DISPATCHING;
         }
 
+        /** What {@link #sendToSelectedChannel} decided for one plain send. */
+        public enum ChannelSend {
+                /** The message was routed to the tab's destination. */
+                ROUTED,
+                /** The tab has no destination — vanilla plain chat stands. */
+                NO_CHANNEL,
+                /** The PMs tab was used before any PM arrived — nothing was sent. */
+                NO_PM_PARTNER
+        }
+
         /**
-         * Sends one message to the feed's own channel — the dev.26 live
+         * Sends one message to the feed's own destination — the dev.26 live
          * request: a plain message typed while a channel tab is selected
          * must go to that channel ({@code /global <msg>} on the Global tab,
          * {@code /nc <msg>} on Nation, ...), not to whatever channel the
-         * server currently has the player writing to. Feeds without a
-         * channel (General, PMs, events) return false and vanilla's plain
-         * chat stands. Slash commands never reach here — the chat screen
-         * intercepts only non-command text. Single-channel routing is core
-         * tab behavior, deliberately not gated behind the multi-send
+         * server currently has the player writing to. The PMs tab sends
+         * {@code /r <msg>} — but only once a PM exchange exists
+         * ({@link PrivateMessaging}); before that the send is refused, never
+         * dropped into vanilla plain chat, which would write to the writing
+         * channel instead of a player (the live crash report's path — the
+         * PMs tab no longer falls through at all). Event feeds without a
+         * destination return {@link ChannelSend#NO_CHANNEL} and vanilla's
+         * plain chat stands. Slash commands never reach here — the chat
+         * screen intercepts only non-command text. Single-destination routing
+         * is core tab behavior, deliberately not gated behind the multi-send
          * setting: the dispatch still goes through the interval-spaced
          * queue, so a rapid follow-up can never race the previous send.
          */
-        public boolean sendToSelectedChannel(Feed feed, String message) {
+        public ChannelSend sendToSelectedChannel(Feed feed, String message) {
+                if (message == null || message.isBlank()) {
+                        return ChannelSend.NO_CHANNEL;
+                }
+                if (Feeds.PRIVATE_MESSAGES.equals(feed)) {
+                        if (privateMessaging.partner().isEmpty()) {
+                                return ChannelSend.NO_PM_PARTNER;
+                        }
+                        dispatcher.dispatch(List.of(new OutgoingMessage("r", message)));
+                        return ChannelSend.ROUTED;
+                }
                 WriteChannel channel = MultiSendInteraction.channelOf(feed);
-                if (channel == null || message == null || message.isBlank()) {
-                        return false;
+                if (channel == null) {
+                        return ChannelSend.NO_CHANNEL;
                 }
                 dispatcher.dispatch(List.of(router.route(channel, message)));
-                return true;
+                return ChannelSend.ROUTED;
         }
 
         public ChannelState channelState() {
@@ -228,6 +284,11 @@ public final class ChatSubsystem {
         /** The trade channel's pacing state; see {@link TradeGate}. */
         public TradeGate tradeGate() {
                 return tradeGate;
+        }
+
+        /** Whom the PMs tab would reply to; see {@link PrivateMessaging}. */
+        public PrivateMessaging privateMessaging() {
+                return privateMessaging;
         }
 
         public MultiChannelDispatcher dispatcher() {
@@ -278,13 +339,15 @@ public final class ChatSubsystem {
         }
 
         /**
-         * The auto-send drain: one tick polls the trade gate, and when the
-         * cooldown has expired with messages waiting, sends the oldest
-         * through the same choke point every trade send passes — the send
-         * command mixin — so its allowance re-arms the window exactly like
-         * a player-typed send. The toast says what left and what still
-         * waits; a disconnect between polls keeps the message queued (the
-         * whole queue clears on disconnect anyway).
+         * The pacing tick: resolves sends the server stopped answering
+         * about, then drains the queue — one tick polls the gate, and when
+         * the server-reported window has expired with messages waiting,
+         * sends the oldest through the same choke point every trade send
+         * passes — the send command mixin — so its outcome is tracked like
+         * any other send: accepted, or refused with a fresh wait line that
+         * re-syncs the window and re-queues it. The toast says what left
+         * and what still waits; a disconnect between polls keeps the
+         * message queued (the whole queue clears on disconnect anyway).
          */
         private void tickTradePacing() {
                 if (!config.tradePacingEnabled() || !config.tradeAutoSend()) {
@@ -294,7 +357,9 @@ public final class ChatSubsystem {
                 if (connection == null) {
                         return;
                 }
-                String due = tradeGate.pollDue(System.currentTimeMillis());
+                long now = System.currentTimeMillis();
+                tradeGate.settleUnresolved(now);
+                String due = tradeGate.pollDue(now);
                 if (due == null) {
                         return;
                 }

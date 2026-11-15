@@ -12,23 +12,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * house style uses everywhere else.
  */
 class ChatTabBarTest {
-	@Test
-	void selectedWinsOverEverything() {
-		assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(true, false, false));
-		assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(true, true, false));
-		assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(true, false, true));
-		assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(true, true, true));
-	}
+        @Test
+        void selectedIsYellowAndWinsOverEverything() {
+                assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(true, false, false));
+                assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(true, true, false));
+                assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(true, false, true));
+                assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(true, true, true));
+        }
 
-	@Test
-	void unreadIsYellowAndOutranksTargeting() {
-		assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(false, false, true));
-		assertEquals(ChatFormatting.YELLOW, ChatTabBar.labelColor(false, true, true));
-	}
+        @Test
+        void unreadIsWhite() {
+                assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(false, false, true));
+                assertEquals(ChatFormatting.WHITE, ChatTabBar.labelColor(false, true, true));
+        }
 
-	@Test
-	void targetedIsAquaAndIdleIsGray() {
-		assertEquals(ChatFormatting.AQUA, ChatTabBar.labelColor(false, true, false));
-		assertEquals(ChatFormatting.GRAY, ChatTabBar.labelColor(false, false, false));
-	}
+        /**
+         * The live player's palette (dev.36): yellow selected, white unread,
+         * gray unselected and read — the target marker strip carries the
+         * targeting state, so a targeted-but-read tab reads gray like any
+         * other idle tab.
+         */
+        @Test
+        void unselectedAndReadIsGrayTargetedOrNot() {
+                assertEquals(ChatFormatting.GRAY, ChatTabBar.labelColor(false, true, false));
+                assertEquals(ChatFormatting.GRAY, ChatTabBar.labelColor(false, false, false));
+        }
 }

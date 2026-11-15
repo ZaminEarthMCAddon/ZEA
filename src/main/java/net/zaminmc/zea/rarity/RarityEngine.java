@@ -104,8 +104,21 @@ public final class RarityEngine {
          * render on top of.
          */
         public static int slotTintArgb(ItemStack stack) {
+                return tintArgb(stack, cfg -> cfg.raritySlotTintEnabled());
+        }
+
+        /**
+         * The same wash for the HUD hotbar (and off-hand) slots — the
+         * dev.36 live request: rarity color in the hotbar, not only
+         * inside container screens. Gated by the hotbar's own switch.
+         */
+        public static int hotbarTintArgb(ItemStack stack) {
+                return tintArgb(stack, cfg -> cfg.rarityHotbarTintEnabled());
+        }
+
+        private static int tintArgb(ItemStack stack, java.util.function.Predicate<ZeaConfig> enabled) {
                 ZeaConfig cfg = ZeaClient.config();
-                if (cfg == null || !cfg.rarityEnabled() || !cfg.raritySlotTintEnabled()) {
+                if (cfg == null || !enabled.test(cfg)) {
                         return 0;
                 }
                 ItemRarity rarity = rarityOf(stack);

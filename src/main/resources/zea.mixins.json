@@ -12,6 +12,7 @@
                 "ContainerScreenMixin",
                 "CreativeScreenMixin",
                 "GuiGraphicsExtractorMixin",
+                "HudMixin",
                 "MouseHandlerMixin",
                 "MultiPlayerGameModeMixin",
                 "RecipeBookScreenMixin",

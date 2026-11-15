@@ -34,10 +34,11 @@ import java.util.function.BooleanSupplier;
  * button is the only one that shows a state: while a search is open it
  * renders "active" (solid background, white icon) like a selected tab.
  *
- * <p>Like every other ZEA chat widget the row is mouse-driven and
- * refuses keyboard focus navigation, so it can never steal the caret
- * from the chat input (the dev.24 live report). Only the left button
- * activates actions — right-click stays free for message copying.
+ * <p>Like every other ZEA chat widget the row is mouse-driven, refuses
+ * keyboard focus navigation, and never takes focus from the chat input
+ * on click (the dev.24 and dev.36 live reports), so the caret survives
+ * every button press. Only the left button activates actions —
+ * right-click stays free for message copying.
  */
 public final class ChatButtonBar extends AbstractWidget {
         /** One button's edge in screen pixels — Chatting's 9×9 grid. */
@@ -151,6 +152,12 @@ public final class ChatButtonBar extends AbstractWidget {
         @Override
         public ComponentPath nextFocusPath(FocusNavigationEvent navigationEvent) {
                 return null;
+        }
+
+        /** Never takes the caret from the chat input on click; see the class javadoc. */
+        @Override
+        public boolean shouldTakeFocusAfterInteraction() {
+                return false;
         }
 
         @Override

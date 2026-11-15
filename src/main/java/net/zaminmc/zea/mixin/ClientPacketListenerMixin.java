@@ -13,17 +13,17 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Enforces the trade channel's pacing on every outgoing trade send.
- * EarthMC allows one trade message per player every five minutes; a
- * second message inside the window is silently rejected by the server.
- * This is the one choke point every send passes through — the player's
- * own {@code /tradechat} (typed or recalled), ZEA's channel routing and
- * the auto-send drain all reach vanilla's
- * {@code ClientPacketListener.sendCommand} — so the gate is decided
- * here and the window restarts on exactly the sends that really went
- * out.
- *
- * <p>A held message is either queued for the drain (auto-send on, up to
+ * Tracks every outgoing trade send through the one choke point they all
+ * share — the player's own {@code /tradechat} (typed or recalled), ZEA's
+ * channel routing and the auto-send drain all reach vanilla's
+ * {@code ClientPacketListener.sendCommand}. While no cooldown is known
+ * the send goes straight out and is remembered as unresolved, because
+ * the server — never a client-side guess — decides whether it counted
+ * (the dev.36 live request: no forced five-minute window). Its answer
+ * arrives as the classified wait line, which syncs the gate's window
+ * and moves the rejected message into the queue; an accepted echo
+ * resolves the send. While a server-reported window runs, a send is
+ * held for the drain (auto-send on, up to
  * {@link TradeGate#MAX_QUEUED}) or refused with a toast explaining the
  * wait; a bare {@code /tradechat} with no message is a channel switch,
  * not a send, and passes untouched. Active only while connected to
@@ -52,7 +52,8 @@ public abstract class ClientPacketListenerMixin {
                 long now = System.currentTimeMillis();
                 TradeGate.Outcome outcome = gate.offer(command, now, config.tradeAutoSend());
                 if (outcome == TradeGate.Outcome.SEND_NOW) {
-                        gate.onSent(now);
+                        // The gate remembers the send; the server's answer —
+                        // echo or wait line — resolves it.
                         return;
                 }
                 ci.cancel();
