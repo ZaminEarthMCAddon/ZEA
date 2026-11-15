@@ -67,5 +67,17 @@
         "zea.slots.locked_hint": "Slot locked",
         "zea.slots.bound_hint": "Bound to hotbar %s — right-click to swap",
         "zea.buttons.edit.tooltip": "Description",
-        "zea.buttons.edit.tooltip.hint": "Optional line under the name in the tooltip"
+        "zea.buttons.edit.tooltip.hint": "Optional line under the name in the tooltip",
+        "zea.chat.unread.narration": "(new messages)",
+        "zea.chat.trade.title": "Trade chat",
+        "zea.chat.trade.queued": "Queued — sends in %s (%d waiting).",
+        "zea.chat.trade.blocked": "The server allows one trade message every 5 minutes — %s left. Enable auto-send to queue.",
+        "zea.chat.trade.full": "The trade queue is full (%d messages).",
+        "zea.chat.trade.auto_sent": "Sent a queued trade message (%d waiting).",
+        "zea.chat.trade.auto_on": "Queued trade messages will send automatically.",
+        "zea.chat.trade.auto_off": "Queued trade messages wait until you send them yourself.",
+        "zea.chat.trade.status": "Trade %s",
+        "zea.chat.trade.status_queued": "Trade %s · %d queued",
+        "zea.chat.trade.ready": "ready",
+        "zea.chat.trade.tooltip": "The trade channel allows one message every 5 minutes. Click to toggle auto-send."
 }

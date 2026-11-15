@@ -32,6 +32,10 @@ class ZeaConfigTest {
                 assertEquals(7, config.historyRetentionDays());
                 assertEquals(7L * 86_400_000L, config.historyRetentionMillis());
                 assertEquals(ZeaConfig.DEFAULT_HISTORY_ENTRIES, config.historyMaxEntries());
+                assertFalse(config.hideServerBroadcastsInGeneral(),
+                        "General keeps its broadcasts until the player asks to hide them");
+                assertTrue(config.tradePacingEnabled(), "trade pacing defaults to on");
+                assertTrue(config.tradeAutoSend(), "queued trade messages auto-send by default");
         }
 
         @Test

@@ -28,275 +28,329 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FeedFilterTest {
-	private ClassifiedMessage classified(MessageCategory category) {
-		CapturedMessage captured = CapturedMessage.of(Component.literal("sample"), Instant.EPOCH);
-		return new ClassifiedMessage(captured, category, MessagePayload.None.INSTANCE);
-	}
+        private ClassifiedMessage classified(MessageCategory category) {
+                CapturedMessage captured = CapturedMessage.of(Component.literal("sample"), Instant.EPOCH);
+                return new ClassifiedMessage(captured, category, MessagePayload.None.INSTANCE);
+        }
 
-	@Test
-	void allAggregatesEveryCategory() {
-		for (MessageCategory category : MessageCategory.values()) {
-			assertTrue(Feeds.ALL.shows(classified(category)), category.name());
-		}
-	}
+        @Test
+        void allAggregatesEveryCategory() {
+                for (MessageCategory category : MessageCategory.values()) {
+                        assertTrue(Feeds.ALL.shows(classified(category)), category.name());
+                }
+        }
 
-	@ParameterizedTest
-	@EnumSource(value = MessageCategory.class, names = {"GLOBAL", "LOCAL", "TRADE", "NATION", "TOWN"})
-	void channelFeedsShowOnlyTheirCategory(MessageCategory category) {
-		Feed feed = Feeds.allFeeds().stream()
-				.filter(f -> f.id().equals(category.name().toLowerCase()))
-				.findFirst().orElseThrow();
+        @ParameterizedTest
+        @EnumSource(value = MessageCategory.class, names = {"GLOBAL", "LOCAL", "TRADE", "NATION", "TOWN"})
+        void channelFeedsShowOnlyTheirCategory(MessageCategory category) {
+                Feed feed = Feeds.allFeeds().stream()
+                                .filter(f -> f.id().equals(category.name().toLowerCase()))
+                                .findFirst().orElseThrow();
 
-		assertTrue(feed.shows(classified(category)));
-		for (MessageCategory other : MessageCategory.values()) {
-			if (other != category) {
-				assertFalse(feed.shows(classified(other)), category + " feed shows " + other);
-			}
-		}
-	}
+                assertTrue(feed.shows(classified(category)));
+                for (MessageCategory other : MessageCategory.values()) {
+                        if (other != category) {
+                                assertFalse(feed.shows(classified(other)), category + " feed shows " + other);
+                        }
+                }
+        }
 
-	@Test
-	void unclassifiedFeedKeepsUnknownMessages() {
-		assertTrue(Feeds.UNCLASSIFIED.shows(classified(MessageCategory.UNCLASSIFIED)));
-		assertFalse(Feeds.GLOBAL.shows(classified(MessageCategory.UNCLASSIFIED)));
-	}
+        @Test
+        void unclassifiedFeedKeepsUnknownMessages() {
+                assertTrue(Feeds.UNCLASSIFIED.shows(classified(MessageCategory.UNCLASSIFIED)));
+                assertFalse(Feeds.GLOBAL.shows(classified(MessageCategory.UNCLASSIFIED)));
+        }
 
-	@Test
-	void defaultTabsAreTheImportantOnes() {
-		List<String> ids = Feeds.defaultVisibleTabs().stream().map(Feed::id).toList();
+        @Test
+        void defaultTabsAreTheImportantOnes() {
+                List<String> ids = Feeds.defaultVisibleTabs().stream().map(Feed::id).toList();
 
-		assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms"), ids);
-	}
+                assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms"), ids);
+        }
 
-	@Test
-	void extraFeedsRemainAccessible() {
-		List<String> ids = Feeds.extraFeeds().stream().map(Feed::id).toList();
+        @Test
+        void extraFeedsRemainAccessible() {
+                List<String> ids = Feeds.extraFeeds().stream().map(Feed::id).toList();
 
-		assertEquals(List.of("discord", "votes", "crates", "deaths", "system", "unclassified"), ids);
-	}
+                assertEquals(List.of("discord", "votes", "crates", "deaths", "system", "unclassified"), ids);
+        }
 
-	@Test
-	void everyCategoryHasAHome() {
-		for (MessageCategory category : MessageCategory.values()) {
-			boolean visibleSomewhere = Feeds.allFeeds().stream()
-					.anyMatch(feed -> feed.shows(classified(category)));
-			assertTrue(visibleSomewhere, category + " has no feed");
-		}
-	}
+        @Test
+        void everyCategoryHasAHome() {
+                for (MessageCategory category : MessageCategory.values()) {
+                        boolean visibleSomewhere = Feeds.allFeeds().stream()
+                                        .anyMatch(feed -> feed.shows(classified(category)));
+                        assertTrue(visibleSomewhere, category + " has no feed");
+                }
+        }
 
-	@Test
-	void visibleTabsDefaultToTheImportantOnes() {
-		List<String> ids = Feeds.visibleTabs(Set.of()).stream().map(Feed::id).toList();
+        @Test
+        void visibleTabsDefaultToTheImportantOnes() {
+                List<String> ids = Feeds.visibleTabs(Set.of()).stream().map(Feed::id).toList();
 
-		assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms"), ids);
-	}
+                assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms"), ids);
+        }
 
-	@Test
-	void enabledExtrasAppendAfterTheDefaultTabs() {
-		List<String> ids = Feeds.visibleTabs(Set.of("deaths", "discord")).stream()
-				.map(Feed::id).toList();
+        @Test
+        void enabledExtrasAppendAfterTheDefaultTabs() {
+                List<String> ids = Feeds.visibleTabs(Set.of("deaths", "discord")).stream()
+                                .map(Feed::id).toList();
 
-		assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms",
-				"discord", "deaths"), ids);
-	}
+                assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms",
+                                "discord", "deaths"), ids);
+        }
 
-	@Test
-	void unknownEnabledIdsAreIgnored() {
-		List<String> ids = Feeds.visibleTabs(Set.of("nonsense", "votes")).stream()
-				.map(Feed::id).toList();
+        @Test
+        void unknownEnabledIdsAreIgnored() {
+                List<String> ids = Feeds.visibleTabs(Set.of("nonsense", "votes")).stream()
+                                .map(Feed::id).toList();
 
-		assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms", "votes"), ids);
-	}
+                assertEquals(List.of("all", "global", "local", "trade", "nation", "town", "pms", "votes"), ids);
+        }
 
-	private final ClassificationCache cache = new ClassificationCache(new ClassificationPipeline(), 64);
-	private final FeedSelection selection = new FeedSelection(Feeds.ALL);
-	private final FeedFilter filter = new FeedFilter(cache, selection);
+        private final ClassificationCache cache = new ClassificationCache(new ClassificationPipeline(), 64);
+        private final FeedSelection selection = new FeedSelection(Feeds.ALL);
+        private boolean hideBroadcasts;
+        private final FeedFilter filter = new FeedFilter(cache, selection, () -> hideBroadcasts);
 
-	private GuiMessage message(String text) {
-		return new GuiMessage(0, Component.literal(text), new MessageSignature(new byte[256]),
-				GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.system());
-	}
+        private GuiMessage message(String text) {
+                return new GuiMessage(0, Component.literal(text), new MessageSignature(new byte[256]),
+                                GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.system());
+        }
 
-	@Test
-	void allTabUsesNoFilterSoVanillaShowsEverything() {
-		assertNull(filter.currentFilter());
-	}
+        @Test
+        void allTabUsesNoFilterSoVanillaShowsEverything() {
+                assertNull(filter.currentFilter());
+        }
 
-	/**
-	 * A filter without its classification service must never exist: the
-	 * dev.23 live crash was a FeedFilter constructed with a null cache
-	 * (ChatSubsystem's field initializer ran before the constructor body
-	 * assigned the cache), and its predicate then dereferenced null inside
-	 * vanilla's packet path — a disconnect. The constructor now fails
-	 * fast, so a wiring mistake dies at startup where it is debuggable.
-	 */
-	@Test
-	void feedFilterRequiresItsCacheAndSelection() {
-		assertThrows(NullPointerException.class, () -> new FeedFilter(null, selection));
-		assertThrows(NullPointerException.class, () -> new FeedFilter(cache, null));
-	}
+        /**
+         * A filter without its classification service must never exist: the
+         * dev.23 live crash was a FeedFilter constructed with a null cache
+         * (ChatSubsystem's field initializer ran before the constructor body
+         * assigned the cache), and its predicate then dereferenced null inside
+         * vanilla's packet path — a disconnect. The constructor now fails
+         * fast, so a wiring mistake dies at startup where it is debuggable.
+         */
+        @Test
+        void feedFilterRequiresItsCacheAndSelection() {
+                assertThrows(NullPointerException.class, () -> new FeedFilter(null, selection, () -> false));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, null, () -> false));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, null));
+        }
 
-	/**
-	 * Every state installs an {@link FeedFilter.Installed} predicate, so
-	 * the retention wrap in ChatComponentMixin can tell ZEA's filters
-	 * from vanilla's and other mods' and retain only what ZEA hides.
-	 */
-	@Test
-	void installedFilterIsAlwaysZeaOwned() {
-		assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
+        /**
+         * Every state installs an {@link FeedFilter.Installed} predicate, so
+         * the retention wrap in ChatComponentMixin can tell ZEA's filters
+         * from vanilla's and other mods' and retain only what ZEA hides.
+         */
+        @Test
+        void installedFilterIsAlwaysZeaOwned() {
+                assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
 
-		filter.setSearchQuery("");
-		assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
+                filter.setSearchQuery("");
+                assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
 
-		selection.select(Feeds.VOTES);
-		assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
+                selection.select(Feeds.VOTES);
+                assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
 
-		filter.setSearchQuery("gold");
-		assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
-	}
+                filter.setSearchQuery("gold");
+                assertTrue(filter.installableFilter() instanceof FeedFilter.Installed);
+        }
 
-	@Test
-	void installedWrapperDelegatesToTheComposedFilter() {
-		selection.select(Feeds.VOTES);
-		filter.setSearchQuery("gold");
+        @Test
+        void installedWrapperDelegatesToTheComposedFilter() {
+                selection.select(Feeds.VOTES);
+                filter.setSearchQuery("gold");
 
-		Predicate<GuiMessage> installed = filter.installableFilter();
+                Predicate<GuiMessage> installed = filter.installableFilter();
 
-		assertTrue(installed.test(message("AdamGladio voted and received a gold crate /vote")));
-		assertFalse(installed.test(message("[Germany|Berlin] KoenigLuis: selling gold cheap")));
-		assertFalse(installed.test(message("AdamGladio voted and received a silver crate /vote")));
-	}
+                assertTrue(installed.test(message("AdamGladio voted and received a gold crate /vote")));
+                assertFalse(installed.test(message("[Germany|Berlin] KoenigLuis: selling gold cheap")));
+                assertFalse(installed.test(message("AdamGladio voted and received a silver crate /vote")));
+        }
 
-	/**
-	 * Vanilla's chat requires a non-null visibleMessageFilter — the field
-	 * starts always-true and addMessage tests it without a null check, so a
-	 * null install throws on the next incoming message and drops the
-	 * connection. The General tab (also: the disconnect reset) must therefore
-	 * install "show everything", not null.
-	 */
-	@Test
-	void generalTabInstallsNonNullAlwaysTrueFilter() {
-		Predicate<GuiMessage> installed = filter.installableFilter();
+        /**
+         * Vanilla's chat requires a non-null visibleMessageFilter — the field
+         * starts always-true and addMessage tests it without a null check, so a
+         * null install throws on the next incoming message and drops the
+         * connection. The General tab (also: the disconnect reset) must therefore
+         * install "show everything", not null.
+         */
+        @Test
+        void generalTabInstallsNonNullAlwaysTrueFilter() {
+                Predicate<GuiMessage> installed = filter.installableFilter();
 
-		assertNotNull(installed);
-		assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: hello")));
-		assertTrue(installed.test(message("completely unknown structure")));
-	}
+                assertNotNull(installed);
+                assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: hello")));
+                assertTrue(installed.test(message("completely unknown structure")));
+        }
 
-	@Test
-	void blankSearchOnAllInstallsNonNullAlwaysTrueFilter() {
-		filter.setSearchQuery("");
+        @Test
+        void blankSearchOnAllInstallsNonNullAlwaysTrueFilter() {
+                filter.setSearchQuery("");
 
-		Predicate<GuiMessage> installed = filter.installableFilter();
+                Predicate<GuiMessage> installed = filter.installableFilter();
 
-		assertNotNull(installed);
-		assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: hello")));
-	}
+                assertNotNull(installed);
+                assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: hello")));
+        }
 
-	@Test
-	void installableFilterTracksSearchAndFeedWhenTheyFilter() {
-		filter.setSearchQuery("gravel");
-		selection.select(Feeds.GLOBAL);
+        @Test
+        void installableFilterTracksSearchAndFeedWhenTheyFilter() {
+                filter.setSearchQuery("gravel");
+                selection.select(Feeds.GLOBAL);
 
-		Predicate<GuiMessage> installed = filter.installableFilter();
+                Predicate<GuiMessage> installed = filter.installableFilter();
 
-		assertNotNull(installed);
-		assertFalse(installed.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
-		assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
-	}
+                assertNotNull(installed);
+                assertFalse(installed.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
+                assertTrue(installed.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
+        }
 
-	@Test
-	void selectedFeedShowsOnlyItsMessages() {
-		selection.select(Feeds.VOTES);
-		Predicate<GuiMessage> predicate = filter.currentFilter();
-		assertNotNull(predicate);
+        @Test
+        void selectedFeedShowsOnlyItsMessages() {
+                selection.select(Feeds.VOTES);
+                Predicate<GuiMessage> predicate = filter.currentFilter();
+                assertNotNull(predicate);
 
-		assertTrue(predicate.test(message("AdamGladio voted and received a gold crate /vote")));
-		assertFalse(predicate.test(message("[Yugoslavia|Pest] GavriloPrincip: hello")));
-		assertFalse(predicate.test(message("completely unknown structure")));
-	}
+                assertTrue(predicate.test(message("AdamGladio voted and received a gold crate /vote")));
+                assertFalse(predicate.test(message("[Yugoslavia|Pest] GavriloPrincip: hello")));
+                assertFalse(predicate.test(message("completely unknown structure")));
+        }
 
-	@Test
-	void unclassifiedMessagesStayVisibleOnlyInAggregateAndGeneralFeeds() {
-		selection.select(Feeds.UNCLASSIFIED);
-		Predicate<GuiMessage> general = filter.currentFilter();
+        @Test
+        void unclassifiedMessagesStayVisibleOnlyInAggregateAndGeneralFeeds() {
+                selection.select(Feeds.UNCLASSIFIED);
+                Predicate<GuiMessage> general = filter.currentFilter();
 
-		assertTrue(general.test(message("completely unknown structure")));
-		assertFalse(general.test(message("AdamGladio voted and received a gold crate /vote")));
+                assertTrue(general.test(message("completely unknown structure")));
+                assertFalse(general.test(message("AdamGladio voted and received a gold crate /vote")));
 
-		selection.select(Feeds.VOTES);
-		assertFalse(filter.currentFilter().test(message("completely unknown structure")));
-	}
+                selection.select(Feeds.VOTES);
+                assertFalse(filter.currentFilter().test(message("completely unknown structure")));
+        }
 
-	@Test
-	void filterRecognizesMessagesSeenByTheCacheFirst() {
-		Component death = Component.literal("☠ xfw_x was killed by dex247");
-		cache.classificationOf(death);
+        /**
+         * The General broadcast filter: votes, deaths and system lines hide
+         * in General when the option is on, conversational messages and — the
+         * safety rule — anything unclassified stay visible, and every hidden
+         * message stays retrievable through its own tab.
+         */
+        @Test
+        void generalHidesServerBroadcastsWhenTheOptionIsOn() {
+                hideBroadcasts = true;
+                selection.select(Feeds.ALL);
+                Predicate<GuiMessage> predicate = filter.currentFilter();
 
-		selection.select(Feeds.DEATHS);
-		assertTrue(filter.currentFilter().test(new GuiMessage(0, death, null,
-				GuiMessageSource.SYSTEM_SERVER, null)));
-	}
+                assertNotNull(predicate);
+                assertFalse(predicate.test(message("AdamGladio voted and received a gold crate /vote")));
+                assertFalse(predicate.test(message("☠ Alex was killed by Bob")));
+                assertTrue(predicate.test(message("[Germany|Berlin] KoenigLuis: hello")),
+                                "channel chat is conversational, not broadcast");
+                assertTrue(predicate.test(message("completely unknown structure")),
+                                "an unknown format must never be swallowed");
+        }
 
-	@Test
-	void openSearchWithBlankQueryFiltersNothing() {
-		filter.setSearchQuery("");
+        @Test
+        void broadcastsStayVisibleInGeneralWhenTheOptionIsOff() {
+                hideBroadcasts = false;
+                selection.select(Feeds.ALL);
 
-		assertNull(filter.currentFilter());
-	}
+                assertNull(filter.currentFilter());
+        }
 
-	@Test
-	void searchOnAllNarrowsByText() {
-		filter.setSearchQuery("gravel");
+        @Test
+        void theBroadcastOptionNeverTouchesModuleTabs() {
+                hideBroadcasts = true;
 
-		Predicate<GuiMessage> predicate = filter.currentFilter();
-		assertNotNull(predicate);
-		assertTrue(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
-		assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
-	}
+                for (Feed feed : Feeds.allFeeds()) {
+                        if (feed.showsEverything()) {
+                                continue;
+                        }
+                        selection.select(feed);
+                        Predicate<GuiMessage> predicate = filter.currentFilter();
+                        assertNotNull(predicate);
+                        assertTrue(predicate.test(message("AdamGladio voted and received a gold crate /vote")) == feed.shows(
+                                                classified(MessageCategory.VOTE)),
+                                feed.label() + " must keep its own category filter");
+                }
+        }
 
-	@Test
-	void searchMatchesCaseInsensitively() {
-		filter.setSearchQuery("koENig");
+        @Test
+        void serverBroadcastsAreExactlyTheServerSpokenCategories() {
+                assertEquals(Set.of(MessageCategory.VOTE, MessageCategory.CRATE_WIN,
+                                MessageCategory.DEATH, MessageCategory.SYSTEM), FeedFilter.SERVER_BROADCASTS);
+        }
 
-		assertTrue(filter.currentFilter().test(message("[Germany|Berlin] KoenigLuis: hello")));
-	}
+        @Test
+        void filterRecognizesMessagesSeenByTheCacheFirst() {
+                Component death = Component.literal("☠ xfw_x was killed by dex247");
+                cache.classificationOf(death);
 
-	@Test
-	void searchComposesWithTheSelectedFeed() {
-		filter.setSearchQuery("gravel");
-		selection.select(Feeds.GLOBAL);
+                selection.select(Feeds.DEATHS);
+                assertTrue(filter.currentFilter().test(new GuiMessage(0, death, null,
+                                GuiMessageSource.SYSTEM_SERVER, null)));
+        }
 
-		Predicate<GuiMessage> predicate = filter.currentFilter();
-		// Matches the text but not the feed: stays hidden.
-		assertFalse(predicate.test(message("AdamGladio voted and received gravel")));
-		// Matches the feed but not the text: stays hidden.
-		assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
-		// Matches both: shown.
-		assertTrue(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
-	}
+        @Test
+        void openSearchWithBlankQueryFiltersNothing() {
+                filter.setSearchQuery("");
 
-	@Test
-	void searchMatchesFlattenedStyledText() {
-		net.minecraft.network.chat.MutableComponent name = Component.literal("Aurora")
-				.withStyle(net.minecraft.ChatFormatting.AQUA);
-		net.minecraft.network.chat.MutableComponent message = Component.literal(": anyone selling gravel?")
-				.withStyle(net.minecraft.ChatFormatting.WHITE);
-		filter.setSearchQuery("selling gravel");
+                assertNull(filter.currentFilter());
+        }
 
-		assertTrue(filter.currentFilter().test(new GuiMessage(0, name.append(message), null,
-				GuiMessageSource.SYSTEM_SERVER, null)));
-	}
+        @Test
+        void searchOnAllNarrowsByText() {
+                filter.setSearchQuery("gravel");
 
-	@Test
-	void closingTheSearchRestoresTheFeedFilterOnly() {
-		filter.setSearchQuery("gravel");
-		selection.select(Feeds.VOTES);
-		filter.setSearchQuery(null);
+                Predicate<GuiMessage> predicate = filter.currentFilter();
+                assertNotNull(predicate);
+                assertTrue(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
+                assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
+        }
 
-		Predicate<GuiMessage> predicate = filter.currentFilter();
-		assertNotNull(predicate);
-		assertTrue(predicate.test(message("AdamGladio voted and received a gold crate /vote")));
-		assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
-	}
+        @Test
+        void searchMatchesCaseInsensitively() {
+                filter.setSearchQuery("koENig");
+
+                assertTrue(filter.currentFilter().test(message("[Germany|Berlin] KoenigLuis: hello")));
+        }
+
+        @Test
+        void searchComposesWithTheSelectedFeed() {
+                filter.setSearchQuery("gravel");
+                selection.select(Feeds.GLOBAL);
+
+                Predicate<GuiMessage> predicate = filter.currentFilter();
+                // Matches the text but not the feed: stays hidden.
+                assertFalse(predicate.test(message("AdamGladio voted and received gravel")));
+                // Matches the feed but not the text: stays hidden.
+                assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling dirt cheap")));
+                // Matches both: shown.
+                assertTrue(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
+        }
+
+        @Test
+        void searchMatchesFlattenedStyledText() {
+                net.minecraft.network.chat.MutableComponent name = Component.literal("Aurora")
+                                .withStyle(net.minecraft.ChatFormatting.AQUA);
+                net.minecraft.network.chat.MutableComponent message = Component.literal(": anyone selling gravel?")
+                                .withStyle(net.minecraft.ChatFormatting.WHITE);
+                filter.setSearchQuery("selling gravel");
+
+                assertTrue(filter.currentFilter().test(new GuiMessage(0, name.append(message), null,
+                                GuiMessageSource.SYSTEM_SERVER, null)));
+        }
+
+        @Test
+        void closingTheSearchRestoresTheFeedFilterOnly() {
+                filter.setSearchQuery("gravel");
+                selection.select(Feeds.VOTES);
+                filter.setSearchQuery(null);
+
+                Predicate<GuiMessage> predicate = filter.currentFilter();
+                assertNotNull(predicate);
+                assertTrue(predicate.test(message("AdamGladio voted and received a gold crate /vote")));
+                assertFalse(predicate.test(message("[Germany|Berlin] KoenigLuis: selling gravel cheap")));
+        }
 }

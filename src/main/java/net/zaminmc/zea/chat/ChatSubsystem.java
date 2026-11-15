@@ -20,6 +20,8 @@ import net.zaminmc.zea.chat.feeds.MultiSendResult;
 import net.zaminmc.zea.chat.feeds.OutgoingMessage;
 import net.zaminmc.zea.chat.feeds.OutgoingRouter;
 import net.zaminmc.zea.chat.feeds.SendTargets;
+import net.zaminmc.zea.chat.feeds.TradeGate;
+import net.zaminmc.zea.chat.feeds.UnreadTracker;
 import net.zaminmc.zea.chat.feeds.WriteChannel;
 import net.zaminmc.zea.chat.history.ChatHistory;
 import net.zaminmc.zea.chat.history.HistoryEntry;
@@ -28,6 +30,7 @@ import net.zaminmc.zea.chat.model.CapturedMessage;
 import net.zaminmc.zea.chat.model.ClassifiedMessage;
 import net.zaminmc.zea.chat.model.WritingChannelReport;
 import net.zaminmc.zea.chat.render.MultiSendToast;
+import net.zaminmc.zea.chat.render.TradeToast;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.mention.MentionAutoResponder;
@@ -62,6 +65,8 @@ public final class ChatSubsystem {
         private final ChatHistory history;
         private final HistoryRecorder historyRecorder;
         private final CaptureRecorder capture;
+        private final UnreadTracker unread;
+        private final TradeGate tradeGate;
 
         public ChatSubsystem(ClientLifecycle lifecycle, ClassificationPipeline classification, ZeaConfig config,
                         CaptureRecorder capture, Path historyDirectory, Executor historyExecutor) {
@@ -81,7 +86,8 @@ public final class ChatSubsystem {
                 // would read the still-null field through classifications()
                 // (the dev.23 live crash; ChatSubsystemWiringTest pins the
                 // compiled order).
-                this.feedFilter = new FeedFilter(this.classifications, this.feedSelection);
+                this.feedFilter = new FeedFilter(this.classifications, this.feedSelection,
+                                config::hideServerBroadcastsInGeneral);
                 this.dispatcher = new MultiChannelDispatcher(
                                 this::sendCommand,
                                 new DispatchFeedback(),
@@ -99,6 +105,10 @@ public final class ChatSubsystem {
                                 new UiNotificationSound(),
                                 config,
                                 autoResponder);
+                // Unread and trade pacing are display/flow state, not wiring:
+                // built after the collaborators they read.
+                this.unread = new UnreadTracker();
+                this.tradeGate = new TradeGate(TradeGate.COOLDOWN_MILLIS);
 
                 ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                         // Registered after ClientLifecycle (constructed first in
@@ -110,6 +120,7 @@ public final class ChatSubsystem {
                         dispatcher.tick(System.currentTimeMillis());
                         notifications.tick(System.currentTimeMillis());
                         historyRecorder.tick();
+                        tickTradePacing();
                 });
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
                         dispatcher.cancel();
@@ -124,6 +135,8 @@ public final class ChatSubsystem {
                         // vanilla chat is untouched on other servers.
                         feedSelection.select(Feeds.ALL);
                         sendTargets.clear();
+                        unread.clear();
+                        tradeGate.clear();
                         feedFilter.setSearchQuery(null);
                         feedFilter.apply(client.gui.hud.getChat());
                 });
@@ -139,6 +152,8 @@ public final class ChatSubsystem {
                 }
                 notifications.onClassified(classified, System.currentTimeMillis());
                 mentions.onClassified(classified, System.currentTimeMillis());
+                unread.onMessage(classified, feedSelection.selected(),
+                                Feeds.visibleTabs(config.enabledExtraFeedIds()));
                 if (!captured.text().isBlank()) {
                         history.append(HistoryEntry.of(classified));
                         historyRecorder.markDirty();
@@ -205,6 +220,16 @@ public final class ChatSubsystem {
                 return feedFilter;
         }
 
+        /** Which visible tabs hold unseen messages; drives the yellow labels. */
+        public UnreadTracker unreadTracker() {
+                return unread;
+        }
+
+        /** The trade channel's pacing state; see {@link TradeGate}. */
+        public TradeGate tradeGate() {
+                return tradeGate;
+        }
+
         public MultiChannelDispatcher dispatcher() {
                 return dispatcher;
         }
@@ -250,6 +275,34 @@ public final class ChatSubsystem {
                         throw new IllegalStateException("not connected to a server");
                 }
                 connection.sendCommand(message.commandLine());
+        }
+
+        /**
+         * The auto-send drain: one tick polls the trade gate, and when the
+         * cooldown has expired with messages waiting, sends the oldest
+         * through the same choke point every trade send passes — the send
+         * command mixin — so its allowance re-arms the window exactly like
+         * a player-typed send. The toast says what left and what still
+         * waits; a disconnect between polls keeps the message queued (the
+         * whole queue clears on disconnect anyway).
+         */
+        private void tickTradePacing() {
+                if (!config.tradePacingEnabled() || !config.tradeAutoSend()) {
+                        return;
+                }
+                ClientPacketListener connection = Minecraft.getInstance().getConnection();
+                if (connection == null) {
+                        return;
+                }
+                String due = tradeGate.pollDue(System.currentTimeMillis());
+                if (due == null) {
+                        return;
+                }
+                connection.sendCommand(due);
+                Minecraft minecraft = Minecraft.getInstance();
+                if (minecraft.gui != null) {
+                        TradeToast.showAutoSent(minecraft, tradeGate.queuedCount());
+                }
         }
 
         /**

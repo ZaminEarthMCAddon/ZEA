@@ -31,44 +31,45 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * only answer null.
  */
 class ChatWidgetsFocusTest {
-	private static final Path MAIN_CLASSES = Paths.get("build", "classes", "java", "main");
+        private static final Path MAIN_CLASSES = Paths.get("build", "classes", "java", "main");
 
-	@Test
-	void theChatWidgetsNeverOfferThemselvesAsKeyboardFocusTargets() throws IOException {
-		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatTabBar.class");
-		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatSearchBar.class");
-		refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatButtonBar.class");
-	}
+        @Test
+        void theChatWidgetsNeverOfferThemselvesAsKeyboardFocusTargets() throws IOException {
+                refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatTabBar.class");
+                refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatSearchBar.class");
+                refusesFocusNavigation("net/zaminmc/zea/chat/render/ChatButtonBar.class");
+                refusesFocusNavigation("net/zaminmc/zea/chat/render/TradeStatusIndicator.class");
+        }
 
-	private static void refusesFocusNavigation(String classFile) throws IOException {
-		assumeTrue(Files.isDirectory(MAIN_CLASSES), "compiled classes not found — run through Gradle");
-		ClassNode node = new ClassNode(Opcodes.ASM9);
-		new ClassReader(Files.readAllBytes(MAIN_CLASSES.resolve(classFile))).accept(node, 0);
+        private static void refusesFocusNavigation(String classFile) throws IOException {
+                assumeTrue(Files.isDirectory(MAIN_CLASSES), "compiled classes not found — run through Gradle");
+                ClassNode node = new ClassNode(Opcodes.ASM9);
+                new ClassReader(Files.readAllBytes(MAIN_CLASSES.resolve(classFile))).accept(node, 0);
 
-		MethodNode override = null;
-		for (MethodNode method : node.methods) {
-			if ("nextFocusPath".equals(method.name)) {
-				override = method;
-				break;
-			}
-		}
-		assertNotNull(override, classFile + " does not override nextFocusPath — keyboard focus"
-				+ " navigation can move the caret onto it while the player types");
+                MethodNode override = null;
+                for (MethodNode method : node.methods) {
+                        if ("nextFocusPath".equals(method.name)) {
+                                override = method;
+                                break;
+                        }
+                }
+                assertNotNull(override, classFile + " does not override nextFocusPath — keyboard focus"
+                                + " navigation can move the caret onto it while the player types");
 
-		boolean pushedNull = false;
-		for (AbstractInsnNode insn : override.instructions) {
-			int opcode = insn.getOpcode();
-			if (opcode == Opcodes.ACONST_NULL) {
-				pushedNull = true;
-			} else if (opcode == Opcodes.ARETURN) {
-				// The single return of a null-only method.
-			} else if (opcode == -1) {
-				// Frame and line-number pseudo-instructions.
-			} else {
-				fail(classFile + "#nextFocusPath does more than return null —"
-						+ " it may answer a focus navigation request");
-			}
-		}
-		assertTrue(pushedNull, classFile + "#nextFocusPath returns something other than null");
-	}
+                boolean pushedNull = false;
+                for (AbstractInsnNode insn : override.instructions) {
+                        int opcode = insn.getOpcode();
+                        if (opcode == Opcodes.ACONST_NULL) {
+                                pushedNull = true;
+                        } else if (opcode == Opcodes.ARETURN) {
+                                // The single return of a null-only method.
+                        } else if (opcode == -1) {
+                                // Frame and line-number pseudo-instructions.
+                        } else {
+                                fail(classFile + "#nextFocusPath does more than return null —"
+                                                + " it may answer a focus navigation request");
+                        }
+                }
+                assertTrue(pushedNull, classFile + "#nextFocusPath returns something other than null");
+        }
 }

@@ -113,25 +113,38 @@ public final class ZeaConfig extends Config {
                 @ConfigOrder(2)
                 public boolean channelTint = true;
 
-                @Category(name = "Tabs", desc = "Which additional chat tabs are shown. The default tabs are always visible.")
+                @ConfigOption(name = "Hide server broadcasts in General", desc = "Hide votes, crate "
+                                + "wins, deaths and system messages in the General tab — they pile up "
+                                + "fast there. They still show in their own tabs, and messages ZEA "
+                                + "could not classify are never hidden.")
+                @ConfigEditorBoolean
                 @ConfigOrder(3)
+                public boolean hideServerBroadcastsInGeneral = false;
+
+                @Category(name = "Tabs", desc = "Which additional chat tabs are shown. The default tabs are always visible.")
+                @ConfigOrder(4)
                 public Tabs tabs = new Tabs();
 
                 @Category(name = "Chat interface", desc = "How the chat looks and moves.")
-                @ConfigOrder(4)
+                @ConfigOrder(5)
                 public ChatInterface chatInterface = new ChatInterface();
 
                 @Category(name = "Notifications", desc = "Private message and mention notifications.")
-                @ConfigOrder(5)
+                @ConfigOrder(6)
                 public Notifications notifications = new Notifications();
 
                 @Category(name = "Mentions", desc = "How mentions of your name are handled in chat.")
-                @ConfigOrder(6)
+                @ConfigOrder(7)
                 public Mentions mentions = new Mentions();
 
                 @Category(name = "Chat history", desc = "Persistent, searchable EarthMC chat history.")
-                @ConfigOrder(7)
+                @ConfigOrder(8)
                 public History history = new History();
+
+                @Category(name = "Trade chat", desc = "Trade channel pacing: the server allows one trade "
+                                + "message every five minutes.")
+                @ConfigOrder(9)
+                public TradeChat tradeChat = new TradeChat();
         }
 
         /**
@@ -320,6 +333,25 @@ public final class ZeaConfig extends Config {
                                 minStep = 500)
                 @ConfigOrder(2)
                 public int maxEntries = DEFAULT_HISTORY_ENTRIES;
+        }
+
+        /** Trade channel pacing. */
+        public static final class TradeChat {
+                @ConfigOption(name = "Trade pacing", desc = "Hold trade messages the server would "
+                                + "reject: while the five-minute cooldown runs, new trade messages queue "
+                                + "(or are refused, with auto-send off). A status line above the chat "
+                                + "tabs shows the cooldown and the queue.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean pacing = true;
+
+                @ConfigOption(name = "Auto-send queued messages", desc = "Send queued trade messages "
+                                + "automatically when the cooldown expires. Click the status line above "
+                                + "the chat tabs to toggle this mid-conversation. Queued messages wait, "
+                                + "never lost, until sent or you disconnect.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean autoSend = true;
         }
 
         /** Chat appearance and motion. */
@@ -677,6 +709,21 @@ public final class ZeaConfig extends Config {
         /** Whether received channel messages are tinted slightly yellow; on by default. */
         public boolean channelTintEnabled() {
                 return chat.channelTint;
+        }
+
+        /** Whether General hides vote, crate, death and system messages; off by default. */
+        public boolean hideServerBroadcastsInGeneral() {
+                return chat.hideServerBroadcastsInGeneral;
+        }
+
+        /** Whether the trade channel's sends are paced against the server's cooldown; on by default. */
+        public boolean tradePacingEnabled() {
+                return chat.tradeChat.pacing;
+        }
+
+        /** Whether queued trade messages send automatically when the cooldown expires; on by default. */
+        public boolean tradeAutoSend() {
+                return chat.tradeChat.autoSend;
         }
 
         /** Whether smooth chat is enabled; on by default. */

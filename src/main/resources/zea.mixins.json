@@ -7,6 +7,7 @@
                 "ChatComponentAccessor",
                 "ChatComponentMixin",
                 "ChatScreenMixin",
+                "ClientPacketListenerMixin",
                 "MentionHighlightMixin",
                 "ContainerScreenMixin",
                 "CreativeScreenMixin",

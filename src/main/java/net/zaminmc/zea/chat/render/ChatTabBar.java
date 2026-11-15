@@ -28,6 +28,12 @@ import java.util.function.Predicate;
  * have no channel and the toggle explains that); targeting is also a
  * separate state, reflected here as a thin marker strip and aqua label.
  *
+ * <p>A tab holding messages that arrived while another tab was selected
+ * shows its label in yellow instead of gray — the unread indicator — until
+ * the player selects it again. Yellow outranks the aqua target color for
+ * the label (the thin target marker still shows); the selected tab stays
+ * white, and by definition nothing unread can arrive on it.
+ *
  * <p>The strip never extends past the chat panel's on-screen width: the
  * caller passes that width (see {@link TabLayout} for the 26.3 width
  * math), and tabs that do not fit compress their padding, then shorten
@@ -67,17 +73,19 @@ public final class ChatTabBar extends AbstractWidget {
         private final Consumer<Feed> onSelect;
         private final Consumer<Feed> onToggleTarget;
         private final Predicate<Feed> isTargeted;
+        private final Predicate<Feed> isUnread;
         private final TabLayout layout;
 
         public ChatTabBar(Font font, int x, int y, int maxWidth, List<Feed> tabs,
                         FeedSelection selection, Predicate<Feed> isTargeted, Consumer<Feed> onSelect,
-                        Consumer<Feed> onToggleTarget) {
+                        Consumer<Feed> onToggleTarget, Predicate<Feed> isUnread) {
                 super(x, y, TAB_HEIGHT, TAB_HEIGHT, Component.literal("Chat tabs"));
                 this.tabs = List.copyOf(tabs);
                 this.selection = selection;
                 this.isTargeted = isTargeted;
                 this.onSelect = onSelect;
                 this.onToggleTarget = onToggleTarget;
+                this.isUnread = isUnread;
                 List<String> labels = tabs.stream().map(Feed::label).toList();
                 this.layout = TabLayout.compute(labels, maxWidth, HORIZONTAL_PADDING,
                                 MIN_HORIZONTAL_PADDING, TAB_GAP, font::width);
@@ -106,8 +114,7 @@ public final class ChatTabBar extends AbstractWidget {
                                 extractor.fill(left, getY() + getHeight() - TARGET_MARKER_HEIGHT,
                                                 left + layout.widths()[i], getY() + getHeight(), TARGET_MARKER);
                         }
-                        ChatFormatting labelColor = isSelected ? ChatFormatting.WHITE
-                                        : targeted ? ChatFormatting.AQUA : ChatFormatting.GRAY;
+                        ChatFormatting labelColor = labelColor(isSelected, targeted, isUnread.test(tab));
                         Component label = Component.literal(layout.labels()[i]).withStyle(labelColor);
                         extractor.textRendererForWidget(this, GuiGraphicsExtractor.HoveredTextEffects.NONE)
                                         .accept(TextAlignment.LEFT, left + HORIZONTAL_PADDING, getY() + TEXT_Y_OFFSET, label);
@@ -151,6 +158,23 @@ public final class ChatTabBar extends AbstractWidget {
                 return super.isMouseOver(x, y) && tabAt(x) >= 0;
         }
 
+        /**
+         * The label color of one tab. Pure, so the priority order — selected,
+         * then unread, then targeted, then idle — is pinned by tests without
+         * Minecraft: the selected tab stays white; a tab with unseen messages
+         * shows yellow (the unread indicator, which outranks the target color
+         * for the label); a multi-send target shows aqua; everything else gray.
+         */
+        public static ChatFormatting labelColor(boolean selected, boolean targeted, boolean unread) {
+                if (selected) {
+                        return ChatFormatting.WHITE;
+                }
+                if (unread) {
+                        return ChatFormatting.YELLOW;
+                }
+                return targeted ? ChatFormatting.AQUA : ChatFormatting.GRAY;
+        }
+
         /** Index of the tab under {@code mouseX}, or -1 in a gap / past the end. */
         private int tabAt(double mouseX) {
                 if (mouseX < getX() || mouseX >= getX() + getWidth()) {
@@ -177,6 +201,9 @@ public final class ChatTabBar extends AbstractWidget {
                 List<String> names = new ArrayList<>();
                 for (Feed tab : tabs) {
                         String name = tab.label();
+                        if (isUnread.test(tab)) {
+                                name += " " + Component.translatable("zea.chat.unread.narration").getString();
+                        }
                         if (isTargeted.test(tab)) {
                                 name += " " + Component.translatable("zea.chat.multisend.narration_target").getString();
                         }

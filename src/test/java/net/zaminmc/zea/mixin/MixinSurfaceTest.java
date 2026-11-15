@@ -16,6 +16,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
@@ -117,6 +118,14 @@ class MixinSurfaceTest {
                 declaredField(ChatScreen.class, CommandSuggestions.class, "commandSuggestions");
                 declaredMethod(CommandSuggestions.class, "setAllowSuggestions", boolean.class);
                 declaredMethod(CommandSuggestions.class, "updateCommandInfo");
+        }
+
+        @Test
+        void sendCommandTargetedByTheTradePacingGateIsDeclaredByClientPacketListener() {
+                // The one choke point every outgoing command passes — the player's
+                // own typing and recall, ZEA's channel routing and the trade
+                // auto-send drain — where the trade pacing gate is enforced.
+                declaredMethod(ClientPacketListener.class, "sendCommand", String.class);
         }
 
         @Test
