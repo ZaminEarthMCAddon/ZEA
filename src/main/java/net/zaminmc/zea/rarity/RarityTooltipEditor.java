@@ -109,6 +109,9 @@ public final class RarityTooltipEditor {
                 if (cfg.rarityLoreRarityEnabled()) {
                         appendRarityLabel(edited, rarity);
                 }
+                if (cfg.rarityAdvancedInfoEnabled() && Minecraft.getInstance().hasControlDown()) {
+                        appendAdvancedInfo(edited, stack);
+                }
                 return edited;
         }
 
@@ -277,6 +280,45 @@ public final class RarityTooltipEditor {
                 lines.add(Component.literal(rarity.label())
                                                 .withStyle(ChatFormatting.BOLD)
                                                 .withStyle(style -> style.withColor(RarityEngine.textColor(rarity))));
+        }
+
+        /**
+         * Appends the hidden technical detail the clean tooltip
+         * suppresses: the item's registry identifier, its recognised
+         * category, the enchantment levels against their registered
+         * maximums, and the count of data components the stack carries.
+         *
+         * <p>Shown only when the advanced-info option is on <em>and</em>
+         * Left Ctrl is held — a deliberate two-gate so the default view
+         * stays clean and the detail is opt-in per hover. The
+         * information is appended, never replacing: server-provided lore
+         * and the rarity label sit above it. Unknown items get the
+         * identifier and component count only, since they have no
+         * category or enchantments to enumerate.
+         */
+        private static void appendAdvancedInfo(List<Component> lines, ItemStack stack) {
+                lines.add(Component.empty());
+                lines.add(Component.literal("§7Identifier: §f"
+                                + stack.getItem().builtInRegistryHolder().key().identifier()));
+                ItemCategory category = ItemClassifier.classify(stack);
+                if (category != ItemCategory.OTHER) {
+                        lines.add(Component.literal("§7Category: §f" + category.name().toLowerCase()));
+                }
+                ItemEnchantments enchantments = stack.getOrDefault(
+                                DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
+                if (!enchantments.isEmpty()) {
+                        lines.add(Component.literal("§7Enchantments:"));
+                        for (var entry : enchantments.entrySet()) {
+                                int level = entry.getIntValue();
+                                int max = entry.getKey().value().getMaxLevel();
+                                String path = entry.getKey().unwrapKey()
+                                                .map(key -> key.identifier().toString())
+                                                .orElse("? ");
+                                lines.add(Component.literal("§8  " + path + " " + level + "/" + max));
+                        }
+                }
+                int components = stack.getComponents().size();
+                lines.add(Component.literal("§7Components: §f" + components));
         }
 
         /**

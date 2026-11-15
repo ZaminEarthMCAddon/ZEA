@@ -532,6 +532,16 @@ public final class ZeaConfig extends Config {
                 @ConfigEditorBoolean
                 @ConfigOrder(4)
                 public boolean rpgStats = true;
+
+                @ConfigOption(name = "Advanced info on Ctrl", desc = "Hold Left Ctrl while hovering "
+                                + "an item to append the hidden technical detail — the registry "
+                                + "identifier, the enchantment levels against their registered "
+                                + "maximums, and the component count. Useful for debugging and "
+                                + "for reading custom server-provided items; off by default so "
+                                + "the default tooltip stays clean.")
+                @ConfigEditorBoolean
+                @ConfigOrder(5)
+                public boolean advancedInfo = false;
         }
 
         /** Enchantment display: missing upgrades on Shift and max-level chroma. */
@@ -906,6 +916,11 @@ public final class ZeaConfig extends Config {
         /** Whether the RPG-style stat block replaces the vanilla attribute tooltip lines. */
         public boolean rarityRpgStatsEnabled() {
                 return rarityEnabled() && rarity.appearance.rpgStats;
+        }
+
+        /** Whether Left Ctrl reveals the hidden technical tooltip detail. */
+        public boolean rarityAdvancedInfoEnabled() {
+                return rarityEnabled() && rarity.appearance.advancedInfo;
         }
 
         /** Whether holding Shift reveals the missing enchantment upgrades. */
