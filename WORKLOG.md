@@ -3457,7 +3457,7 @@ A missing field degrades the response to partial; nothing is guessed.
 
 ### Verification
 
-`./gradlew test` green — 1030 tests, 0 failures across the feature's
+`./gradlew test` green — 1113 tests, 0 failures across the feature's
 parser fixtures (both example responses from the feature brief, bulk
 sizes 7/64, `You can sell 0`, explicit `all`, decimal and comma prices,
 malformed variants), correlation (delayed, duplicate, out-of-window,
