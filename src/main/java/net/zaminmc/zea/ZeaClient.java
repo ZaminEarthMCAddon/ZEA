@@ -132,7 +132,8 @@ public final class ZeaClient implements ClientModInitializer {
                 search = new InventorySearch();
                 slotLocks = new SlotLocks(new SlotLockStore(configDir.resolve("zea/slotlocks.json")));
                 marketExecutor = newIoExecutor("ZEA-Market");
-                market = new MarketSubsystem(lifecycle, configDir.resolve("zea/market.json"), marketExecutor);
+                market = new MarketSubsystem(lifecycle, configDir.resolve("zea/market.json"), marketExecutor,
+                                config.market);
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides

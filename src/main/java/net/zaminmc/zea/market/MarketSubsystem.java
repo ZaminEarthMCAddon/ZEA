@@ -14,9 +14,12 @@ import net.zaminmc.zea.chat.capture.MessageCapture;
 import net.zaminmc.zea.chat.model.CapturedMessage;
 import net.zaminmc.zea.earthmc.ServerIdentity;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
+import net.zaminmc.zea.market.config.MarketConfig;
 import net.zaminmc.zea.market.interaction.ShopInspectionTracker;
 import net.zaminmc.zea.market.interaction.ShopSignGeometry;
+import net.zaminmc.zea.market.model.ShopResponse;
 import net.zaminmc.zea.market.store.MarketStore;
+import net.zaminmc.zea.market.ui.ShopScreens;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -44,11 +47,14 @@ public final class MarketSubsystem {
 	private final ShopInspectionTracker tracker;
 	private final MarketData data;
 	private final MarketPersistence persistence;
+	private final MarketConfig config;
 	// Null until the first inspection lands; read on the client thread only.
 	private volatile ShopInspectionTracker.Inspection latestInspection;
 
-	public MarketSubsystem(ClientLifecycle lifecycle, Path file, ExecutorService executor) {
+	public MarketSubsystem(ClientLifecycle lifecycle, Path file, ExecutorService executor,
+			MarketConfig config) {
 		this.lifecycle = lifecycle;
+		this.config = config;
 		this.tracker = new ShopInspectionTracker(this::onInspection);
 		this.data = restore(file);
 		this.persistence = new MarketPersistence(new MarketStore(file), executor);
@@ -88,6 +94,16 @@ public final class MarketSubsystem {
 		Observations.of(inspection).ifPresent(recorded -> {
 			if (data.record(recorded.shop(), recorded.observation())) {
 				persistence.markDirty(MarketPersistence.snapshot(data));
+			}
+			// The structured shop interface replaces the raw chat wall for
+			// server-verified inspections when the player wants it. A
+			// partial response never opens a falsely complete screen; a
+			// sign-only advert stays in the market data without
+			// interrupting the player.
+			if (config.openShopScreen && inspection.response() != null
+					&& inspection.response().completeness() == ShopResponse.Completeness.COMPLETE
+					&& inspection.response().price() != null) {
+				ShopScreens.open(recorded.shop(), recorded.observation(), inspection.response());
 			}
 		});
 	}

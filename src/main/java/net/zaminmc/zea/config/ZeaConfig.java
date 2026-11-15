@@ -16,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.map.config.MapConfig;
+import net.zaminmc.zea.market.config.MarketConfig;
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.notify.Notification;
 import net.zaminmc.zea.search.SearchOverlay;
@@ -596,6 +597,10 @@ public final class ZeaConfig extends Config {
         @Category(name = "Map", desc = "Native EarthMC map: world map, minimap, claims and players.")
         @ConfigOrder(4)
         public MapConfig map = new MapConfig();
+
+        @Category(name = "Market", desc = "EarthMC physical shops: inspect, compare, navigate.")
+        @ConfigOrder(5)
+        public MarketConfig market = new MarketConfig();
 
         /** Set by the store so the MoulConfig editor's saves go through safe-write. */
         private transient Runnable saveAction;
