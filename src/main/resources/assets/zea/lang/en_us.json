@@ -135,5 +135,12 @@
     "zea.market.tooltip.buy": "Buy: %s - %sG/item",
     "zea.market.tooltip.sell": "Sell: %s - %sG/item",
     "zea.market.tooltip.age": "Based on observations - %s",
-    "zea.market.tooltip.stale": "Older observation"
+    "zea.market.tooltip.stale": "Older observation",
+    "zea.market.browser.back": "Back to results",
+    "zea.market.browser.unpriced": "no comparable price",
+    "zea.market.browser.side.buy": "BUY",
+    "zea.market.browser.side.sell": "SELL",
+    "zea.market.browser.unknown.owner": "unknown owner",
+    "zea.market.browser.travel": "Travel: /n spawn %s",
+    "zea.market.browser.travel.blocked": "Travel unavailable (no verified nation)"
 }

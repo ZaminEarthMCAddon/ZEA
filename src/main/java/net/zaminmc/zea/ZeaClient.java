@@ -27,6 +27,7 @@ import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.market.MarketSubsystem;
+import net.zaminmc.zea.market.ui.MarketScreen;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
@@ -171,6 +172,14 @@ public final class ZeaClient implements ClientModInitializer {
                 // client queue like the settings screen: a client command
                 // runs mid-keystroke in the chat screen, whose follow-up
                 // close would otherwise wipe the editor before a frame.
+                // /zeamarket — the market browser. Deferred through the
+                // client queue like the other screens.
+                ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
+                                ClientCommands.literal("zeamarket").executes(context -> {
+                                        Minecraft client = context.getSource().getClient();
+                                        client.execute(() -> client.gui.setScreen(new MarketScreen()));
+                                        return 1;
+                                })));
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
                                 ClientCommands.literal("zeabuttons").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
