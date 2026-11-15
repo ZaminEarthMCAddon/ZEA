@@ -19,6 +19,7 @@ import net.zaminmc.zea.market.interaction.ShopInspectionTracker;
 import net.zaminmc.zea.market.interaction.ShopSignGeometry;
 import net.zaminmc.zea.market.model.ShopResponse;
 import net.zaminmc.zea.market.store.MarketStore;
+import net.zaminmc.zea.market.sync.SubmissionQueue;
 import net.zaminmc.zea.market.ui.ShopScreens;
 
 import java.nio.file.Path;
@@ -48,6 +49,7 @@ public final class MarketSubsystem {
 	private final MarketData data;
 	private final MarketPersistence persistence;
 	private final MarketConfig config;
+	private final SubmissionQueue submissions;
 	// Null until the first inspection lands; read on the client thread only.
 	private volatile ShopInspectionTracker.Inspection latestInspection;
 
@@ -58,6 +60,7 @@ public final class MarketSubsystem {
 		this.tracker = new ShopInspectionTracker(this::onInspection);
 		this.data = restore(file);
 		this.persistence = new MarketPersistence(new MarketStore(file), executor);
+		this.submissions = new SubmissionQueue(file.resolveSibling("market-submissions.json"), executor);
 		// Pending inspections belong to one connection: a disconnect or a
 		// world change leaves nothing for a response to correlate with.
 		// The recorded market, in contrast, survives every disconnect —
@@ -78,9 +81,10 @@ public final class MarketSubsystem {
 		return data;
 	}
 
-	/** Forces pending market writes to land; used for shutdown. */
+	/** Forces pending market and queue writes to land; used for shutdown. */
 	public void flushNow() {
 		persistence.flushNow();
+		submissions.flushNow();
 	}
 
 	/** Forgets pending inspection state (disconnect, world change), keeps the market. */
@@ -94,6 +98,7 @@ public final class MarketSubsystem {
 		Observations.of(inspection).ifPresent(recorded -> {
 			if (data.record(recorded.shop(), recorded.observation())) {
 				persistence.markDirty(MarketPersistence.snapshot(data));
+				submissions.enqueue(recorded.shop(), recorded.observation());
 			}
 			// The structured shop interface replaces the raw chat wall for
 			// server-verified inspections when the player wants it. A
