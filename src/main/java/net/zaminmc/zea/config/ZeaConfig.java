@@ -521,6 +521,17 @@ public final class ZeaConfig extends Config {
                 @ConfigEditorBoolean
                 @ConfigOrder(3)
                 public boolean loreRarity = true;
+
+                @ConfigOption(name = "RPG-style stats", desc = "Replace the vanilla 'When in "
+                                + "Main Hand' attribute clutter with a clean stat block — Damage, "
+                                + "Attack Speed, Mining Speed, Armor, Durability and the "
+                                + "category-specific numbers (bow draw, mace smash, food "
+                                + "nutrition). Statistics are calculated from the item's actual "
+                                + "attributes, enchantments and components, never invented. "
+                                + "Server-provided lore and enchantments are preserved.")
+                @ConfigEditorBoolean
+                @ConfigOrder(4)
+                public boolean rpgStats = true;
         }
 
         /** Enchantment display: missing upgrades on Shift and max-level chroma. */
@@ -890,6 +901,11 @@ public final class ZeaConfig extends Config {
         /** Whether supported items' tooltips end with the rarity label. */
         public boolean rarityLoreRarityEnabled() {
                 return rarityEnabled() && rarity.appearance.loreRarity;
+        }
+
+        /** Whether the RPG-style stat block replaces the vanilla attribute tooltip lines. */
+        public boolean rarityRpgStatsEnabled() {
+                return rarityEnabled() && rarity.appearance.rpgStats;
         }
 
         /** Whether holding Shift reveals the missing enchantment upgrades. */

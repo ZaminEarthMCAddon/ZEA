@@ -10,6 +10,11 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.itempresentation.calculation.ItemStatistics;
+import net.zaminmc.zea.itempresentation.calculation.StatisticsEngine;
+import net.zaminmc.zea.itempresentation.presentation.ItemPresentationBuilder;
+import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
+import net.zaminmc.zea.itempresentation.recognition.ItemClassifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,11 +82,19 @@ public final class RarityTooltipEditor {
                 if (cfg == null || list.isEmpty()) {
                         return list;
                 }
+                List<Component> edited = new ArrayList<>(list);
+                // The RPG stat block applies to any recognised category —
+                // bows and maces are not rarity-rated (MaterialTier only
+                // covers tools and armor), but they still carry the
+                // statistics this block presents. Resolved before the
+                // rarity null-check so those categories are not skipped.
+                if (cfg.rarityRpgStatsEnabled()) {
+                        insertRpgStatsBlock(edited, stack);
+                }
                 ItemRarity rarity = RarityEngine.rarityOf(stack);
                 if (rarity == null) {
-                        return list;
+                        return edited;
                 }
-                List<Component> edited = new ArrayList<>(list);
                 if (cfg.rarityNameColoringEnabled()) {
                         recolorName(edited, stack, rarity);
                 }
@@ -196,6 +209,75 @@ public final class RarityTooltipEditor {
                 lines.add(Component.literal(rarity.label())
                                                 .withStyle(ChatFormatting.BOLD)
                                                 .withStyle(style -> style.withColor(RarityEngine.textColor(rarity))));
+        }
+
+        /**
+         * Inserts the RPG-style stat block after the item name and drops
+         * the redundant vanilla attribute section it replaces. The
+         * stat block is built from the item's actual computed statistics;
+         * when the item carries no statistics (an unrecognised item, or
+         * a recognised one whose calculators all returned empty) nothing
+         * is inserted and the vanilla tooltip is left intact. Server
+         * enchantments and lore are never removed — only the
+         * "When in Main Hand" / "When on Body" attribute listing that the
+         * stat block now carries in a cleaner form.
+         */
+        private static void insertRpgStatsBlock(List<Component> lines, ItemStack stack) {
+                ItemCategory category = ItemClassifier.classify(stack);
+                if (category == ItemCategory.OTHER) {
+                        return;
+                }
+                ItemStatistics statistics = StatisticsEngine.statisticsOf(stack, levelLookup());
+                List<Component> statLines = ItemPresentationBuilder.build(category, statistics);
+                if (statLines.isEmpty()) {
+                        return;
+                }
+                removeVanillaAttributeSection(lines);
+                // Insert after the name (line 0); the stat block already
+                // carries its own leading and trailing blank separators.
+                int insertAt = Math.min(1, lines.size());
+                lines.addAll(insertAt, statLines);
+        }
+
+        /**
+         * Removes the vanilla "When in Main Hand" / "When on Body"
+         * attribute section — the lines between the header and the next
+         * blank line. The stat block reproduces these numbers in a
+         * cleaner form, so the redundant vanilla listing is dropped.
+         * Enchantment lines and lore sit outside this section and are
+         * untouched. If no attribute section is present (a server
+         * tooltip that omits it), nothing is removed.
+         */
+        private static void removeVanillaAttributeSection(List<Component> lines) {
+                int headerIndex = -1;
+                for (int i = 0; i < lines.size(); i++) {
+                        String text = lines.get(i).getString();
+                        if (text.equals("When in Main Hand:")
+                                        || text.equals("When in Off Hand:")
+                                        || text.equals("When on Body:")
+                                        || text.equals("When on Head:")
+                                        || text.equals("When on Legs:")
+                                        || text.equals("When on Feet:")) {
+                                headerIndex = i;
+                                break;
+                        }
+                }
+                if (headerIndex < 0) {
+                        return;
+                }
+                // The section runs from the header through the next blank
+                // line (inclusive). A missing closing blank is treated as
+                // the end of the tooltip.
+                int end = headerIndex + 1;
+                while (end < lines.size() && !lines.get(end).getString().isEmpty()) {
+                        end++;
+                }
+                if (end < lines.size() && lines.get(end).getString().isEmpty()) {
+                        end++;
+                }
+                for (int i = end - 1; i >= headerIndex; i--) {
+                        lines.remove(i);
+                }
         }
 
         /**
