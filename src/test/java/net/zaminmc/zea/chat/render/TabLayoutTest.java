@@ -5,15 +5,16 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The tab strip's layout policy: natural fit, padding compression before
- * label shortening, longest-first shortening with ellipsis, the one
- * character floor, and the documented overflow when nothing more can
- * give. The measurer is a fake (every character 6 px) so the tests pin
- * the arithmetic, not a font.
+ * The tab strip's layout policy: natural fit, padding compression toward
+ * its floor, labels that are never shortened no matter how narrow the
+ * strip (the dev.35 live report showed a row of "G…" tabs — unreadable),
+ * and the scrolling questions that follow from never shortening: how many
+ * tabs fit a window, the last offset worth scrolling to, and where to
+ * scroll to reveal one tab with minimal movement. The measurer is a fake
+ * (every character 6 px) so the tests pin the arithmetic, not a font.
  */
 class TabLayoutTest {
 	private static final int PADDING = 5;
@@ -30,29 +31,25 @@ class TabLayoutTest {
 		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 200,
 				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
 
-		assertFalse(layout.truncated()[0]);
 		assertEquals("All", layout.labels()[0]);
 		assertEquals("Global", layout.labels()[1]);
+		assertEquals(3 * CHAR, layout.textWidths()[0]);
+		assertEquals(6 * CHAR, layout.textWidths()[1]);
 		assertEquals(3 * CHAR + 2 * PADDING, layout.widths()[0]);
 		assertEquals(6 * CHAR + 2 * PADDING, layout.widths()[1]);
 		assertEquals(3 * CHAR + 6 * CHAR + 2 * (2 * PADDING) + GAP, layout.total(GAP));
 	}
 
 	@Test
-	void paddingCompressesBeforeLabelsShorten() {
+	void paddingCompressesBeforeAnythingElse() {
 		// Text is 54 px, gaps 1; 66 leaves 11 px of padding across 2 tabs:
-		// floor(11 / 4) = 2 px per side, above the floor — no truncation.
+		// floor(11 / 4) = 2 px per side, above the floor.
 		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 66,
 				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
 
-		assertFalse(layout.truncated()[0]);
-		assertFalse(layout.truncated()[1]);
-		assertEquals("All", layout.labels()[0]);
-		assertEquals("Global", layout.labels()[1]);
 		assertEquals(3 * CHAR + 2 * 2, layout.widths()[0]);
 		assertEquals(6 * CHAR + 2 * 2, layout.widths()[1]);
 		assertEquals(54 + 4 * 2 + GAP, layout.total(GAP)); // 63 <= 66
-		assertTrue(layout.total(GAP) <= 66);
 	}
 
 	@Test
@@ -66,47 +63,130 @@ class TabLayoutTest {
 	}
 
 	@Test
-	void longestLabelShortensFirst() {
-		// At 52 px not even floor padding fits the text (59), so "Global"
-		// gives way — each step trades a character for the ellipsis, so it
-		// takes three steps ("Glo…", 4 chars = 24 px) to fit — while "All"
-		// stays intact.
-		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 52,
-				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
-
-		assertFalse(layout.truncated()[0]);
-		assertEquals("All", layout.labels()[0]);
-		assertTrue(layout.truncated()[1]);
-		assertEquals("Glo…", layout.labels()[1]);
-		assertEquals(4 * CHAR, layout.widths()[1] - 2 * MIN_PADDING);
-		assertEquals(3 * CHAR + 4 * CHAR + 2 * (2 * MIN_PADDING) + GAP, layout.total(GAP)); // 47
-	}
-
-	@Test
-	void shorteningNeverGoesBelowOneCharacter() {
-		// Absurdly narrow: every label bottoms out at one character plus
-		// ellipsis; nothing is dropped, even though the strip overflows.
+	void labelsAreNeverShortenedNoMatterHowNarrow() {
+		// Absurdly narrow: the labels survive intact, the padding bottoms
+		// out, and the strip overflows — scrolling is the caller's
+		// answer, not ellipses. (The dev.35 report: every tab "G…".)
 		TabLayout layout = TabLayout.compute(List.of("All", "Global", "Trade"), 20,
 				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
 
+		assertEquals("All", layout.labels()[0]);
+		assertEquals("Global", layout.labels()[1]);
+		assertEquals("Trade", layout.labels()[2]);
 		for (int i = 0; i < 3; i++) {
-			assertTrue(layout.truncated()[i]);
-			assertEquals(2, layout.labels()[i].length()); // one character + ellipsis
-			assertEquals(2 * CHAR + 2 * MIN_PADDING, layout.widths()[i]);
+			assertEquals(2 * MIN_PADDING, layout.widths()[i] - layout.textWidths()[i]);
 		}
-		// The documented overflow: three 14 px tabs plus gaps exceed 20 px.
 		assertTrue(layout.total(GAP) > 20);
 	}
 
 	@Test
-	void singleCharacterLabelsAreNeverShortened() {
-		TabLayout layout = TabLayout.compute(List.of("A", "B"), 8,
+	void windowCoversEverythingWhenItFits() {
+		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 200,
 				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
 
-		assertEquals("A", layout.labels()[0]);
-		assertEquals("B", layout.labels()[1]);
-		assertFalse(layout.truncated()[0]);
-		assertFalse(layout.truncated()[1]);
+		assertEquals(2, layout.window(0, 200, GAP));
+		assertEquals(0, layout.maxScrollOffset(200, GAP));
+	}
+
+	@Test
+	void windowStopsAtTheBudget() {
+		// At floor padding: All = 20 px, Global = 38 px, gap 1.
+		// 59 fits both exactly; 58 fits only the first.
+		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 58,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(2, layout.window(0, 59, GAP));
+		assertEquals(1, layout.window(0, 58, GAP));
+		assertEquals(1, layout.window(1, 58, GAP));
+	}
+
+	@Test
+	void windowAlwaysShowsAtLeastOneTab() {
+		// No tab fits 5 px — the first still shows, overflowing, because
+		// overflow beats hiding. Past the end there is nothing to show.
+		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 58,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(1, layout.window(0, 5, GAP));
+		assertEquals(0, layout.window(2, 58, GAP));
+		assertEquals(0, layout.window(-1, 58, GAP));
+	}
+
+	@Test
+	void maxScrollOffsetKeepsTheLastTabReachable() {
+		// Three tabs at floor padding: All = 20 px, Trade = 32, Local = 32,
+		// gaps 1 — 65 fits Trade and Local together, so the furthest
+		// window starts at Trade and still shows Local beside it.
+		TabLayout layout = TabLayout.compute(List.of("All", "Trade", "Local"), 65,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(2, layout.window(0, 65, GAP));
+		assertEquals(1, layout.maxScrollOffset(65, GAP));
+		assertEquals(2, layout.window(1, 65, GAP));
+
+		// A window that swallows everything scrolls nowhere.
+		assertEquals(0, layout.maxScrollOffset(200, GAP));
+	}
+
+	@Test
+	void maxScrollOffsetShowsTheLastTabAloneWhenNothingFitsBesideIt() {
+		// At 59 the last tab's predecessor no longer fits (32 + 1 + 32
+		// = 65 > 59), so the furthest window is the last tab alone.
+		TabLayout layout = TabLayout.compute(List.of("All", "Trade", "Local"), 59,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(2, layout.maxScrollOffset(59, GAP));
+		assertEquals(1, layout.window(2, 59, GAP));
+	}
+
+	@Test
+	void maxScrollOffsetNeverLandsPastTheLastTab() {
+		// A budget under one tab still reaches the last tab — alone.
+		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 58,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(1, layout.maxScrollOffset(5, GAP));
+		assertEquals(1, layout.window(1, 5, GAP));
+	}
+
+	@Test
+	void revealDoesNotMoveATabAlreadyInWindow() {
+		TabLayout layout = TabLayout.compute(List.of("All", "Trade", "Local"), 65,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(0, layout.revealOffset(1, 0, 65, GAP)); // second tab visible at 0
+	}
+
+	@Test
+	void revealScrollsBackToATabThatFellOffTheLeft() {
+		TabLayout layout = TabLayout.compute(List.of("All", "Trade", "Local"), 65,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(0, layout.revealOffset(0, 1, 65, GAP));
+	}
+
+	@Test
+	void revealDocksATabThatFellOffTheRightAtTheWindowEdge() {
+		// From offset 0 the third tab is past the window (two fit in
+		// 65); revealing it scrolls minimally — the window that covers
+		// it with the second tab still in view ahead of it.
+		TabLayout layout = TabLayout.compute(List.of("All", "Trade", "Local"), 65,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(1, layout.revealOffset(2, 0, 65, GAP));
+
+		// In 59 nothing fits beside the third tab (32 + 1 + 32 = 65),
+		// so revealing it shows it alone — still the minimal scroll.
+		assertEquals(2, layout.revealOffset(2, 0, 59, GAP));
+	}
+
+	@Test
+	void revealClampsWaywardArguments() {
+		TabLayout layout = TabLayout.compute(List.of("All", "Global"), 200,
+				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
+
+		assertEquals(1, layout.revealOffset(99, 99, 200, GAP));
+		assertEquals(0, layout.revealOffset(-5, 1, 200, GAP));
 	}
 
 	@Test
@@ -116,6 +196,9 @@ class TabLayoutTest {
 
 		assertEquals(0, layout.widths().length);
 		assertEquals(0, layout.total(GAP));
+		assertEquals(0, layout.window(0, 100, GAP));
+		assertEquals(0, layout.maxScrollOffset(100, GAP));
+		assertEquals(0, layout.revealOffset(0, 0, 100, GAP));
 	}
 
 	@Test
@@ -124,21 +207,5 @@ class TabLayoutTest {
 				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
 
 		assertEquals(6 * CHAR + 2 * PADDING, layout.total(GAP));
-	}
-
-	@Test
-	void shorteningTakesFromTheWidestTabEachStep() {
-		// "Crate Wins" (10 chars) is wider than "General" (7); with a 100 px
-		// budget the padding bottoms out at 107 px, so "Crate Wins" loses
-		// three characters (each loss must outrun the ellipsis it gains)
-		// while "General" loses none.
-		TabLayout layout = TabLayout.compute(List.of("General", "Crate Wins"), 100,
-				PADDING, MIN_PADDING, GAP, TabLayoutTest::measure);
-
-		assertFalse(layout.truncated()[0]);
-		assertEquals("General", layout.labels()[0]);
-		assertTrue(layout.truncated()[1]);
-		assertEquals("Crate W…", layout.labels()[1]);
-		assertTrue(layout.total(GAP) <= 100);
 	}
 }

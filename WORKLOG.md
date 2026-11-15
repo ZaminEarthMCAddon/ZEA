@@ -3235,3 +3235,62 @@ centers, full opacity, 90×18. In-game verification — the editor flow,
 the suggestor against EarthMC's command tree, the styled buttons at
 every GUI scale, and foreign-container placement — is the live
 checklist for the next session.
+
+## 2026-11-16 (session 15) — The dev.35 chat row: "G…" tabs and the always-open search
+
+### The live report
+
+Two symptoms, one root. Every chat tab rendered as "G…" (unreadable),
+and the search field was visible on every fresh chat screen instead of
+appearing on Ctrl+F. Both landed in dev.34's Chatting-geometry pass.
+
+### The hunt
+
+The search box, one quarter of the screen wide, is positioned at the
+row's right end beside the action buttons — and its space was
+**reserved whether or not a search was open** ("so opening a search
+never reflows the strip"). The tab strip's maximum is the chat panel's
+width (`ChatComponent.getWidth`, floor(option·280+40) — 320 px by
+default), so the reserve left the strip 320 − screen/4 − ~35 px: on a
+960-px GUI, **45 pixels for every tab**. The layout policy then
+shortened every label to one character plus its ellipsis — measured
+against the real 26.3 font metrics (`scripts/tab_font_sim.py` reads the
+bitmap providers out of the loom-cached jar and recomputes each glyph's
+advance exactly as `BitmapProvider` does: seven default labels are 198
+px of text, which is why defaults had looked fine in review and any
+real screen broke). The second bug was simpler: the bar's `visible` was
+only ever set `true` in the restore branch, and `AbstractWidget.visible`
+defaults `true` — a fresh screen drew the box with nothing behind it.
+
+### The fix
+
+- **The box is not drawn and its space is not reserved while no search
+  is open.** Closed, the strip gets the panel width minus the buttons;
+  open, it reflows live to the row that remains left of the box
+  (`ChatTabBar.setMaxWidth` recomputes padding, scroll and extent; the
+  selected tab stays in view). One documented deviation from Chatting,
+  which can afford the reserve because its tabs sit under a wide panel.
+- **Labels are never shortened.** `TabLayout` compresses padding toward
+  its floor and then hands the overflow to the caller: the strip
+  **scrolls by whole tabs** — small 9×9 flat arrows at its right end
+  (the action buttons' idiom) shown while actionable, the mouse wheel
+  over the strip scrolling it ahead of vanilla's chat scroll, and the
+  selected tab always kept in the window. `window`, `maxScrollOffset`
+  and `revealOffset` are pure and pinned by tests; the strip clamps
+  scrolling so the last tab is always reachable (alone if nothing fits
+  beside it).
+- The fresh screen hides the search bar (`visible = openQuery != null`);
+  labels center in their tabs at any padding; the arrows carry the only
+  tooltips (`zea.chat.tabs.scroll_left/right`).
+
+### Verification
+
+`./gradlew build` green; **954 tests, 0 failures** (the layout suite
+grew by seven: never-shortened labels, window counts and the single-tab
+floor, the last-tab reachability both ways, reveal's three moves).
+Font-accurate simulation of the reported setup (960-px GUI, default
+tabs, search closed): 295-px budget, all seven tabs full labels at
+natural padding; thirteen tabs scroll with eight visible; with a search
+open the strip spans the row up to the box. In-game verification — the
+arrows' hit boxes, the wheel over the strip versus the chat log, and
+the reflow on Ctrl+F — is the live checklist for the next session.

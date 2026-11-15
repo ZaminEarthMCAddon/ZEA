@@ -56,12 +56,19 @@ import java.util.stream.Collectors;
  * would reshow a hidden popup; it closes on the button again, on losing
  * focus (polled per frame, after the screen's focus machinery) and on
  * the screen going away, each close handing the caret back to the input
- * and re-arming the suggestions. One documented deviation: focus that
- * lands on ZEA's own row widgets (the tab strip, the action buttons)
- * does not close the search, because a search composes with the
- * selected feed and checking another feed mid-search is a normal move —
- * Chatting's tabs are not widgets, so its focus-loss close never sees
- * this case.
+ * and re-arming the suggestions. One documented deviation from
+ * Chatting: the field's space is not reserved while it is hidden.
+ * Chatting can afford the reserve because its tabs sit under a wide
+ * panel; ZEA's strip is clamped to the chat panel's width (320 px by
+ * default) and the dev.34 reserve — a quarter of the screen for the box —
+ * starved the strip to ~45 px, every tab truncated to "G…" (the dev.35
+ * live report). The strip takes the full row while the search is closed
+ * and reflows live when it opens, so the two never overlap and the tabs
+ * stay readable. Focus that lands on ZEA's own row widgets (the tab
+ * strip, the action buttons) does not close the search, because a search
+ * composes with the selected feed and checking another feed mid-search
+ * is a normal move — Chatting's tabs are not widgets, so its focus-loss
+ * close never sees this case.
  */
 @Mixin(ChatScreen.class)
 public abstract class ChatScreenMixin {
@@ -88,16 +95,19 @@ public abstract class ChatScreenMixin {
          * in from the screen edge and the buttons right-aligned with the
          * rightmost starting at {@code width - 12}, Chatting's exact
          * geometry (its 9-pixel buttons on an 11-pixel pitch, the box one
-         * quarter of the screen wide). The strip's maximum is reduced by
-         * everything the box and the buttons occupy, so the three can
-         * never run under each other, even on narrow windows; the box's
-         * space stays reserved while it is hidden, so opening a search
-         * never reflows the strip.
+         * quarter of the screen wide). While a search is open the strip's
+         * maximum is reduced by everything the box and the buttons
+         * occupy, so the three can never run under each other, even on
+         * narrow windows; while it is closed the strip keeps the row to
+         * itself (minus the buttons) and the box is simply not there —
+         * see the class javadoc for why the space is not reserved.
          */
         private static final int BUTTON_ROW_RIGHT_EDGE_MARGIN = 3;
         private static final int BUTTON_ROW_RIGHTMOST_LEFT = 12;
         /** Breathing room between the tab strip and the search box. */
         private static final int BUTTON_ROW_GAP = 2;
+        /** The tab strip's left edge, flush with the input strip's background. */
+        private static final int STRIP_X = 2;
 
         @Shadow
         protected EditBox input;
@@ -128,28 +138,17 @@ public abstract class ChatScreenMixin {
                 boolean clearButton = ZeaClient.config().clearHistoryButtonEnabled();
                 int buttonCount = (searchButton ? 1 : 0) + (clearButton ? 1 : 0);
                 int buttonRowWidth = ChatButtonBar.rowWidth(searchButton, clearButton);
-                // Chatting's geometry: the box's right edge sits n * 11 + 12
-                // pixels in from the screen's right (its constant +12 gap to
-                // the leftmost button slot), the rightmost button starts at
-                // width - 12. The box exists whether or not the button shows —
-                // Ctrl+F opens the same field — so its space is always reserved.
-                int searchBoxWidth = screen.width / 4;
-                int searchBoxLeft = screen.width - searchBoxWidth
-                                - (buttonCount * (ChatButtonBar.BUTTON_SIZE + ChatButtonBar.BUTTON_GAP) + 12);
+                int searchBoxLeft = zea$searchBoxLeft(screen, buttonCount);
                 int buttonRowLeft = buttonCount == 0 ? searchBoxLeft
                                 : screen.width - BUTTON_ROW_RIGHTMOST_LEFT
                                                 - (buttonCount - 1) * (ChatButtonBar.BUTTON_SIZE + ChatButtonBar.BUTTON_GAP);
-                // Two gaps' worth keeps the strip clear of the box: the margin the
-                // buttons no longer cover (3 rather than the old 4) would otherwise
-                // eat the single gap and the tabs would touch the box's edge.
-                int stripReserve = (screen.width - BUTTON_ROW_RIGHT_EDGE_MARGIN) - searchBoxLeft
-                                + 2 * BUTTON_ROW_GAP;
+                boolean searchOpen = filter.searchQuery() != null;
 
                 ChatTabBar tabBar = new ChatTabBar(
                                 minecraft.font,
-                                2,
+                                STRIP_X,
                                 tabRowY,
-                                zea$stripMaxWidth(minecraft, screen) - stripReserve,
+                                zea$stripMaxWidth(minecraft, screen, searchOpen, searchBoxLeft, buttonRowWidth),
                                 Feeds.visibleTabs(ZeaClient.config().enabledExtraFeedIds()),
                                 chat.feedSelection(),
                                 feed -> MultiSendInteraction.isTargeted(
@@ -187,13 +186,15 @@ public abstract class ChatScreenMixin {
                                 minecraft.font,
                                 searchBoxLeft,
                                 tabRowY,
-                                searchBoxWidth);
-                // Restore an open search across screen rebuilds (window resize); the
-                // value is set before the responder so restoring applies no filter.
+                                screen.width / 4);
+                // The box starts hidden — a fresh chat screen has no search —
+                // and an open one is restored across the rebuild (window
+                // resize); the value is set before the responder so restoring
+                // applies no filter.
                 String openQuery = filter.searchQuery();
+                zea$searchBar.visible = openQuery != null;
                 if (openQuery != null) {
                         zea$searchBar.setValue(openQuery);
-                        zea$searchBar.visible = true;
                         // The search keeps the caret across the rebuild too: without
                         // this, typing would silently go to the chat input while the
                         // search bar shows its old query — and the focus-loss close
@@ -419,15 +420,62 @@ public abstract class ChatScreenMixin {
         }
 
         /**
-         * The widest the tab strip may be: the chat panel's on-screen width.
-         * In 26.3 that is {@code ChatComponent.getWidth(option)} — floor(option
-         * * 280 + 40) screen pixels, independent of chat scale (the renderer
-         * scales internally by 1/scale; verified against the bytecode). The
-         * screen bound stays for tiny windows.
+         * The widest the tab strip may be. While the search is closed that
+         * is the chat panel's on-screen width — in 26.3
+         * {@code ChatComponent.getWidth(option)}, floor(option * 280 + 40)
+         * screen pixels, independent of chat scale because the renderer
+         * scales internally by 1/scale (verified against the bytecode) — so
+         * the tabs align with the chat log, less what the action buttons
+         * occupy at the screen's right. While a search is open the strip
+         * spans the row up to the search box instead: the search row is a
+         * screen-wide row — the vanilla input already spans it, and
+         * Chatting's box sits beside its tabs the same way — and holding
+         * the strip to the panel would starve it of everything the box
+         * covers (the dev.35 lesson again).
          */
-        private static int zea$stripMaxWidth(Minecraft minecraft, ChatScreen screen) {
+        private static int zea$stripMaxWidth(Minecraft minecraft, ChatScreen screen, boolean searchOpen,
+                        int searchBoxLeft, int buttonRowWidth) {
+                if (searchOpen) {
+                        return Math.max(STRIP_X + 20, searchBoxLeft - 2 * BUTTON_ROW_GAP - STRIP_X);
+                }
+                int reserve = buttonRowWidth == 0 ? 0
+                                : BUTTON_ROW_RIGHT_EDGE_MARGIN + buttonRowWidth + BUTTON_ROW_GAP;
                 int panelWidth = ChatComponent.getWidth(minecraft.options.chatWidth().get());
-                return Math.min(screen.width - BUTTON_ROW_RIGHT_EDGE_MARGIN, panelWidth);
+                return Math.min(screen.width - BUTTON_ROW_RIGHT_EDGE_MARGIN, panelWidth) - reserve;
+        }
+
+        /**
+         * The search box's left edge — Chatting's geometry: the box is a
+         * quarter of the screen wide, its right edge sitting
+         * {@code n * 11 + 12} pixels in from the screen's right.
+         */
+        private static int zea$searchBoxLeft(ChatScreen screen, int buttonCount) {
+                int searchBoxWidth = screen.width / 4;
+                return screen.width - searchBoxWidth
+                                - (buttonCount * (ChatButtonBar.BUTTON_SIZE + ChatButtonBar.BUTTON_GAP) + 12);
+        }
+
+        /**
+         * Re-budgets the tab strip for the search's new state — the box
+         * just appeared or vanished from the row's right end. The strip
+         * reflows its padding and scroll position itself, keeping the
+         * selected tab in view.
+         */
+        private void zea$relayoutStrip(ChatScreen screen, Minecraft minecraft) {
+                if (zea$tabBar == null) {
+                        return;
+                }
+                ChatSubsystem chat = ZeaClient.chat();
+                if (chat == null) {
+                        return;
+                }
+                boolean searchButton = ZeaClient.config().searchButtonEnabled();
+                boolean clearButton = ZeaClient.config().clearHistoryButtonEnabled();
+                int buttonCount = (searchButton ? 1 : 0) + (clearButton ? 1 : 0);
+                int buttonRowWidth = ChatButtonBar.rowWidth(searchButton, clearButton);
+                boolean searchOpen = chat.feedFilter().searchQuery() != null;
+                zea$tabBar.setMaxWidth(zea$stripMaxWidth(minecraft, screen, searchOpen,
+                                zea$searchBoxLeft(screen, buttonCount), buttonRowWidth));
         }
 
         private void zea$openSearch(ChatScreen screen, FeedFilter filter, Minecraft minecraft) {
@@ -444,6 +492,7 @@ public abstract class ChatScreenMixin {
                 commandSuggestions.setAllowSuggestions(false);
                 zea$moveFocus(screen, zea$searchBar);
                 filter.apply(minecraft.gui.hud.getChat());
+                zea$relayoutStrip(screen, minecraft);
         }
 
         /** Opens a closed search, closes an open one — the shared body of Ctrl+F and the search button. */
@@ -516,5 +565,26 @@ public abstract class ChatScreenMixin {
                 commandSuggestions.setAllowSuggestions(true);
                 commandSuggestions.updateCommandInfo();
                 filter.apply(minecraft.gui.hud.getChat());
+                zea$relayoutStrip(screen, minecraft);
+        }
+
+        /**
+         * The wheel over an overflowing tab strip scrolls the strip by one
+         * tab before vanilla turns the same gesture on the chat log — the
+         * strip is a small target and the arrows are not the only way in.
+         * Vanilla's chat handler never forwards the wheel to screen
+         * widgets, so this runs ahead of it: wheel up (away) scrolls left
+         * toward the earlier tabs, wheel down scrolls right.
+         */
+        @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
+        private void zea$scrollTheTabStrip(double x, double y, double scrollX, double scrollY,
+                        CallbackInfoReturnable<Boolean> cir) {
+                if (zea$tabBar == null || ZeaClient.chat() == null || !ZeaClient.lifecycle().onEarthMc()) {
+                        return;
+                }
+                if (zea$tabBar.wantsScroll(x, y)) {
+                        zea$tabBar.scrollBy(scrollY > 0 ? -1 : 1);
+                        cir.setReturnValue(true);
+                }
         }
 }

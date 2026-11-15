@@ -4,18 +4,20 @@ import java.util.List;
 import java.util.function.ToIntFunction;
 
 /**
- * The chat tab strip's layout policy: how tab labels fit a maximum width.
- * A pure computation, so the behavior is pinned by tests without Minecraft.
+ * The chat tab strip's layout policy: how tab labels share a maximum
+ * width. A pure computation, so the behavior is pinned by tests without
+ * Minecraft.
  *
- * <p>Three stages, each only as far as needed: the natural layout (label
- * plus padding); then padding compressed toward {@code minPadding} — a
- * denser strip beats shortened labels; then labels shortened one
- * character at a time, longest tab first, the shortened form carrying an
- * ellipsis, never below one character. If even one-character labels with
- * minimal padding do not fit (an absurdly narrow maximum), the minimum
- * layout is returned overflowing rather than dropping tabs: every tab
- * stays visible and clickable, and the drawn extent always equals the
- * hit-test extent.
+ * <p>Labels are never shortened — a strip of "G…" tabs tells the player
+ * nothing (the dev.34 live report, where a mis-sized reserve left the
+ * whole strip ~45 px). Instead the policy is two stages: the natural
+ * layout (label plus padding), then padding compressed toward
+ * {@code minPadding} — a denser strip beats hiding tabs. If the tabs
+ * still do not fit, that is the caller's business: the strip scrolls
+ * by whole tabs, and this class answers the scrolling questions — how
+ * many tabs fit a window ({@link #window}), the last scroll position
+ * worth having ({@link #maxScrollOffset}), and where to scroll to bring
+ * one tab into view with minimal movement ({@link #revealOffset}).
  *
  * <p>The strip is clamped to the chat panel's on-screen width. In 26.3
  * that width is {@code ChatComponent.getWidth(chatWidthOption)} —
@@ -24,15 +26,12 @@ import java.util.function.ToIntFunction;
  * (verified against the 26.3 bytecode). An earlier note assumed the
  * on-screen width scaled with chat scale; it does not.
  *
- * @param widths    the drawn width of each tab, parallel to {@code labels}
- * @param labels    the label each tab should draw (with ellipsis when
- *                  shortened)
- * @param truncated whether each tab's label was shortened
+ * @param widths     the drawn width of each tab, parallel to {@code labels}
+ * @param textWidths the drawn width of each label alone — so the strip
+ *                   can center a label in its tab at any padding
+ * @param labels     the full label each tab draws
  */
-public record TabLayout(int[] widths, String[] labels, boolean[] truncated) {
-	/** The ellipsis appended to shortened labels. */
-	private static final String ELLIPSIS = "…";
-
+public record TabLayout(int[] widths, int[] textWidths, String[] labels) {
 	/** Sum of tab widths and gaps; the strip's full drawn extent. */
 	public int total(int gap) {
 		int sum = 0;
@@ -55,17 +54,15 @@ public record TabLayout(int[] widths, String[] labels, boolean[] truncated) {
 	public static TabLayout compute(List<String> labels, int maxWidth, int padding, int minPadding,
 			int gap, ToIntFunction<String> measure) {
 		int count = labels.size();
-		String[] current = labels.toArray(String[]::new);
 		String[] display = labels.toArray(String[]::new);
-		boolean[] shortened = new boolean[count];
 		int[] textWidths = new int[count];
 		for (int i = 0; i < count; i++) {
-			textWidths[i] = measure.applyAsInt(current[i]);
+			textWidths[i] = measure.applyAsInt(display[i]);
 		}
 
 		int pad = padding;
 		if (count > 0 && total(textWidths, pad, gap) > maxWidth) {
-			// Compress the padding toward its floor before touching labels.
+			// Compress the padding toward its floor before giving up.
 			int room = maxWidth - gaps(count, gap);
 			int text = 0;
 			for (int width : textWidths) {
@@ -74,31 +71,92 @@ public record TabLayout(int[] widths, String[] labels, boolean[] truncated) {
 			pad = Math.max(minPadding, Math.min(padding, (room - text) / (2 * count)));
 		}
 
-		// Shorten the widest tab by one character until the strip fits.
-		while (count > 0 && total(textWidths, pad, gap) > maxWidth) {
-			int widest = -1;
-			for (int i = 0; i < count; i++) {
-				if (current[i].length() <= 1) {
-					continue; // one character is the floor
-				}
-				if (widest < 0 || textWidths[i] > textWidths[widest]) {
-					widest = i;
-				}
-			}
-			if (widest < 0) {
-				break; // everything is at the floor; overflow beats hiding tabs
-			}
-			current[widest] = current[widest].substring(0, current[widest].length() - 1);
-			display[widest] = current[widest] + ELLIPSIS;
-			shortened[widest] = true;
-			textWidths[widest] = measure.applyAsInt(display[widest]);
-		}
-
 		int[] widths = new int[count];
 		for (int i = 0; i < count; i++) {
 			widths[i] = textWidths[i] + 2 * pad;
 		}
-		return new TabLayout(widths, display, shortened);
+		return new TabLayout(widths, textWidths, display);
+	}
+
+	/**
+	 * How many tabs fit {@code budget} starting at {@code from}: the
+	 * widest prefix of the remaining strip. Always at least one — a
+	 * single tab overflows the budget rather than hiding, the same
+	 * "overflow beats hiding" rule the strip has always had. Tabs past
+	 * the end, or a {@code from} out of range, yield zero.
+	 */
+	public int window(int from, int budget, int gap) {
+		if (from < 0 || from >= widths.length) {
+			return 0;
+		}
+		int sum = 0;
+		int count = 0;
+		for (int i = from; i < widths.length; i++) {
+			int next = sum + widths[i] + (count > 0 ? gap : 0);
+			if (count > 0 && next > budget) {
+				break;
+			}
+			sum = next;
+			count++;
+		}
+		return count;
+	}
+
+	/**
+	 * The furthest the strip may scroll: the offset whose window shows
+	 * the final tab — the last tab always reachable, never a blank
+	 * strip one past it. If even the final tab alone overflows the
+	 * budget, it still shows (alone), so the answer is
+	 * {@code widths.length - 1}.
+	 */
+	public int maxScrollOffset(int budget, int gap) {
+		if (widths.length == 0) {
+			return 0;
+		}
+		int sum = 0;
+		for (int start = widths.length - 1; start >= 0; start--) {
+			int addition = widths[start] + (start < widths.length - 1 ? gap : 0);
+			if (sum + addition > budget && start < widths.length - 1) {
+				return start + 1;
+			}
+			sum += addition;
+		}
+		return 0;
+	}
+
+	/**
+	 * The offset that brings tab {@code index} into a window of
+	 * {@code budget}, moving as little as possible from
+	 * {@code current}: no move when it is already visible; the index
+	 * itself when it fell off the left; and when it fell off the
+	 * right, the smallest offset whose window still covers it — the
+	 * tab docks at the window's right edge with as many earlier tabs
+	 * as fit kept in view.
+	 */
+	public int revealOffset(int index, int current, int budget, int gap) {
+		if (widths.length == 0) {
+			return 0;
+		}
+		int target = Math.clamp(index, 0, widths.length - 1);
+		int from = Math.clamp(current, 0, widths.length - 1);
+		if (target < from) {
+			return target;
+		}
+		if (target < from + window(from, budget, gap)) {
+			return from;
+		}
+		// Right-align: walk left while the window still covers the tab.
+		// Covering fails monotonically — one step left needs one more
+		// tab in the window — so the first failure ends the walk.
+		int best = target;
+		for (int offset = target; offset >= 0; offset--) {
+			if (offset + window(offset, budget, gap) - 1 >= target) {
+				best = offset;
+			} else {
+				break;
+			}
+		}
+		return best;
 	}
 
 	private static int total(int[] textWidths, int padding, int gap) {
