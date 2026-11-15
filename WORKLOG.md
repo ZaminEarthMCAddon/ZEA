@@ -3402,3 +3402,82 @@ input), MinimapHud (HUD layer registration), MapEditorScreen, `/zeamap`
 + keybinds, lifecycle wiring (schedulers, world resolution, generation
 bumps), RepoMapClient, claim-command chat integration, and the visual
 checklist on the live server.
+
+## 2026-11-15 (session 17) — ZEA Market: the physical-shop marketplace, end to end
+
+The full ZEA Market feature landed as ten commits: models, response
+parser, sign correlation, persistence, pricing, the shop screen, the
+browser, tooltips, and the submission queue.
+
+### The shape of it
+
+A sign right-click (observed in the game-mode mixin, never modified)
+notes a pending use — position, attached chest, the sign's own text.
+Shop-shaped lines that follow start or extend a response run attributed
+to that use; the run closes on the first unrelated message or a quiet
+gap and parses into an inspection. A use that expires without a
+response falls back to its sign text. Shop-shaped lines with no pending
+use are ignored entirely — the market never records a shop nobody
+inspected, and unrelated chat is never touched.
+
+The response parser anchors on the observed line shapes
+(`Owner: `, `Stock: `, `Price per 7x ... - 1G`, `This shop is SELLING
+items.`) and reads the `[Item Preview]` hover structurally: 26.3's
+show_item carries the full item template, and identity fingerprints
+that wire data (item id + component patch, count normalized away)
+instead of a resolved stack — which also keeps the whole path testable
+in a bootstrapped-but-not-data-loaded JVM, where the documented
+"Components not bound yet" constraint rules out ItemStack construction.
+A missing field degrades the response to partial; nothing is guessed.
+
+### Decisions worth recording
+
+- **Shop identity is server + world + sign position.** The chest is
+  data, never identity: a chest resolved on a later visit must not fork
+  the shop in two.
+- **Direction is named from the shop's point of view** (`SELLING` means
+  the player buys) exactly as the server phrases it, and every
+  player-facing label derives from it — the two sides cannot silently
+  reverse.
+- **Prices are BigDecimal end to end**, stored as exact decimal text;
+  normalization divides at a fixed documented scale (half-even), totals
+  multiply exactly.
+- **One offer per shop, from its latest observation.** An old cheaper
+  measurement never outranks the shop's current price; history stays
+  available for display.
+- **No recognized success/failure transaction messages.** Rather than
+  guess outcome shapes and claim results the client cannot verify, the
+  state machine ends a send in TIMED_OUT — outcome unknown, no retry,
+  never a false success. The transitions grow from real captures.
+- **The ZEA-REPO submission side is a local validated queue.** The
+  repository has no shop dataset/schema/manifest entry; inventing a
+  remote endpoint is forbidden by the feature's own contract, so the
+  queue stores validated, deduplicated, timestamp-preserving batches
+  and documents the missing contract in docs/MARKET.md.
+
+### Verification
+
+`./gradlew test` green — 1030 tests, 0 failures across the feature's
+parser fixtures (both example responses from the feature brief, bulk
+sizes 7/64, `You can sell 0`, explicit `all`, decimal and comma prices,
+malformed variants), correlation (delayed, duplicate, out-of-window,
+two-click ownership, sign-only fallback), identity (fingerprint
+fidelity, count normalization), pricing (normalization across bulk
+sizes, direction separation, per-shop latest, deterministic ties,
+incomparable offers listed but unranked), persistence (round-trip,
+per-entry tolerance, newer-file refusal, corruption recovery, damaged
+prices degrade to none), transactions (bulk and item arithmetic,
+server-maximum enforcement, duplicate-confirmation protection, timeout
+without retry), submissions (sign-only refusal, dedupe, restart
+survival) and the mixin hygiene suite. Compile verified against the
+26.3 jar (`useItemOn`, `sendChat`/`sendCommand`, `HoverEvent.ShowItem`
+→ `ItemStackTemplate`, `SignText.getMessages`, `EditBox` without
+`setFilter`, `AbstractWidget.extractRenderState`).
+
+Not yet verified in-game (no live EarthMC client here): the actual
+sign-click → response → screen flow against the real server, the
+screens' rendering (the layout is drawn but never seen), and the
+server's real component tree for the shop response. The parser and
+correlator were built to tolerate all of that being different on first
+contact; the field-test capture tool (`/zea capture`) is the ready
+instrument for the real session.

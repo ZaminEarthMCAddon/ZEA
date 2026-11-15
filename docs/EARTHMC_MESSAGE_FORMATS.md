@@ -166,6 +166,48 @@ channel; the transition must be explicit and correct (Stage 3). The channel
 list is data (ZEA-REPO `datasets/channels.json`) precisely because it may
 change server-side.
 
+## Shop responses
+
+```
+Shop Information:
+Owner: Pelle_Nomme
+Item: Block of Diamond [Item Preview]
+Stock: 78
+Price per 7x Block of Diamond - 1G
+This shop is SELLING items.
+
+Enter in chat, how many bulks you wish to BUY.
+There are 7 items in each bulk and you can buy 64 bulks.
+Enter all in chat to buy all.
+```
+
+```
+Owner: Pelle_Nomme
+Item: Netherite Ingot [Item Preview]
+Space: 38
+Price per Netherite Ingot - 17G
+This shop is BUYING items.
+
+Enter in chat, how much you wish to SELL.
+You can sell 0.
+Enter all in chat, to sell all.
+```
+
+Class: Shop (market subsystem — `ShopResponseParser`, fixtures are the
+two shapes above). The lines anchor the parse; the `[Item Preview]`
+hover carries the actual item as a show_item event, which is what item
+identity fingerprints from. `Stock:` is preserved verbatim (stackable
+items may report stacks, equipment individual items — the client cannot
+tell reliably); `Space:` is free capacity, not stock; the per-bulk
+price line's `7x` prefix and the `There are 7 items in each bulk and
+you can buy 64 bulks.` line are the only sources of bulk size and
+purchase limits; `You can sell 0.` is the authoritative sellable
+quantity; `Enter all in chat` is the only license to offer an `all`
+input. These observations come from the feature brief's recorded
+responses; a `/zea capture` session at a real shop should confirm the
+component-level tree (the parser tolerates both multi-line single
+messages and line-per-message delivery, and missing hovers).
+
 ## Unclassified
 
 Anything not confidently matched lands in the general/unclassified feed and

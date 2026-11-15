@@ -68,6 +68,7 @@ Packages represent responsibilities. The mapping:
 | `net.zaminmc.zea.search` | Inventory search bar: calculator, matching mode, search text cache |
 | `net.zaminmc.zea.slots` | Slot locking and binding: state, click guard, indicators |
 | `net.zaminmc.zea.share` | Paste client, share envelope, payload codecs, coordinator, `/zea` commands |
+| `net.zaminmc.zea.market` | Physical-shop market: inspection correlation, observation store, pricing, screens, tooltips, submission queue (`docs/MARKET.md`) |
 | `net.zaminmc.zea.earthmc` | EarthMC API client, server identity, ZEA-REPO data |
 | `net.zaminmc.zea.config` | Configuration (MoulConfig), the `/zea` settings screen |
 | `net.zaminmc.zea.persistence` | Atomic file IO, JSON store utilities |
@@ -148,6 +149,7 @@ dispatch is cancelled on disconnect by design.
 | History queries for search | Background executor, results marshalled back |
 | History writes | `ZEA-History` executor, sequential, drained on shutdown |
 | Share uploads/downloads | `ZEA-Share` executor, results marshalled to the client thread |
+| Market persistence + submission queue | `ZEA-Market` executor, snapshot writes, client thread owns the index |
 | EarthMC API + ZEA-REPO HTTP (future) | Same pattern: bounded executor, never the client thread |
 
 Rules:
