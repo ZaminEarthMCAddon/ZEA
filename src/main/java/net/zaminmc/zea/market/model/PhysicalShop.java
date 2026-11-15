@@ -41,18 +41,15 @@ public record PhysicalShop(
 
 	/**
 	 * The stable identity of the shop anchored at a sign: server identity
-	 * plus world plus sign block position, with the chest appended when
-	 * known. The same format every layer uses — a shop found again after
-	 * a restart must resolve to the same id.
+	 * plus world plus sign block position. The attached chest is data on
+	 * the record, never part of the identity — a chest resolved on a
+	 * later visit must not fork the shop into a second one.
 	 */
-	public static String idOf(String serverId, String world, BlockPos signPos, @Nullable BlockPos chestPos) {
-		StringBuilder id = new StringBuilder(serverId)
+	public static String idOf(String serverId, String world, BlockPos signPos) {
+		return new StringBuilder(serverId)
 				.append('|').append(world)
-				.append('|').append(signPos.getX()).append(',').append(signPos.getY()).append(',').append(signPos.getZ());
-		if (chestPos != null) {
-			id.append('|').append(chestPos.getX()).append(',').append(chestPos.getY()).append(',').append(chestPos.getZ());
-		}
-		return id.toString();
+				.append('|').append(signPos.getX()).append(',').append(signPos.getY()).append(',').append(signPos.getZ())
+				.toString();
 	}
 
 	/** A copy of this shop with the owner, nation and observation stamp updated. */

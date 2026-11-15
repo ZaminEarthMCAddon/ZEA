@@ -69,6 +69,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static ExecutorService captureExecutor;
         private static PasteService pasteService;
         private static CaptureRecorder captureRecorder;
+        private static ExecutorService marketExecutor;
         private static MarketSubsystem market;
 
         public static ClientLifecycle lifecycle() {
@@ -130,7 +131,8 @@ public final class ZeaClient implements ClientModInitializer {
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
                 slotLocks = new SlotLocks(new SlotLockStore(configDir.resolve("zea/slotlocks.json")));
-                market = new MarketSubsystem(lifecycle);
+                marketExecutor = newIoExecutor("ZEA-Market");
+                market = new MarketSubsystem(lifecycle, configDir.resolve("zea/market.json"), marketExecutor);
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
@@ -214,10 +216,12 @@ public final class ZeaClient implements ClientModInitializer {
                 try {
                         chat.shutdownHistory();
                 } finally {
+                        market.flushNow();
                         pasteService.close();
                         captureRecorder.shutdown();
                         drain(historyExecutor);
                         drain(captureExecutor);
+                        drain(marketExecutor);
                         shareExecutor.shutdown();
                 }
         }

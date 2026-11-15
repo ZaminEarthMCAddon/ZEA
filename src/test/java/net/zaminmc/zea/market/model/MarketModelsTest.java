@@ -18,9 +18,9 @@ class MarketModelsTest {
 	@Test
 	void shopIdentityIsStableAcrossObservations() {
 		String first = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), new BlockPos(101, 64, -200));
+				new BlockPos(100, 64, -200));
 		String second = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), new BlockPos(101, 64, -200));
+				new BlockPos(100, 64, -200));
 
 		assertEquals(first, second);
 	}
@@ -28,9 +28,9 @@ class MarketModelsTest {
 	@Test
 	void changingOwnerKeepsTheShopIdentity() {
 		String before = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), null);
+				new BlockPos(100, 64, -200));
 		String after = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), null);
+				new BlockPos(100, 64, -200));
 
 		assertEquals(before, after);
 	}
@@ -38,27 +38,17 @@ class MarketModelsTest {
 	@Test
 	void differentPlacesAreDifferentShops() {
 		String a = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), null);
+				new BlockPos(100, 64, -200));
 		String b = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -201), null);
+				new BlockPos(100, 64, -201));
 		String c = PhysicalShop.idOf("earthmc.net", "earthmc_moon",
-				new BlockPos(100, 64, -200), null);
+				new BlockPos(100, 64, -200));
 		String d = PhysicalShop.idOf("other.host", "minecraft_overworld",
-				new BlockPos(100, 64, -200), null);
+				new BlockPos(100, 64, -200));
 
 		assertNotEquals(a, b);
 		assertNotEquals(a, c);
 		assertNotEquals(a, d);
-	}
-
-	@Test
-	void aKnownChestDisambiguatesTheIdentity() {
-		String bare = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), null);
-		String withChest = PhysicalShop.idOf("earthmc.net", "minecraft_overworld",
-				new BlockPos(100, 64, -200), new BlockPos(100, 64, -201));
-
-		assertNotEquals(bare, withChest);
 	}
 
 	@Test

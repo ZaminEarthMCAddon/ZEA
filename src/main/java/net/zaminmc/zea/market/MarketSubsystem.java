@@ -16,44 +16,68 @@ import net.zaminmc.zea.earthmc.ServerIdentity;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.market.interaction.ShopInspectionTracker;
 import net.zaminmc.zea.market.interaction.ShopSignGeometry;
-import org.jspecify.annotations.Nullable;
+import net.zaminmc.zea.market.store.MarketStore;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 /**
- * The market subsystem: turns physical shop inspections into market
- * data. Sign right-clicks arrive from the game-mode mixin, chat arrives
- * through its own capture hook, and the inspection tracker correlates
- * the two — the result is a shop inspection carrying either a
+ * The market subsystem: turns physical shop inspections into persisted
+ * market data. Sign right-clicks arrive from the game-mode mixin, chat
+ * arrives through its own capture hook, and the inspection tracker
+ * correlates the two — the result is a shop inspection carrying either a
  * server-verified response or the sign text that stands in when the
- * server never responded.
+ * server never responded. Every accepted inspection is recorded into the
+ * market index (a shop revisit updates the shop and appends an
+ * observation) and scheduled for a disk write.
  *
- * <p>The subsystem owns no persistence and no UI; it produces
- * inspections and hands them on. Everything runs on the client thread:
- * capture events and ticks are client-thread, and the mixin fires
- * mid-interaction, where no other thread can race it.
+ * <p>All state mutations run on the client thread: capture events, ticks
+ * and the mixin are client-thread, so the index needs no locks; disk IO
+ * happens on the market executor via snapshots taken on the client
+ * thread. The market works fully offline — persistence never touches a
+ * network.
  */
 public final class MarketSubsystem {
 	private final ClientLifecycle lifecycle;
 	private final ShopInspectionTracker tracker;
+	private final MarketData data;
+	private final MarketPersistence persistence;
 	// Null until the first inspection lands; read on the client thread only.
 	private volatile ShopInspectionTracker.Inspection latestInspection;
 
-	public MarketSubsystem(ClientLifecycle lifecycle) {
+	public MarketSubsystem(ClientLifecycle lifecycle, Path file, ExecutorService executor) {
 		this.lifecycle = lifecycle;
 		this.tracker = new ShopInspectionTracker(this::onInspection);
+		this.data = restore(file);
+		this.persistence = new MarketPersistence(new MarketStore(file), executor);
 		// Pending inspections belong to one connection: a disconnect or a
 		// world change leaves nothing for a response to correlate with.
+		// The recorded market, in contrast, survives every disconnect —
+		// that is the point of it.
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> reset());
-		ClientTickEvents.END_CLIENT_TICK.register(client -> tracker.tick(Instant.now()));
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			tracker.tick(Instant.now());
+			persistence.tick(System.currentTimeMillis());
+		});
 		// A second, independent capture sink — the chat pipeline keeps
 		// its own; the market reads the same events and never touches
 		// the chat feed.
 		new MessageCapture(lifecycle::onEarthMc, this::onMessage);
 	}
 
-	/** Forgets all pending inspection state (disconnect, world change). */
+	/** The market index: known shops and their observation history. */
+	public MarketData data() {
+		return data;
+	}
+
+	/** Forces pending market writes to land; used for shutdown. */
+	public void flushNow() {
+		persistence.flushNow();
+	}
+
+	/** Forgets pending inspection state (disconnect, world change), keeps the market. */
 	public void reset() {
 		tracker.reset();
 		latestInspection = null;
@@ -61,13 +85,17 @@ public final class MarketSubsystem {
 
 	private void onInspection(ShopInspectionTracker.Inspection inspection) {
 		latestInspection = inspection;
+		Observations.of(inspection).ifPresent(recorded -> {
+			if (data.record(recorded.shop(), recorded.observation())) {
+				persistence.markDirty(MarketPersistence.snapshot(data));
+			}
+		});
 	}
 
 	/**
 	 * The most recent inspection, for the shop screen that presents it.
 	 * Cleared on disconnect along with the rest of the pending state.
 	 */
-	/** The most recent inspection, or {@code null} before the first one. */
 	public ShopInspectionTracker.Inspection latestInspection() {
 		return latestInspection;
 	}
@@ -102,5 +130,22 @@ public final class MarketSubsystem {
 					.toList();
 		}
 		return List.of();
+	}
+
+	/**
+	 * Restores the index from disk with full entry tolerance: shops
+	 * without a position or observations without an id, direction or
+	 * timestamp are dropped, never crash the load.
+	 */
+	private static MarketData restore(Path file) {
+		MarketStore.MarketFile stored = new MarketStore(file).load();
+		MarketData data = new MarketData();
+		for (MarketStore.ShopWire wire : MarketStore.usableShops(stored)) {
+			MarketStore.toShop(wire).ifPresent(data::putShop);
+		}
+		for (MarketStore.ObservationWire wire : MarketStore.usableObservations(stored)) {
+			MarketStore.toObservation(wire).ifPresent(data::putObservation);
+		}
+		return data;
 	}
 }
