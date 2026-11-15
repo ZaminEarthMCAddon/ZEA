@@ -19,7 +19,10 @@ import java.util.Optional;
  * does not need to know which categories carry which stats. The
  * category is resolved first only to short-circuit {@link
  * ItemCategory#OTHER} (blocks, materials) before any component is
- * read, keeping the hot path — hovering ordinary items — cheap.
+ * read, keeping the hot path — hovering ordinary items — cheap, and to
+ * pass the two facts only the category knows: whether Unbreaking's
+ * armor data branch applies, and whether the spear-specific
+ * calculator should run.
  *
  * <p>The engine is stateless; caching lives at the presentation layer,
  * keyed by the (item, enchantments) pair the snapshot captures. The
@@ -55,17 +58,16 @@ public final class StatisticsEngine {
                                 ? MiningSpeedCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.ArmorStats> armor = category.isArmor()
                                 ? ArmorCalculator.calculate(stack, snapshot) : Optional.empty();
-                Optional<ItemStatistics.Durability> durability = DurabilityCalculator.calculate(stack, snapshot);
+                Optional<ItemStatistics.Durability> durability = DurabilityCalculator.calculate(
+                                stack, snapshot, category.isArmor());
                 Optional<ItemStatistics.ProjectileStats> projectile = category.isRangedWeapon()
-                                ? ProjectileCalculator.calculate(stack, snapshot) : Optional.empty();
+                                ? ProjectileCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
                 Optional<ItemStatistics.SmashDamage> smash = category == ItemCategory.MACE
-                                ? MaceCalculator.calculate(stack, snapshot) : Optional.empty();
+                                ? MaceCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
+                Optional<ItemStatistics.SpearStats> spear = category == ItemCategory.SPEAR
+                                ? SpearCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.FoodStats> food = category == ItemCategory.FOOD
                                 ? FoodCalculator.calculate(stack, snapshot) : Optional.empty();
-                // Spear reach is resolved directly by the presentation
-                // model through SpearCalculator when the category is SPEAR,
-                // so the engine does not fold a spear-specific field into
-                // the generic statistics record.
-                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, food);
+                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear, food);
         }
 }

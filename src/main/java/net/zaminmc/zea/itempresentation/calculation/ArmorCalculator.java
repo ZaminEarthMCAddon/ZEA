@@ -10,6 +10,7 @@ import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -22,17 +23,36 @@ import java.util.Optional;
  * equipped. An item with no armor modifier yields an empty result.
  *
  * <p>Protection enchantments are <em>not</em> folded into a single
- * damage-reduction percentage. The vanilla protection formula is
- * conditional on the incoming damage type (Fire Protection only helps
- * against fire, Blast Protection only against explosions, …), and the
- * tooltip has no incoming damage to evaluate against. Each protection
- * enchantment is therefore listed as a {@link
- * ItemStatistics.ConditionalBonus} carrying the enchantment's label and
- * the unconditional portion of its effect (the flat Protection bonus
- * that applies to every damage type), so the tooltip states the
- * protection it actually grants without claiming a universal reduction.
+ * damage-reduction percentage. In the 26.3 data every protection
+ * enchantment's {@code damage_protection} effect carries a
+ * damage-source requirement — plain Protection applies to everything
+ * that does not bypass invulnerability, Fire Protection only to fire,
+ * Feather Falling only to falls — so a tooltip with no incoming damage
+ * to evaluate must state the condition, not average over it. Each
+ * enchantment is listed as a {@link ItemStatistics.ConditionalBonus}
+ * whose value is the piece's enchantment-protection-factor (EPF)
+ * contribution, read live from the effect; the reduction this piece
+ * alone grants against matching damage is {@code min(20, epf) / 25} of
+ * it, the vanilla combat rule (each EPF point is 4%, the whole set
+ * caps at 80%).
  */
 public final class ArmorCalculator {
+
+        /**
+         * The condition text for the protection enchantments, keyed by
+         * registry path. The EPF <em>values</em> are read live from the
+         * effect data; only the human phrasing of the damage type each
+         * loot condition selects is curated here, because a loot
+         * condition is opaque to a tooltip. Unknown protection
+         * enchantments fall back to the honest "(conditional)".
+         */
+        private static final Map<String, String> CONDITION_LABELS = Map.of(
+                        "protection", "most damage",
+                        "fire_protection", "fire damage",
+                        "blast_protection", "explosions",
+                        "projectile_protection", "projectiles",
+                        "feather_falling", "falls");
+
         private ArmorCalculator() {
         }
 
@@ -83,16 +103,17 @@ public final class ArmorCalculator {
 
         /**
          * The protection enchantments on the item, each as a conditional
-         * bonus labelled with the enchantment's display name. The value
-         * is the unconditional portion of the {@link
-         * EnchantmentEffectComponents#DAMAGE_PROTECTION} effect,
-         * evaluated with a fixed seed so the tooltip is stable.
+         * bonus: the label is the enchantment's fullname at its held
+         * level plus the damage type it applies to, the value is its
+         * live EPF contribution. Enchantment effects whose requirements
+         * are empty still count — the datapack decides which protection
+         * is conditional, not ZEA.
          */
         private static List<ItemStatistics.ConditionalBonus> protectionEnchantments(ItemSnapshot snapshot) {
                 if (!snapshot.hasEnchantments()) {
                         return List.of();
                 }
-                RandomSource random = RandomSource.create(DamageCalculator.EFFECT_SEED);
+                RandomSource random = RandomSource.create(EnchantmentEffects.EFFECT_SEED);
                 List<ItemStatistics.ConditionalBonus> bonuses = new ArrayList<>();
                 for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
                         Holder<Enchantment> holder = entry.enchantment();
@@ -101,15 +122,19 @@ public final class ArmorCalculator {
                         if (effects.isEmpty()) {
                                 continue;
                         }
-                        double value = 0.0;
+                        double epf = 0.0;
                         for (var conditionalEffect : effects) {
-                                if (conditionalEffect.requirements().isEmpty()) {
-                                        value += conditionalEffect.effect().process(level, random, 0.0f);
-                                }
+                                epf += conditionalEffect.effect().process(level, random, 0.0f);
                         }
-                        if (value > 0.0) {
+                        if (epf > 0.0) {
                                 String label = Enchantment.getFullname(holder, level).getString();
-                                bonuses.add(new ItemStatistics.ConditionalBonus(label, value));
+                                String condition = holder.unwrapKey()
+                                                .map(key -> CONDITION_LABELS.get(key.identifier().getPath()))
+                                                .orElse(null);
+                                bonuses.add(new ItemStatistics.ConditionalBonus(
+                                                label + " (" + (condition != null
+                                                                ? condition : "conditional") + ")",
+                                                epf));
                         }
                 }
                 return List.copyOf(bonuses);

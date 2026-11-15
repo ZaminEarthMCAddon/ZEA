@@ -17,26 +17,6 @@ final class EnchantmentLevel {
         private EnchantmentLevel() {
         }
 
-        /** The level of the Efficiency enchantment on the snapshot, or 0. */
-        static int efficiency(ItemSnapshot snapshot) {
-                return byPath(snapshot, "efficiency");
-        }
-
-        /** The level of the Unbreaking enchantment on the snapshot, or 0. */
-        static int unbreaking(ItemSnapshot snapshot) {
-                return byPath(snapshot, "unbreaking");
-        }
-
-        /** The level of the Power enchantment on the snapshot, or 0. */
-        static int power(ItemSnapshot snapshot) {
-                return byPath(snapshot, "power");
-        }
-
-        /** The level of the Density enchantment on the snapshot, or 0. */
-        static int density(ItemSnapshot snapshot) {
-                return byPath(snapshot, "density");
-        }
-
         /** The level of the Lunge enchantment on the snapshot, or 0. */
         static int lunge(ItemSnapshot snapshot) {
                 return byPath(snapshot, "lunge");

@@ -16,9 +16,11 @@ import java.util.List;
  * <p>The layout follows the spec's structural example: a damage section
  * for weapons, a mining section for tools, an armor section for worn
  * pieces, a durability line whenever the item is damageable, and the
- * smash/projectile/food sections for the categories that carry them.
- * Only sections with a populated statistic appear — a diamond shovel
- * never shows attack damage, a bow never shows melee attack speed.
+ * smash/projectile/spear/food sections for the categories that carry
+ * them. Only sections with a populated statistic appear — a diamond
+ * shovel never shows attack damage, a bow never shows melee attack
+ * speed. Numbers that hold only under a condition state the condition
+ * in their own line, never as a bare universal claim.
  *
  * <p>The builder is a pure transform: it takes the already-computed
  * {@link ItemStatistics} and the category, and emits {@link Component}
@@ -44,9 +46,10 @@ public final class ItemPresentationBuilder {
         public static List<Component> build(ItemCategory category, ItemStatistics statistics) {
                 List<Component> lines = new ArrayList<>();
                 statistics.meleeDamage().ifPresent(melee -> lines.addAll(meleeLines(category, melee)));
+                statistics.spear().ifPresent(spear -> lines.addAll(spearLines(spear)));
                 statistics.miningSpeed().ifPresent(mining -> lines.add(miningLine(mining)));
                 statistics.armor().ifPresent(armor -> lines.addAll(armorLines(armor)));
-                statistics.projectile().ifPresent(projectile -> lines.addAll(projectileLines(projectile)));
+                statistics.projectile().ifPresent(projectile -> lines.addAll(projectileLines(category, projectile)));
                 statistics.smashDamage().ifPresent(smash -> lines.addAll(smashLines(smash)));
                 statistics.food().ifPresent(food -> lines.addAll(foodLines(food)));
                 statistics.durability().ifPresent(durability -> lines.add(durabilityLine(durability)));
@@ -57,16 +60,50 @@ public final class ItemPresentationBuilder {
                 return lines;
         }
 
-        /** The melee damage section: damage, attack speed, sweeping, conditional bonuses. */
+        /**
+         * The melee damage section: damage (with the base/enchantment
+         * split stated when an enchantment contributes), attack speed,
+         * sweeping, conditional bonuses. A spear's left-click is the
+         * jab, so its damage line says so.
+         */
         private static List<Component> meleeLines(ItemCategory category, ItemStatistics.MeleeDamage melee) {
                 List<Component> lines = new ArrayList<>();
-                lines.add(statLine("Damage", format(melee.total())));
+                String damageKey = category == ItemCategory.SPEAR ? "Jab Damage" : "Damage";
+                if (melee.enchantmentBonus() > 0.0) {
+                        String split = format(melee.baseDamage()) + " base + "
+                                        + format(melee.enchantmentBonus())
+                                        + (melee.bonusLabel().isEmpty() ? "" : " " + melee.bonusLabel());
+                        lines.add(statLine(damageKey, format(melee.total()) + " (" + split + ")"));
+                } else {
+                        lines.add(statLine(damageKey, format(melee.baseDamage())));
+                }
                 lines.add(statLine("Attack Speed", format(melee.attackSpeed())));
                 if (melee.sweepingRatio() > 0.0) {
                         lines.add(statLine("Sweeping Damage Ratio", format(melee.sweepingRatio())));
                 }
                 for (ItemStatistics.ConditionalBonus bonus : melee.conditional()) {
-                        lines.add(statLine(bonus.label(), format(bonus.value())));
+                        lines.add(statLine(bonus.label(), "+" + format(bonus.value())));
+                }
+                return lines;
+        }
+
+        /**
+         * The spear section: the reach window from the item's own
+         * attack-range component, the charged attack's damage
+         * multiplier, and the Lunge dash. The jab's damage and speed
+         * live in the melee section.
+         */
+        private static List<Component> spearLines(ItemStatistics.SpearStats spear) {
+                List<Component> lines = new ArrayList<>();
+                if (spear.maxReach() > 0.0f) {
+                        lines.add(statLine("Reach",
+                                        format(spear.minReach()) + " to " + format(spear.maxReach()) + " blocks"));
+                }
+                if (spear.chargeAttackMultiplier() > 0.0) {
+                        lines.add(statLine("Charged Attack", "x" + format(spear.chargeAttackMultiplier())));
+                }
+                if (spear.lungeLevel() > 0) {
+                        lines.add(statLine("Lunge", "dash " + format(spear.lungeImpulse())));
                 }
                 return lines;
         }
@@ -79,7 +116,12 @@ public final class ItemPresentationBuilder {
                 return statLine(label, format(mining.correctForDrops()));
         }
 
-        /** The armor section: armor, toughness, knockback resistance, protection enchantments. */
+        /**
+         * The armor section: armor, toughness, knockback resistance, and
+         * the protection enchantments as conditional reductions — each
+         * states the damage type it applies to and the reduction this
+         * piece alone grants against it.
+         */
         private static List<Component> armorLines(ItemStatistics.ArmorStats armor) {
                 List<Component> lines = new ArrayList<>();
                 lines.add(statLine("Armor", format(armor.armor())));
@@ -90,23 +132,37 @@ public final class ItemPresentationBuilder {
                         lines.add(statLine("Knockback Resistance", formatPercent(armor.knockbackResistance())));
                 }
                 for (ItemStatistics.ConditionalBonus protection : armor.protectionEnchantments()) {
-                        lines.add(statLine(protection.label(), format(protection.value())));
+                        lines.add(statLine(protection.label(),
+                                        "-" + formatPercent(Math.min(20.0, protection.value()) / 25.0)));
                 }
                 return lines;
         }
 
         /**
-         * The projectile section: fully-charged damage with draw ticks for
-         * bows, projectile damage and pierce for crossbows.
+         * The projectile section: fully-drawn damage for bows (with the
+         * draw condition stated), the loaded projectile's damage for
+         * crossbows, draw/reload time, projectile count under
+         * Multishot, and pierce depth.
          */
-        private static List<Component> projectileLines(ItemStatistics.ProjectileStats projectile) {
+        private static List<Component> projectileLines(ItemCategory category, ItemStatistics.ProjectileStats projectile) {
                 List<Component> lines = new ArrayList<>();
-                lines.add(statLine("Projectile Damage", format(projectile.fullyCharged())));
-                if (projectile.drawTicks() > 0) {
-                        lines.add(statLine("Draw Time", projectile.drawTicks() + " ticks"));
+                if (projectile.firework()) {
+                        lines.add(statLine("Projectile", "Firework Rocket"));
+                        lines.add(statLine("Firework Damage",
+                                        format(projectile.fireworkDamage())
+                                        + " (" + projectile.fireworkStars() + " stars)"));
+                } else if (category == ItemCategory.BOW) {
+                        lines.add(statLine("Projectile Damage (fully drawn)", format(projectile.fullyCharged())));
+                } else {
+                        lines.add(statLine("Projectile Damage (arrow)", format(projectile.fullyCharged())));
                 }
-                if (projectile.multishot()) {
-                        lines.add(statLine("Multishot", "yes"));
+                if (category == ItemCategory.BOW) {
+                        lines.add(statLine("Draw Time", ticksLine(projectile.chargeTicks())));
+                } else {
+                        lines.add(statLine("Reload Time", ticksLine(projectile.chargeTicks())));
+                }
+                if (projectile.projectileCount() > 1) {
+                        lines.add(statLine("Projectiles", String.valueOf(projectile.projectileCount())));
                 }
                 if (projectile.piercing() > 0) {
                         lines.add(statLine("Piercing", String.valueOf(projectile.piercing())));
@@ -115,23 +171,41 @@ public final class ItemPresentationBuilder {
         }
 
         /**
-         * The smash section: the per-fallen-block Density rate and the
-         * Breach/Wind Burst flags. Stated as conditional because smash
-         * damage depends on fall distance.
+         * The smash section: the fall threshold, the piecewise fall
+         * bonus in words, Density's per-block rate, Breach's armor
+         * reduction, and the Wind Burst flag. The mace's normal-hit
+         * damage is the melee section's business.
          */
         private static List<Component> smashLines(ItemStatistics.SmashDamage smash) {
                 List<Component> lines = new ArrayList<>();
-                if (smash.perFallenBlock() > 0.0) {
-                        lines.add(statLine("Smash Damage per fallen block", format(smash.perFallenBlock())));
+                StringBuilder bands = new StringBuilder();
+                for (int i = 0; i < smash.bands().size(); i++) {
+                        ItemStatistics.SmashDamage.SmashBand band = smash.bands().get(i);
+                        if (i > 0) {
+                                bands.append(", ");
+                        }
+                        bands.append("+").append(format(band.perBlock())).append("/block ");
+                        if (Double.isInfinite(band.upTo())) {
+                                bands.append("after");
+                        } else if (i == smash.bands().size() - 1) {
+                                bands.append("to ").append(format(band.upTo())).append(", then onward");
+                        } else {
+                                bands.append("to ").append(format(band.upTo()));
+                        }
                 }
-                if (smash.breach()) {
-                        lines.add(statLine("Breach", "active"));
+                lines.add(statLine("Smash Attack",
+                                "+" + format(smash.fallBonus(smash.fallThreshold()))
+                                + " past " + format(smash.fallThreshold()) + " blocks fallen (" + bands + ")"));
+                if (smash.densityPerFallenBlock() > 0.0) {
+                        lines.add(statLine("Density Bonus",
+                                        "+" + format(smash.densityPerFallenBlock()) + "/block fallen"));
+                }
+                if (smash.breach() != 0.0) {
+                        lines.add(statLine("Breach",
+                                        "-" + formatPercent(-smash.breach()) + " armor effectiveness"));
                 }
                 if (smash.windBurst()) {
-                        lines.add(statLine("Wind Burst", "active"));
-                }
-                if (lines.isEmpty()) {
-                        lines.add(statLine("Smash Attack", "active (no fall bonus)"));
+                        lines.add(statLine("Wind Burst", "launches on smash hit"));
                 }
                 return lines;
         }
@@ -144,8 +218,8 @@ public final class ItemPresentationBuilder {
                 if (food.canAlwaysEat()) {
                         lines.add(statLine("Can Always Eat", "yes"));
                 }
-                for (ItemStatistics.ConditionalBonus effect : food.effects()) {
-                        lines.add(statLine("Effect", effect.label()));
+                for (String effect : food.effects()) {
+                        lines.add(statLine("Effect", effect));
                 }
                 return lines;
         }
@@ -159,6 +233,11 @@ public final class ItemPresentationBuilder {
                 return statLine("Durability", value);
         }
 
+        /** A tick count as both ticks and seconds, the way players read draw times. */
+        private static String ticksLine(int ticks) {
+                return ticks + " ticks (" + format(ticks / 20.0) + "s)";
+        }
+
         /**
          * One "Label: value" line — the label in grey, the value in white,
          * the same visual rhythm the spec example uses.
@@ -170,12 +249,24 @@ public final class ItemPresentationBuilder {
                 return line;
         }
 
-        /** Formats a double as a one-decimal value, dropping the ".0" on whole numbers. */
+        /**
+         * Formats a double with up to three decimals, trailing zeros
+         * stripped — one decimal covers damage and speed, but the
+         * stats with fractional data rates (Sweeping Edge's 0.75, the
+         * spear's 1.075 charge multiplier) must not be rounded away.
+         */
         private static String format(double value) {
                 if (value == Math.rint(value)) {
                         return String.valueOf((long) value);
                 }
-                return String.format("%.1f", value);
+                String formatted = String.format("%.3f", value);
+                while (formatted.endsWith("0")) {
+                        formatted = formatted.substring(0, formatted.length() - 1);
+                }
+                if (formatted.endsWith(".")) {
+                        formatted = formatted.substring(0, formatted.length() - 1);
+                }
+                return formatted;
         }
 
         /** Formats a 0..1 fraction as a percentage, the way knockback resistance is shown. */
