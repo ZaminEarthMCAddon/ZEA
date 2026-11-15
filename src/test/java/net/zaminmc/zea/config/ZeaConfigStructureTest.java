@@ -129,11 +129,10 @@ class ZeaConfigStructureTest {
         void inventoryUtilitiesNestTheirSubcategories() {
                 // The inventory utilities layout: one top-level category
                 // holding the master switch, the editor launcher and the
-                // Button placement, Search bar, Slot binding and Slot
-                // locking subcategories.
+                // Search bar, Slot binding and Slot locking subcategories.
+                // (Button placement left with the region model — free
+                // placement has nothing to toggle per edge.)
                 List<Class<?>> held = categoriesHeldBy(ZeaConfig.InventoryButtons.class);
-                assertTrue(held.contains(ZeaConfig.ButtonPlacement.class),
-                                "Button placement nests under the inventory category");
                 assertTrue(held.contains(ZeaConfig.SearchBar.class),
                                 "Search bar nests under the inventory category");
                 assertTrue(held.contains(ZeaConfig.SlotBinding.class),
@@ -146,8 +145,7 @@ class ZeaConfigStructureTest {
                                 topLevel.add(field.getType());
                         }
                 }
-                assertFalse(topLevel.contains(ZeaConfig.ButtonPlacement.class)
-                                || topLevel.contains(ZeaConfig.SearchBar.class)
+                assertFalse(topLevel.contains(ZeaConfig.SearchBar.class)
                                 || topLevel.contains(ZeaConfig.SlotBinding.class)
                                 || topLevel.contains(ZeaConfig.SlotLocking.class),
                                 "inventory utility settings nest, never stand beside the category");

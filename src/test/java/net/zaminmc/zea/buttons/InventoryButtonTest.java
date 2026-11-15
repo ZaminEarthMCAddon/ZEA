@@ -2,131 +2,117 @@ package net.zaminmc.zea.buttons;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InventoryButtonTest {
-        @Test
-        void newButtonIsIncompleteUntilGivenACommand() {
-                InventoryButton button = InventoryButton.newButton(1);
+	private InventoryButton button() {
+		return new InventoryButton(UUID.randomUUID(), "Home", "home", "minecraft:compass", "", "",
+				2, 4, true, false, 3, false, true);
+	}
 
-                assertEquals("Button 1", button.name());
-                assertEquals("", button.command());
-                assertEquals("minecraft:compass", button.icon());
-                assertEquals(ButtonRegion.RIGHT, button.region());
-                assertEquals(0, button.order());
-                assertFalse(button.closeOnExecute());
-                assertTrue(button.enabled());
-                assertFalse(button.isUsable());
+	@Test
+	void defaultsRepairMissingFields() {
+		InventoryButton bare = new InventoryButton(null, null, null, null, null, null,
+				0, 0, false, false, 0, false, true);
 
-                assertTrue(button.withCommand("g hello").isUsable());
-        }
+		assertNotEquals(null, bare.id());
+		assertEquals(InventoryButton.DEFAULT_NAME, bare.name());
+		assertEquals("", bare.command());
+		assertEquals("", bare.icon());
+		assertTrue(bare.enabled());
+	}
 
-        @Test
-        void missingFieldsGetSafeDefaults() {
-                InventoryButton button = new InventoryButton(null, null, null, null, null, null, null, 5, false, true);
+	@Test
+	void commandsLoseTheirLeadingSlash() {
+		InventoryButton slashed = button().withCommand("/home");
 
-                assertNotNull(button.id());
-                assertEquals(InventoryButton.DEFAULT_NAME, button.name());
-                assertEquals("", button.command());
-                assertEquals("", button.icon());
-                assertEquals("", button.text());
-                assertEquals("", button.tooltip());
-                assertEquals(ButtonRegion.RIGHT, button.region());
-                assertEquals(5, button.order());
-                assertFalse(button.isUsable());
-        }
+		assertEquals("home", slashed.command());
+	}
 
-        @Test
-        void orderIsClampedToTheRegionCapacity() {
-                InventoryButton button = InventoryButton.newButton(1)
-                                .withRegion(ButtonRegion.UNDER_SEARCH)
-                                .withOrder(99);
+	@Test
+	void controlCharactersAreStripped() {
+		InventoryButton noisy = button().withCommand("hom\ne");
 
-                assertEquals(ButtonRegion.UNDER_SEARCH.capacity() - 1, button.order());
-        }
+		assertEquals("home", noisy.command());
+	}
 
-        @Test
-        void textButtonsAreUsableWithoutAnIcon() {
-                InventoryButton button = InventoryButton.newButton(1)
-                                .withCommand("hub")
-                                .withIcon("")
-                                .withText("Hub");
+	@Test
+	void offsetsAreClampedToTheSanityRange() {
+		InventoryButton far = new InventoryButton(null, "x", "cmd", "minecraft:stone", "", "",
+				999_999, -999_999, false, false, 0, false, true);
 
-                assertTrue(button.isUsable());
-                // Without text, an icon is required.
-                assertFalse(button.withText("").isUsable());
-        }
+		assertEquals(ButtonGeometry.MAX_OFFSET, far.x());
+		assertEquals(-ButtonGeometry.MAX_OFFSET, far.y());
+	}
 
-        @Test
-        void leadingSlashIsStrippedFromCommands() {
-                InventoryButton button = InventoryButton.newButton(1).withCommand("/town spawn");
+	@Test
+	void styleWrapsIntoTheSheetRange() {
+		InventoryButton styled = button().withStyle(7);
 
-                assertEquals("town spawn", button.command());
-        }
+		assertEquals(2, styled.style());
+		assertEquals(0, button().withStyle(5).style());
+		assertEquals(4, button().withStyle(-1).style());
+	}
 
-        @Test
-        void longNamesAndCommandsAreTruncated() {
-                InventoryButton button = InventoryButton.newButton(1)
-                                .withCommand("a".repeat(InventoryButton.MAX_COMMAND_LENGTH + 10))
-                                .withName("b".repeat(InventoryButton.MAX_NAME_LENGTH + 10))
-                                .withText("c".repeat(InventoryButton.MAX_TEXT_LENGTH + 10));
+	@Test
+	void usabilityNeedsACommandAndAnIconOrText() {
+		assertTrue(button().isUsable());
 
-                assertEquals(InventoryButton.MAX_COMMAND_LENGTH, button.command().length());
-                assertEquals(InventoryButton.MAX_NAME_LENGTH, button.name().length());
-                assertEquals(InventoryButton.MAX_TEXT_LENGTH, button.text().length());
-        }
+		assertFalse(button().withCommand("").isUsable(), "no command");
+		assertFalse(button().withCommand("").withText("ab").isUsable(), "text does not rescue the command");
+		assertTrue(button().withText("ab").isUsable(), "text rescues the icon");
+		assertFalse(button().withIcon("").isUsable(), "no icon and no text");
+	}
 
-        @Test
-        void controlCharactersAreRemoved() {
-                InventoryButton button = InventoryButton.newButton(1).withCommand("town\r\nspawn");
+	@Test
+	void withNewIdKeepsEverythingButIdentity() {
+		InventoryButton original = button();
 
-                assertEquals("townspawn", button.command());
-                assertTrue(button.isUsable());
-        }
+		InventoryButton fresh = original.withNewId();
 
-        @Test
-        void commandValidityRules() {
-                assertFalse(InventoryButton.validCommand(null));
-                assertFalse(InventoryButton.validCommand(""));
-                assertFalse(InventoryButton.validCommand("   "));
-                assertFalse(InventoryButton.validCommand("a".repeat(InventoryButton.MAX_COMMAND_LENGTH + 1)));
-                assertFalse(InventoryButton.validCommand("town\nspawn"));
-                assertTrue(InventoryButton.validCommand("g hello world"));
-                assertTrue(InventoryButton.validCommand("a".repeat(InventoryButton.MAX_COMMAND_LENGTH)));
-        }
+		assertNotEquals(original.id(), fresh.id());
+		assertEquals(original.name(), fresh.name());
+		assertEquals(original.command(), fresh.command());
+		assertEquals(original.x(), fresh.x());
+		assertEquals(original.y(), fresh.y());
+		assertEquals(original.anchorRight(), fresh.anchorRight());
+		assertEquals(original.anchorBottom(), fresh.anchorBottom());
+		assertEquals(original.style(), fresh.style());
+	}
 
-        @Test
-        void iconValidityRules() {
-                assertFalse(InventoryButton.validIcon(null));
-                assertFalse(InventoryButton.validIcon(""));
-                assertFalse(InventoryButton.validIcon("a".repeat(InventoryButton.MAX_ICON_LENGTH + 1)));
-                assertFalse(InventoryButton.validIcon("compass\n"));
-                assertTrue(InventoryButton.validIcon("minecraft:compass"));
-                assertTrue(InventoryButton.validIcon("zea:anything"));
-        }
+	@Test
+	void withPositionMovesAndAnchors() {
+		InventoryButton moved = button().withPosition(-20, -18, false, true);
 
-        @Test
-        void withNewIdChangesIdentityButKeepsData() {
-                InventoryButton button = InventoryButton.newButton(1).withCommand("g hi");
-                InventoryButton copy = button.withNewId();
+		assertEquals(-20, moved.x());
+		assertEquals(-18, moved.y());
+		assertFalse(moved.anchorRight());
+		assertTrue(moved.anchorBottom());
+	}
 
-                assertNotEquals(button.id(), copy.id());
-                assertEquals(button.command(), copy.command());
-                assertEquals(button.icon(), copy.icon());
-                assertEquals(button.region(), copy.region());
-                assertEquals(button.order(), copy.order());
-                assertEquals(button.closeOnExecute(), copy.closeOnExecute());
-        }
+	@Test
+	void newButtonsStartBesideTheGui() {
+		InventoryButton fresh = InventoryButton.newButton(1);
 
-        @Test
-        void legacyAnchorsMapToRegions() {
-                assertEquals(ButtonRegion.TOP, ButtonRegion.fromLegacyAnchor(ButtonAnchor.TOP_LEFT));
-                assertEquals(ButtonRegion.TOP, ButtonRegion.fromLegacyAnchor(ButtonAnchor.TOP_RIGHT));
-                assertEquals(ButtonRegion.BOTTOM, ButtonRegion.fromLegacyAnchor(ButtonAnchor.BOTTOM_LEFT));
-                assertEquals(ButtonRegion.BOTTOM, ButtonRegion.fromLegacyAnchor(ButtonAnchor.BOTTOM_RIGHT));
-        }
+		assertEquals(InventoryButton.NEW_BUTTON_X, fresh.x());
+		assertTrue(fresh.anchorRight());
+		assertEquals("", fresh.command(), "a fresh button cannot run anything");
+		assertFalse(fresh.isUsable());
+	}
+
+	@Test
+	void commandValidationRejectsBlankLongAndControlled() {
+		assertFalse(InventoryButton.validCommand(null));
+		assertFalse(InventoryButton.validCommand(""));
+		assertFalse(InventoryButton.validCommand("   "));
+		assertFalse(InventoryButton.validCommand("a".repeat(257)));
+		assertFalse(InventoryButton.validCommand("bad\ncommand"));
+		assertTrue(InventoryButton.validCommand("home"));
+		assertTrue(InventoryButton.validCommand("/home".substring(1)));
+	}
 }

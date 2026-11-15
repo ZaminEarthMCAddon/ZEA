@@ -14,9 +14,8 @@ import io.github.notenoughupdates.moulconfig.common.text.StructuredText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
-import net.zaminmc.zea.buttons.ButtonListScreen;
+import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.map.config.MapConfig;
-import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.notify.Notification;
 import net.zaminmc.zea.search.SearchOverlay;
@@ -169,52 +168,17 @@ public final class ZeaConfig extends Config {
                 @ConfigOrder(1)
                 public boolean openEditor = true;
 
-                @Category(name = "Button placement", desc = "Which button regions are shown.")
-                @ConfigOrder(2)
-                public ButtonPlacement buttonPlacement = new ButtonPlacement();
-
                 @Category(name = "Search bar", desc = "The search bar under the inventory: calculator and item matching.")
-                @ConfigOrder(3)
+                @ConfigOrder(2)
                 public SearchBar searchBar = new SearchBar();
 
                 @Category(name = "Slot binding", desc = "Bind inventory slots to hotbar slots.")
-                @ConfigOrder(4)
+                @ConfigOrder(3)
                 public SlotBinding slotBinding = new SlotBinding();
 
                 @Category(name = "Slot locking", desc = "Protect inventory slots from accidental actions.")
-                @ConfigOrder(5)
-                public SlotLocking slotLocking = new SlotLocking();
-        }
-
-        /** Which button regions render. */
-        public static final class ButtonPlacement {
-                @ConfigOption(name = "Top row", desc = "Show buttons placed above the container GUI.")
-                @ConfigEditorBoolean
-                @ConfigOrder(0)
-                public boolean top = true;
-
-                @ConfigOption(name = "Bottom row", desc = "Show buttons placed below the search bar "
-                                + "(below the GUI when the search bar is off).")
-                @ConfigEditorBoolean
-                @ConfigOrder(1)
-                public boolean bottom = true;
-
-                @ConfigOption(name = "Under the search bar", desc = "Show the row of up to five buttons "
-                                + "beneath the search bar. Hidden entirely while the search bar is off.")
-                @ConfigEditorBoolean
-                @ConfigOrder(2)
-                public boolean underSearch = true;
-
-                @ConfigOption(name = "Left column", desc = "Show buttons left of the container GUI. "
-                                + "They step aside while the recipe book is open.")
-                @ConfigEditorBoolean
-                @ConfigOrder(3)
-                public boolean left = true;
-
-                @ConfigOption(name = "Right column", desc = "Show buttons right of the container GUI.")
-                @ConfigEditorBoolean
                 @ConfigOrder(4)
-                public boolean right = true;
+                public SlotLocking slotLocking = new SlotLocking();
         }
 
         /** The inventory search bar. */
@@ -659,7 +623,7 @@ public final class ZeaConfig extends Config {
                         Minecraft minecraft = Minecraft.getInstance();
                         net.zaminmc.zea.buttons.InventoryButtons buttons = ZeaClient.inventoryButtons();
                         if (buttons != null) {
-                                minecraft.execute(() -> minecraft.gui.setScreen(new ButtonListScreen(buttons)));
+                                minecraft.execute(() -> minecraft.gui.setScreen(new ButtonEditorScreen(null, buttons)));
                         }
                 }
         }
@@ -843,21 +807,6 @@ public final class ZeaConfig extends Config {
         /** Whether inventory buttons render; on by default (they do nothing until configured). */
         public boolean inventoryButtonsEnabled() {
                 return inventoryButtons != null && inventoryButtons.enabled;
-        }
-
-        /** Whether one button region is enabled (the master switch gates it). */
-        public boolean inventoryButtonsRegionEnabled(ButtonRegion region) {
-                if (!inventoryButtonsEnabled() || inventoryButtons.buttonPlacement == null) {
-                        return false;
-                }
-                ButtonPlacement placement = inventoryButtons.buttonPlacement;
-                return switch (region) {
-                        case TOP -> placement.top;
-                        case BOTTOM -> placement.bottom;
-                        case UNDER_SEARCH -> placement.underSearch;
-                        case LEFT -> placement.left;
-                        case RIGHT -> placement.right;
-                };
         }
 
         /** Whether the inventory search bar is shown. */

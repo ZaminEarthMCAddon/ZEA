@@ -1,7 +1,6 @@
 package net.zaminmc.zea.share;
 
 import net.zaminmc.zea.buttons.ButtonActivator;
-import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.buttons.InventoryButton;
 import net.zaminmc.zea.buttons.InventoryButtons;
 import net.zaminmc.zea.config.ZeaConfig;
@@ -53,7 +52,7 @@ class ShareCoordinatorTest {
 
 	private static InventoryButton button(String name, String command) {
 		return new InventoryButton(UUID.randomUUID(), name, command, "minecraft:compass",
-				"", "", ButtonRegion.RIGHT, 0, false, true);
+				"", "", 2, 4, true, false, 0, false, true);
 	}
 
 	private InventoryButtons buttons() {

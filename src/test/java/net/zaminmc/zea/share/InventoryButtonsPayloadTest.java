@@ -2,7 +2,6 @@ package net.zaminmc.zea.share;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.buttons.InventoryButton;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InventoryButtonsPayloadTest {
 	private static InventoryButton button(String name, String command) {
 		return new InventoryButton(UUID.randomUUID(), name, command, "minecraft:compass",
-				"", "", ButtonRegion.RIGHT, 0, false, true);
+				"", "", 2, 4, true, false, 1, false, true);
 	}
 
 	@Test
@@ -33,8 +32,10 @@ class InventoryButtonsPayloadTest {
 		assertEquals("Home", decoded.buttons().get(0).name());
 		assertEquals("spawn", decoded.buttons().get(0).command());
 		assertEquals("Shop", decoded.buttons().get(1).name());
-		assertEquals(ButtonRegion.RIGHT, decoded.buttons().get(0).region());
-		assertEquals(0, decoded.buttons().get(0).order());
+		assertEquals(2, decoded.buttons().get(0).x());
+		assertEquals(4, decoded.buttons().get(0).y());
+		assertTrue(decoded.buttons().get(0).anchorRight());
+		assertEquals(1, decoded.buttons().get(0).style());
 	}
 
 	@Test
@@ -134,8 +135,10 @@ class InventoryButtonsPayloadTest {
 
 		assertEquals(1, buttons.size());
 		InventoryButton button = buttons.get(0);
-		assertEquals(ButtonRegion.RIGHT, button.region());
-		assertEquals(0, button.order());
+		assertEquals(0, button.x());
+		assertEquals(0, button.y());
+		assertFalse(button.anchorRight());
+		assertEquals(0, button.style());
 		assertFalse(button.closeOnExecute());
 		assertTrue(button.enabled());
 	}
@@ -167,7 +170,7 @@ class InventoryButtonsPayloadTest {
 	@Test
 	void exportsNeverCarryAForwardSlashCommand() {
 		InventoryButton withSlash = new InventoryButton(UUID.randomUUID(), "Slash", "/spawn",
-				"minecraft:compass", "", "", ButtonRegion.LEFT, 0, false, true);
+				"minecraft:compass", "", "", 0, 0, false, false, 0, false, true);
 
 		List<InventoryButton> exported = InventoryButtonsPayload.of(List.of(withSlash), null).buttons();
 

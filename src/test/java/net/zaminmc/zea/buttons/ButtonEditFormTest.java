@@ -4,176 +4,98 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ButtonEditFormTest {
+	private ButtonEditForm form() {
+		return new ButtonEditForm(new InventoryButton(null, "Home", "home", "minecraft:compass", "", "",
+				2, 4, true, false, 1, false, true));
+	}
 
-        private ButtonEditForm form(InventoryButton button) {
-                return new ButtonEditForm(button);
-        }
+	@Test
+	void savesApplyEveryField() {
+		ButtonEditForm.Result result = form().save("Warp", "warp home", "minecraft:ender_pearl", "", "Warps home");
 
-        @Test
-        void savesValidValues() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
+		assertTrue(result instanceof ButtonEditForm.Result.Saved);
+		InventoryButton saved = ((ButtonEditForm.Result.Saved) result).button();
+		assertEquals("Warp", saved.name());
+		assertEquals("warp home", saved.command());
+		assertEquals("minecraft:ender_pearl", saved.icon());
+		assertEquals("Warps home", saved.tooltip());
+		// Untouched placement survives the save.
+		assertEquals(2, saved.x());
+		assertEquals(4, saved.y());
+		assertTrue(saved.anchorRight());
+		assertEquals(1, saved.style());
+	}
 
-                var result = form.save("Home", "town spawn", "minecraft:compass", "", "");
+	@Test
+	void aBlankCommandRefusesFirst() {
+		ButtonEditForm.Result result = form().save("Warp", "   ", "minecraft:compass", "", "");
 
-                var saved = assertInstanceOf(ButtonEditForm.Result.Saved.class, result);
-                assertEquals("Home", saved.button().name());
-                assertEquals("town spawn", saved.button().command());
-                assertEquals("minecraft:compass", saved.button().icon());
-                assertEquals(saved.button(), form.button(), "a successful save updates the working copy");
-        }
+		assertTrue(result instanceof ButtonEditForm.Result.Refused);
+		assertEquals(ButtonEditForm.Rejection.BAD_COMMAND, ((ButtonEditForm.Result.Refused) result).reason());
+	}
 
-        @Test
-        void textButtonsPassWithoutAnIcon() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
+	@Test
+	void aBadIconRefusesOnlyWithoutText() {
+		ButtonEditForm form = form();
 
-                var result = form.save("Hub", "hub", "", "Hub", "Teleports home");
+		assertTrue(form.save("Warp", "warp", "not an identifier", "", "")
+				instanceof ButtonEditForm.Result.Refused);
+		assertTrue(form.save("Warp", "warp", "not an identifier", "GO", "")
+				instanceof ButtonEditForm.Result.Saved);
+	}
 
-                var saved = assertInstanceOf(ButtonEditForm.Result.Saved.class, result);
-                assertTrue(saved.button().isUsable());
-                assertEquals("Teleports home", saved.button().tooltip());
-        }
+	@Test
+	void aCustomTextureIconIsValid() {
+		ButtonEditForm.Result result = form().save("Settings", "settings", "custom:settings", "", "");
 
-        @Test
-        void refusesMissingCommand() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
+		assertTrue(result instanceof ButtonEditForm.Result.Saved);
+	}
 
-                var result = form.save("Home", " ", "minecraft:compass", "", "");
+	@Test
+	void refusedSavesLeaveTheWorkingCopyUntouched() {
+		ButtonEditForm form = form();
+		InventoryButton before = form.button();
 
-                var refused = assertInstanceOf(ButtonEditForm.Result.Refused.class, result);
-                assertEquals(ButtonEditForm.Rejection.BAD_COMMAND, refused.reason());
-        }
+		form.save("Warp", "", "minecraft:compass", "", "");
 
-        @Test
-        void refusesMalformedIconWithoutText() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
+		assertEquals(before, form.button());
+	}
 
-                var result = form.save("Home", "town spawn", "not an item id", "", "");
+	@Test
+	void styleMutatesTheWorkingCopy() {
+		ButtonEditForm form = form();
 
-                var refused = assertInstanceOf(ButtonEditForm.Result.Refused.class, result);
-                assertEquals(ButtonEditForm.Rejection.BAD_ICON, refused.reason());
-        }
+		form.style(3);
 
-        @Test
-        void commandErrorWinsWhenBothAreInvalid() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
+		assertEquals(3, form.button().style());
+	}
 
-                var result = form.save("Home", "", "not an item id", "", "");
+	@Test
+	void togglesFlipAndReport() {
+		ButtonEditForm form = form();
 
-                var refused = assertInstanceOf(ButtonEditForm.Result.Refused.class, result);
-                assertEquals(ButtonEditForm.Rejection.BAD_COMMAND, refused.reason());
-        }
+		assertFalse(form.button().closeOnExecute());
+		assertTrue(form.toggleCloseOnExecute());
+		assertTrue(form.button().closeOnExecute());
 
-        @Test
-        void refusedSaveLeavesWorkingCopyUntouched() {
-                InventoryButton button = InventoryButton.newButton(1).withCommand("original");
-                ButtonEditForm form = form(button);
+		assertTrue(form.button().enabled());
+		assertFalse(form.toggleEnabled());
+		assertFalse(form.button().enabled());
+	}
 
-                form.save("Home", " ", "minecraft:compass", "", "");
+	@Test
+	void deleteNeedsTwoClicks() {
+		ButtonEditForm form = form();
 
-                assertEquals("original", form.button().command(),
-                                "the text fields stay the source of truth until a save succeeds");
-        }
+		assertFalse(form.requestDelete());
+		assertTrue(form.deleteArmed());
+		assertTrue(form.requestDelete());
 
-        @Test
-        void leadingSlashIsAcceptedAndStripped() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
-
-                var result = form.save("Home", "/town spawn", "minecraft:compass", "", "");
-
-                var saved = assertInstanceOf(ButtonEditForm.Result.Saved.class, result);
-                assertEquals("town spawn", saved.button().command());
-        }
-
-        @Test
-        void regionOrderAndFlagsMutateTheWorkingCopy() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
-
-                form.region(ButtonRegion.BOTTOM);
-                boolean close = form.toggleCloseOnExecute();
-                boolean enabled = form.toggleEnabled();
-                boolean later = form.orderLater();
-                boolean earlier = form.orderEarlier();
-
-                assertTrue(close);
-                assertFalse(enabled);
-                assertTrue(later);
-                assertTrue(earlier);
-                assertEquals(ButtonRegion.BOTTOM, form.button().region());
-                assertFalse(form.button().enabled());
-                assertTrue(form.button().closeOnExecute());
-                assertEquals(0, form.button().order());
-        }
-
-        @Test
-        void orderMovesStopAtTheRegionBounds() {
-                ButtonEditForm form = form(InventoryButton.newButton(1).withOrder(0));
-
-                assertFalse(form.orderEarlier());
-                form.orderFirst();
-                assertEquals(0, form.button().order());
-                while (form.orderLater()) {
-                        // climb to the top of the region
-                }
-                assertEquals(ButtonRegion.RIGHT.capacity() - 1, form.button().order());
-                assertFalse(form.orderLater());
-        }
-
-        @Test
-        void cycleRegionWrapsAround() {
-                ButtonEditForm form = form(InventoryButton.newButton(1).withRegion(ButtonRegion.RIGHT));
-
-                form.cycleRegion();
-                assertEquals(ButtonRegion.TOP, form.button().region());
-                form.cycleRegion();
-                form.cycleRegion();
-                form.cycleRegion();
-                form.cycleRegion();
-                assertEquals(ButtonRegion.RIGHT, form.button().region());
-        }
-
-        @Test
-        void deleteRequiresTwoClicks() {
-                ButtonEditForm form = form(InventoryButton.newButton(1));
-
-                assertFalse(form.deleteArmed());
-                assertFalse(form.requestDelete(), "the first click only arms");
-                assertTrue(form.deleteArmed());
-                assertTrue(form.requestDelete(), "the second click deletes");
-        }
-
-        @Test
-        void rejectionKeysMatchTheLangFileConvention() {
-                assertEquals("command", ButtonEditForm.Rejection.BAD_COMMAND.key());
-                assertEquals("icon", ButtonEditForm.Rejection.BAD_ICON.key());
-        }
-
-        @Test
-        void formKeepsButtonIdentityAcrossEdits() {
-                InventoryButton button = InventoryButton.newButton(1);
-                ButtonEditForm form = form(button);
-
-                form.region(ButtonRegion.BOTTOM);
-                form.toggleEnabled();
-                var result = form.save("Renamed", "home", "minecraft:compass", "", "");
-
-                var saved = assertInstanceOf(ButtonEditForm.Result.Saved.class, result);
-                assertEquals(button.id(), saved.button().id());
-                assertNotEquals(button, saved.button());
-        }
-
-        @Test
-        void nullRegionIsIgnored() {
-                ButtonEditForm form = form(InventoryButton.newButton(1).withRegion(ButtonRegion.LEFT));
-
-                form.region(null);
-
-                assertEquals(ButtonRegion.LEFT, form.button().region());
-                assertNull(null);
-        }
+		form.disarmDelete();
+		assertFalse(form.deleteArmed());
+		assertFalse(form.requestDelete());
+	}
 }

@@ -15,246 +15,217 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InventoryButtonStoreTest {
-        @TempDir
-        Path tempDir;
+	@TempDir
+	Path tempDir;
 
-        private InventoryButtonStore newStore() {
-                return new InventoryButtonStore(tempDir.resolve("buttons.json"));
-        }
+	private Path file() {
+		return tempDir.resolve("buttons.json");
+	}
 
-        private static InventoryButton usable(String name) {
-                return InventoryButton.newButton(1).withName(name).withCommand("town spawn");
-        }
+	private InventoryButtonStore newStore() {
+		return new InventoryButtonStore(file());
+	}
 
-        @Test
-        void missingFileYieldsNoButtons() {
-                assertTrue(newStore().load().isEmpty());
-        }
+	private static InventoryButton usable(String name) {
+		return InventoryButton.newButton(1).withName(name).withCommand("town spawn");
+	}
 
-        @Test
-        void roundTripsButtons() {
-                InventoryButtonStore store = newStore();
-                List<InventoryButton> buttons = List.of(
-                                usable("Home").withIcon("minecraft:compass"),
-                                usable("Trade").withRegion(ButtonRegion.BOTTOM).withOrder(2).withEnabled(false),
-                                usable("Hub").withText("Hub").withCloseOnExecute(true));
+	private void write(String json) throws IOException {
+		Files.write(file(), json.getBytes(UTF_8));
+	}
 
-                store.save(buttons);
-                List<InventoryButton> loaded = store.load();
+	@Test
+	void missingFileYieldsNoButtons() {
+		assertTrue(newStore().load().isEmpty());
+	}
 
-                // The store normalizes on the way through (regions sorted,
-                // orders dense) but every field survives, keyed by identity.
-                assertEquals(3, loaded.size());
-                InventoryButton home = loaded.stream().filter(b -> b.name().equals("Home")).findFirst().orElseThrow();
-                InventoryButton trade = loaded.stream().filter(b -> b.name().equals("Trade")).findFirst().orElseThrow();
-                InventoryButton hub = loaded.stream().filter(b -> b.name().equals("Hub")).findFirst().orElseThrow();
-                assertEquals("minecraft:compass", home.icon());
-                assertEquals(ButtonRegion.BOTTOM, trade.region());
-                assertEquals(0, trade.order(), "sparse orders are re-packed densely");
-                assertFalse(trade.enabled());
-                assertEquals("Hub", hub.text());
-                assertTrue(hub.closeOnExecute());
-                // And the normalization is stable: a second round trip is the identity.
-                store.save(loaded);
-                assertEquals(loaded, store.load());
-        }
+	@Test
+	void roundTripsButtons() {
+		InventoryButtonStore store = newStore();
+		List<InventoryButton> buttons = List.of(
+				usable("Home").withIcon("minecraft:compass"),
+				usable("Trade").withPosition(40, 100, false, true).withEnabled(false),
+				usable("Hub").withText("Hub").withCloseOnExecute(true).withStyle(3));
 
-        @Test
-        void corruptFileYieldsNoButtonsAndIsPreserved() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, "{ not json", UTF_8);
+		store.save(buttons);
+		List<InventoryButton> loaded = store.load();
 
-                assertTrue(newStore().load().isEmpty());
-                assertEquals("{ not json", Files.readString(tempDir.resolve("buttons.json.corrupted"), UTF_8));
-        }
+		assertEquals(3, loaded.size());
+		InventoryButton home = loaded.stream().filter(b -> b.name().equals("Home")).findFirst().orElseThrow();
+		InventoryButton trade = loaded.stream().filter(b -> b.name().equals("Trade")).findFirst().orElseThrow();
+		InventoryButton hub = loaded.stream().filter(b -> b.name().equals("Hub")).findFirst().orElseThrow();
+		assertEquals("minecraft:compass", home.icon());
+		assertTrue(home.anchorRight(), "the new-button default placement survives");
+		assertEquals(40, trade.x());
+		assertEquals(100, trade.y());
+		assertTrue(trade.anchorBottom());
+		assertFalse(trade.enabled());
+		assertEquals("Hub", hub.text());
+		assertTrue(hub.closeOnExecute());
+		assertEquals(3, hub.style());
+		// And a second round trip is the identity.
+		store.save(loaded);
+		assertEquals(loaded, store.load());
+	}
 
-        @Test
-        void nullEntriesAreDroppedAndBlankCommandsKept() throws IOException {
-                // A v2 file: one good, one template with a blank command, one damaged.
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": "Good", "command": "town spawn", "icon": "minecraft:compass" },
-                                    { "name": "Template", "icon": "minecraft:chest", "order": 1 },
-                                    null
-                                  ]
-                                }
-                                """, UTF_8);
+	@Test
+	void versionThreeFilesLoadDirectly() throws IOException {
+		write("""
+				{"version":3,"buttons":[
+				  {"id":"11111111-1111-1111-1111-111111111111","name":"Home","command":"home",
+				   "icon":"minecraft:compass","x":2,"y":4,"anchorRight":true,"anchorBottom":false,
+				   "style":2,"closeOnExecute":false,"enabled":true}
+				]}
+				""");
 
-                List<InventoryButton> loaded = newStore().load();
+		List<InventoryButton> loaded = newStore().load();
 
-                assertEquals(2, loaded.size());
-                InventoryButton good = loaded.stream().filter(b -> b.name().equals("Good")).findFirst().orElseThrow();
-                InventoryButton template = loaded.stream().filter(b -> b.name().equals("Template")).findFirst().orElseThrow();
-                assertEquals("town spawn", good.command());
-                assertEquals("", template.command(), "preset templates survive persistence");
-                assertEquals(0, good.order());
-                assertEquals(1, template.order());
-        }
+		assertEquals(1, loaded.size());
+		assertEquals("Home", loaded.get(0).name());
+		assertEquals(2, loaded.get(0).x());
+		assertTrue(loaded.get(0).anchorRight());
+		assertEquals(2, loaded.get(0).style());
+	}
 
-        @Test
-        void nullFieldsAreTolerated() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": null, "command": "/g hi", "icon": "minecraft:paper", "text": null,
-                                      "region": null, "order": null, "closeOnExecute": null, "enabled": null }
-                                  ]
-                                }
-                                """, UTF_8);
+	@Test
+	void partialEntriesDegradeInsteadOfFailing() throws IOException {
+		write("""
+				{"version":3,"buttons":[
+				  {"name":"Home","command":"home"},
+				  null,
+				  {"name":"Broken","command":"","icon":""}
+				]}
+				""");
 
-                List<InventoryButton> loaded = newStore().load();
+		List<InventoryButton> loaded = newStore().load();
 
-                assertEquals(1, loaded.size());
-                assertEquals(InventoryButton.DEFAULT_NAME, loaded.get(0).name());
-                assertEquals("g hi", loaded.get(0).command());
-                assertEquals(ButtonRegion.RIGHT, loaded.get(0).region());
-                assertEquals(0, loaded.get(0).order());
-                assertFalse(loaded.get(0).closeOnExecute());
-                assertTrue(loaded.get(0).enabled());
-        }
+		// A null entry is dropped (it carries nothing to keep); a damaged
+		// but present entry degrades into inert data instead of failing
+		// the whole file.
+		assertEquals(2, loaded.size());
+		assertEquals("Home", loaded.get(0).name());
+		assertFalse(loaded.get(1).isUsable());
+	}
 
-        @Test
-        void duplicatedIdsAreReissuedOnLoad() throws IOException {
-                UUID shared = UUID.randomUUID();
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "id": "%s", "name": "First", "command": "spawn", "icon": "minecraft:compass" },
-                                    { "id": "%s", "name": "Second", "command": "spawn", "icon": "minecraft:paper" }
-                                  ]
-                                }
-                                """.formatted(shared, shared), UTF_8);
+	@Test
+	void duplicateIdentitiesAreReissued() throws IOException {
+		write("""
+				{"version":3,"buttons":[
+				  {"id":"11111111-1111-1111-1111-111111111111","name":"A","command":"a","icon":"minecraft:stone"},
+				  {"id":"11111111-1111-1111-1111-111111111111","name":"B","command":"b","icon":"minecraft:stone"}
+				]}
+				""");
 
-                List<InventoryButton> loaded = newStore().load();
+		List<InventoryButton> loaded = newStore().load();
 
-                assertEquals(2, loaded.size());
-                assertEquals(2, loaded.stream().map(InventoryButton::id).distinct().count(),
-                                "each button must keep a unique identity");
-        }
+		assertEquals(2, loaded.size());
+		long distinct = loaded.stream().map(InventoryButton::id).distinct().count();
+		assertEquals(2, distinct);
+	}
 
-        @Test
-        void saveWritesTheVersionedShape() throws IOException {
-                newStore().save(List.of(usable("Home")));
+	@Test
+	void versionOneCornerAnchorsTranslateExactly() throws IOException {
+		write("""
+				{"version":1,"buttons":[
+				  {"id":"11111111-1111-1111-1111-111111111111","name":"TL","command":"a","icon":"minecraft:stone",
+				   "anchor":"TOP_LEFT","offsetX":10,"offsetY":-20},
+				  {"name":"BR","command":"b","icon":"minecraft:stone",
+				   "anchor":"BOTTOM_RIGHT","offsetX":30,"offsetY":40}
+				]}
+				""");
 
-                String json = Files.readString(tempDir.resolve("buttons.json"), UTF_8);
-                assertTrue(json.contains("\"version\": 2"), "file should carry its schema version");
-                assertTrue(json.contains("\"buttons\": ["), "file should carry the button list");
-                assertTrue(json.contains("\"region\""), "v2 entries carry the placement region");
-        }
+		List<InventoryButton> loaded = newStore().load();
 
-        @Test
-        void overwritingKeepsTheLastState() {
-                InventoryButtonStore store = newStore();
-                store.save(List.of(usable("First")));
-                store.save(List.of(usable("Second"), usable("Third")));
+		assertEquals(2, loaded.size());
+		InventoryButton tl = loaded.get(0);
+		InventoryButton br = loaded.get(1);
+		assertEquals(10, tl.x());
+		assertEquals(-20, tl.y());
+		assertFalse(tl.anchorRight());
+		assertFalse(tl.anchorBottom());
+		assertEquals(30, br.x());
+		assertEquals(40, br.y());
+		assertTrue(br.anchorRight());
+		assertTrue(br.anchorBottom());
+	}
 
-                List<InventoryButton> loaded = store.load();
+	@Test
+	void versionOneDefaultsFillMissingOffsets() throws IOException {
+		write("""
+				{"version":0,"buttons":[
+				  {"name":"Old","command":"old","icon":"minecraft:stone"}
+				]}
+				""");
 
-                assertEquals(2, loaded.size());
-                List<String> names = loaded.stream().map(InventoryButton::name).toList();
-                assertTrue(names.containsAll(List.of("Second", "Third")));
-                org.junit.jupiter.api.Assertions.assertFalse(names.contains("First"));
-        }
+		List<InventoryButton> loaded = newStore().load();
 
-        // ---- The v1 → v2 migration ----
+		assertEquals(1, loaded.size());
+		assertEquals(InventoryButton.DEFAULT_OFFSET_X_V1, loaded.get(0).x());
+		assertEquals(InventoryButton.DEFAULT_OFFSET_Y_V1, loaded.get(0).y());
+	}
 
-        @Test
-        void v1TopCornersMigrateToTheTopRowInHorizontalOrder() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 1,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "anchor": "TOP_LEFT", "offsetX": 20, "offsetY": 5 },
-                                    { "name": "B", "command": "spawn", "icon": "minecraft:paper",
-                                      "anchor": "TOP_LEFT", "offsetX": 60, "offsetY": 5 },
-                                    { "name": "C", "command": "spawn", "icon": "minecraft:book",
-                                      "anchor": "TOP_RIGHT", "offsetX": -40, "offsetY": 5 }
-                                  ]
-                                }
-                                """, UTF_8);
+	@Test
+	void versionTwoRegionsResolveToTheirExactPixels() throws IOException {
+		write("""
+				{"version":2,"buttons":[
+				  {"id":"11111111-1111-1111-1111-111111111111","name":"Top0","command":"a","icon":"minecraft:stone",
+				   "region":"TOP","order":0},
+				  {"name":"Right3","command":"b","icon":"minecraft:stone",
+				   "region":"RIGHT","order":3},
+				  {"name":"Left1","command":"c","icon":"minecraft:stone",
+				   "region":"LEFT","order":1}
+				]}
+				""");
 
-                List<InventoryButton> loaded = newStore().load();
+		List<InventoryButton> loaded = newStore().load();
 
-                assertEquals(3, loaded.size());
-                assertTrue(loaded.stream().allMatch(button -> button.region() == ButtonRegion.TOP));
-                // Old horizontal offsets become orders: A at x=20 sorts before B at
-                // x=60, and the right-anchored C (measured from the right edge)
-                // sorts last; the repack then renumbers densely.
-                assertEquals("A", loaded.get(0).name());
-                assertEquals("B", loaded.get(1).name());
-                assertEquals("C", loaded.get(2).name());
-                assertEquals(0, loaded.get(0).order(), "orders are re-packed densely");
-                assertEquals(1, loaded.get(1).order());
-                assertEquals(2, loaded.get(2).order());
-        }
+		assertEquals(3, loaded.size());
+		InventoryButton top = loaded.get(0);
+		InventoryButton right = loaded.get(1);
+		InventoryButton left = loaded.get(2);
+		// Top row: order 0 at x = 0, y = -18 - 2, unanchored.
+		assertEquals(0, top.x());
+		assertEquals(-ButtonGeometry.SIZE - ButtonGeometry.GAP, top.y());
+		assertFalse(top.anchorRight());
+		// Right column: order 3 at x = +2 (anchored right), y = 3 * 20.
+		assertEquals(ButtonGeometry.GAP, right.x());
+		assertEquals(3 * 20, right.y());
+		assertTrue(right.anchorRight());
+		// Left column: order 1 at x = -18 - 2, y = 1 * 20.
+		assertEquals(-ButtonGeometry.SIZE - ButtonGeometry.GAP, left.x());
+		assertEquals(20, left.y());
+	}
 
-        @Test
-        void v1BottomCornersMigrateToTheBottomRow() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 1,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "anchor": "BOTTOM_LEFT", "offsetX": 4, "offsetY": 2 }
-                                  ]
-                                }
-                                """, UTF_8);
+	@Test
+	void versionTwoBottomRowsStackUnderTheSearchBar() throws IOException {
+		write("""
+				{"version":2,"buttons":[
+				  {"name":"Under","command":"a","icon":"minecraft:stone","region":"UNDER_SEARCH","order":0},
+				  {"name":"Bottom","command":"b","icon":"minecraft:stone","region":"BOTTOM","order":2}
+				]}
+				""");
 
-                List<InventoryButton> loaded = newStore().load();
+		List<InventoryButton> loaded = newStore().load();
 
-                assertEquals(1, loaded.size());
-                assertEquals(ButtonRegion.BOTTOM, loaded.get(0).region());
-        }
+		InventoryButton under = loaded.get(0);
+		InventoryButton bottom = loaded.get(1);
+		// Under-search: below the GUI plus bar row, anchored bottom.
+		assertEquals(0, under.x());
+		assertEquals(ButtonGeometry.GAP + 12 + ButtonGeometry.GAP, under.y());
+		assertTrue(under.anchorBottom());
+		// Bottom: one more button row below the occupied under-search row.
+		assertEquals(2 * 20, bottom.x());
+		assertEquals(ButtonGeometry.GAP + 12 + ButtonGeometry.GAP + 20, bottom.y());
+		assertTrue(bottom.anchorBottom());
+	}
 
-        @Test
-        void v1ButtonsPushedPastTheRightEdgeMigrateToTheRightColumn() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 1,
-                                  "buttons": [
-                                    { "name": "Side", "command": "spawn", "icon": "minecraft:compass",
-                                      "anchor": "TOP_RIGHT", "offsetX": 22, "offsetY": 2 }
-                                  ]
-                                }
-                                """, UTF_8);
+	@Test
+	void savingRewritesTheFileInTheCurrentShape() throws IOException {
+		InventoryButtonStore store = newStore();
+		store.save(List.of(usable("Home")));
 
-                List<InventoryButton> loaded = newStore().load();
-
-                assertEquals(1, loaded.size());
-                assertEquals(ButtonRegion.RIGHT, loaded.get(0).region());
-                assertEquals(0, loaded.get(0).order());
-        }
-
-        @Test
-        void v1MigrationSurvivesTheRoundTripAsV2() throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, """
-                                {
-                                  "version": 1,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "anchor": "TOP_LEFT", "offsetX": 0, "offsetY": 0 }
-                                  ]
-                                }
-                                """, UTF_8);
-                InventoryButtonStore store = newStore();
-                List<InventoryButton> loaded = store.load();
-
-                store.save(loaded);
-
-                assertTrue(Files.readString(file, UTF_8).contains("\"version\": 2"),
-                                "the first save rewrites the file in v2 shape");
-                assertEquals(loaded, store.load(), "the migration's output is already normalized");
-        }
+		String json = Files.readString(file());
+		assertTrue(json.contains("\"version\": 3"));
+		assertTrue(json.contains("\"anchorRight\""));
+	}
 }

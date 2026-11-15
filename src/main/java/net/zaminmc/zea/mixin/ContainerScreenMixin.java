@@ -13,7 +13,7 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.zaminmc.zea.ZeaClient;
-import net.zaminmc.zea.buttons.ButtonEditScreen;
+import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.ButtonGeometry;
 import net.zaminmc.zea.buttons.ButtonRenderer;
 import net.zaminmc.zea.buttons.InventoryButton;
@@ -146,9 +146,7 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                                         leftPos,
                                         topPos,
                                         mouseX,
-                                        mouseY,
-                                        buttons.editMode(),
-                                        buttons.drag());
+                                        mouseY);
                 }
         }
 
@@ -165,7 +163,6 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
 
         /** The layout inputs for this screen right now. */
         private ButtonGeometry.Inputs zea$inputs(AbstractContainerScreen<?> self) {
-                boolean searchBar = zea$searchBar != null && zea$searchBar.visible;
                 return new ButtonGeometry.Inputs(
                                 leftPos,
                                 topPos,
@@ -173,15 +170,13 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                                 imageHeight,
                                 self.width,
                                 self.height,
-                                searchBar,
+                                self instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen,
                                 self instanceof RecipeBookAccess access && access.zea$recipeBookOpen());
         }
 
         private List<ButtonGeometry.Placement> zea$placements(InventoryButtons buttons,
                         AbstractContainerScreen<?> self) {
-                ZeaConfig config = ZeaClient.config();
-                return ButtonGeometry.placements(buttons.buttons(), zea$inputs(self),
-                                region -> config == null || config.inventoryButtonsRegionEnabled(region));
+                return ButtonGeometry.placements(buttons.buttons(), zea$inputs(self));
         }
 
         // ------------------------------------------------------------------
@@ -333,27 +328,22 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         // ------------------------------------------------------------------
 
         /**
-         * Key routing, in priority order: edit-mode Esc and its keybind,
-         * the search bar (while focused it owns every key — Esc first
-         * leaves matching mode, then focus, and the inventory key defocuses
-         * instead of closing, so typing never triggers the number-key
-         * swaps or anything else underneath), and the slot lock key.
+         * Key routing, in priority order: the button-editor keybind
+         * (opens the NEU-style editor over this screen), the search bar
+         * (while focused it owns every key — Esc first leaves matching
+         * mode, then focus, and the inventory key defocuses instead of
+         * closing, so typing never triggers the number-key swaps or
+         * anything else underneath), and the slot lock key.
          */
         @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
         private void zea$handleKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
-                if (zea$buttonsActive(buttons)) {
-                        if (buttons.editMode() && event.isEscape()) {
-                                buttons.toggleEditMode();
-                                cir.setReturnValue(true);
-                                return;
-                        }
-                        if (ZeaKeys.EDIT_BUTTONS.matches(event)) {
-                                buttons.toggleEditMode();
-                                cir.setReturnValue(true);
-                                return;
-                        }
+                if (zea$buttonsActive(buttons) && ZeaKeys.EDIT_BUTTONS.matches(event)) {
+                        Minecraft minecraft = Minecraft.getInstance();
+                        minecraft.gui.setScreen(new ButtonEditorScreen(self, buttons));
+                        cir.setReturnValue(true);
+                        return;
                 }
                 SearchBarWidget bar = zea$searchBar;
                 if (bar != null && self.getFocused() == bar) {
@@ -413,12 +403,13 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
 
         /**
          * Mouse routing: a stale pairing ends when its key is no longer
-         * held; edit mode grabs and edits buttons; a pairing click on a
-         * hotbar slot binds; a normal click on a button runs its command
-         * (consumed without running while an item is carried, so the click
-         * cannot drop it); the search bar's double-click toggles matching
-         * mode; and clicking anywhere else releases the bar's focus so
-         * typing resumes to the inventory.
+         * held; a pairing click on a hotbar slot binds; a normal click
+         * on a button runs its command (consumed without running while
+         * an item is carried, so the click cannot drop it); the search
+         * bar's double-click toggles matching mode; and clicking
+         * anywhere else releases the bar's focus so typing resumes to
+         * the inventory. Button editing lives in the editor screen the
+         * keybind opens — not in place.
          */
         @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
         private void zea$onMouseClick(MouseButtonEvent event, boolean doubleClick,
@@ -430,12 +421,6 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                         locks.endPairing();
                 }
                 if (zea$buttonsActive(buttons)) {
-                        if (buttons.editMode()) {
-                                if (zea$handleEditClick(buttons, self, event)) {
-                                        cir.setReturnValue(true);
-                                }
-                                return;
-                        }
                         ButtonGeometry.Placement hit = ButtonGeometry.at(zea$placements(buttons, self),
                                         event.x(), event.y());
                         if (hit != null) {
@@ -492,86 +477,22 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                 }
         }
 
-        @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
-        private void zea$onButtonDrag(MouseButtonEvent event, double dragX, double dragY,
-                        CallbackInfoReturnable<Boolean> cir) {
-                InventoryButtons buttons = ZeaClient.inventoryButtons();
-                if (!zea$buttonsActive(buttons) || !buttons.drag().isActive()) {
-                        return;
-                }
-                buttons.drag().moveTo(event.x(), event.y());
-                cir.setReturnValue(true);
-        }
-
         /**
-         * Releasing a drag converts the preview position into a region
-         * move and persists it. Otherwise, releasing over a button is
-         * consumed too, so vanilla never treats the button area as
-         * "outside the GUI" (which would drop a carried item). Mid-
-         * quick-craft releases pass through so the drag resolves normally.
+         * A release over a button is consumed, so vanilla never treats
+         * the button area as "outside the GUI" (which would drop a
+         * carried item). Mid-quick-craft releases pass through so the
+         * drag resolves normally.
          */
         @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
         private void zea$onButtonRelease(MouseButtonEvent event, CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
-                if (!zea$buttonsActive(buttons)) {
-                        return;
-                }
-                if (buttons.drag().isActive()) {
-                        InventoryButton dragged = buttons.drag().end();
-                        if (dragged != null) {
-                                ButtonGeometry.DropTarget target = ButtonGeometry.dropTarget(
-                                                zea$inputs(self),
-                                                buttons.drag().previewX(),
-                                                buttons.drag().previewY(),
-                                                zea$searchBar != null && zea$searchBar.visible);
-                                if (target != null) {
-                                        buttons.move(dragged.id(), target.region(), target.index());
-                                }
-                        }
-                        cir.setReturnValue(true);
-                        return;
-                }
-                if (isQuickCrafting) {
+                if (!zea$buttonsActive(buttons) || isQuickCrafting) {
                         return;
                 }
                 if (ButtonGeometry.editableAt(zea$placements(buttons, self), event.x(), event.y()) != null) {
                         cir.setReturnValue(true);
                 }
-        }
-
-        /**
-         * Edit-mode clicks: buttons are grabbed (left) or edited
-         * (right); the ghost button in the top row opens the edit form
-         * for a new button. Returns whether the click was consumed.
-         */
-        private boolean zea$handleEditClick(InventoryButtons buttons, AbstractContainerScreen<?> self,
-                        MouseButtonEvent event) {
-                ButtonGeometry.Placement hit = ButtonGeometry.editableAt(zea$placements(buttons, self),
-                                event.x(), event.y());
-                if (hit != null) {
-                        Minecraft minecraft = Minecraft.getInstance();
-                        if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
-                                minecraft.gui.setScreen(new ButtonEditScreen(self, hit.button(), buttons));
-                        } else if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
-                                buttons.drag().begin(hit.button(), hit.x(), hit.y(), event.x(), event.y());
-                        }
-                        return true;
-                }
-                int topCount = buttons.regionButtons(net.zaminmc.zea.buttons.ButtonRegion.TOP).size();
-                if (topCount < net.zaminmc.zea.buttons.ButtonRegion.TOP.capacity()
-                                && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
-                        int ghostX = leftPos + topCount * (ButtonGeometry.SIZE + ButtonGeometry.GAP);
-                        int ghostY = topPos - ButtonGeometry.SIZE - ButtonGeometry.GAP;
-                        if (ButtonGeometry.contains(ghostX, ghostY, ButtonGeometry.SIZE, ButtonGeometry.SIZE,
-                                        event.x(), event.y())) {
-                                Minecraft minecraft = Minecraft.getInstance();
-                                minecraft.gui.setScreen(new ButtonEditScreen(self,
-                                                InventoryButton.newButton(buttons.buttons().size() + 1), buttons));
-                                return true;
-                        }
-                }
-                return false;
         }
 
         // ------------------------------------------------------------------
@@ -633,14 +554,10 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         // Close
         // ------------------------------------------------------------------
 
-        /** A closed screen must not keep a half-finished drag, search or pairing alive. */
+        /** A closed screen must not keep a half-finished search or pairing alive. */
         @Inject(method = "removed", at = @At("HEAD"))
         private void zea$cancelTransientState(CallbackInfo ci) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
-                InventoryButtons buttons = ZeaClient.inventoryButtons();
-                if (buttons != null) {
-                        buttons.drag().cancel();
-                }
                 SlotLocks locks = ZeaClient.slotLocks();
                 if (locks != null) {
                         locks.endPairing();

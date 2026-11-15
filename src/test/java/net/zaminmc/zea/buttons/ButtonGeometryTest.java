@@ -12,198 +12,180 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ButtonGeometryTest {
-        private static final int LEFT = 40;
-        private static final int TOP = 20;
-        private static final int WIDTH = 176;
-        private static final int HEIGHT = 166;
-        private static final int SCREEN_W = 320;
-        private static final int SCREEN_H = 240;
+	private InventoryButton at(int x, int y) {
+		return new InventoryButton(UUID.randomUUID(), "b", "cmd", "minecraft:stone", "", "",
+				x, y, false, false, 0, false, true);
+	}
 
-        private static ButtonGeometry.Inputs inputs(boolean searchBar, boolean recipeBook) {
-                return new ButtonGeometry.Inputs(LEFT, TOP, WIDTH, HEIGHT, SCREEN_W, SCREEN_H, searchBar, recipeBook);
-        }
+	private InventoryButton anchored(int x, int y, boolean right, boolean bottom) {
+		return new InventoryButton(UUID.randomUUID(), "b", "cmd", "minecraft:stone", "", "",
+				x, y, right, bottom, 0, false, true);
+	}
 
-        private static InventoryButton button(ButtonRegion region, int order) {
-                return InventoryButton.newButton(order + 1)
-                                .withCommand("g hi")
-                                .withRegion(region)
-                                .withOrder(order);
-        }
+	private ButtonGeometry.Inputs canvas(boolean playerInventory) {
+		return new ButtonGeometry.Inputs(100, 50, 176, 166, 400, 300, playerInventory, false);
+	}
 
-        private static List<ButtonGeometry.Placement> placements(ButtonGeometry.Inputs inputs,
-                        ButtonRegion... regions) {
-                List<InventoryButton> buttons = new java.util.ArrayList<>();
-                int i = 0;
-                for (ButtonRegion region : regions) {
-                        buttons.add(button(region, i++));
-                }
-                return ButtonGeometry.placements(buttons, inputs, region -> true);
-        }
+	@Test
+	void positionsResolveAgainstTheCornerTheAnchorsPick() {
+		ButtonGeometry.Inputs inputs = canvas(false);
+		// The plain case sits in the inventory band, where foreign
+		// containers do render unanchored buttons.
+		ButtonGeometry.Placement plain = ButtonGeometry.placements(
+				List.of(at(2, 100)), inputs).get(0);
+		assertEquals(102, plain.x());
+		assertEquals(150, plain.y());
+		assertTrue(plain.rendered());
 
-        /** The placement of the (single) button of one region in a placements list. */
-        private static ButtonGeometry.Placement of(List<ButtonGeometry.Placement> placements, ButtonRegion region) {
-                for (ButtonGeometry.Placement placement : placements) {
-                        if (placement.button().region() == region) {
-                                return placement;
-                        }
-                }
-                throw new AssertionError("no placement for " + region);
-        }
+		ButtonGeometry.Placement right = ButtonGeometry.placements(
+				List.of(anchored(2, 4, true, false)), inputs).get(0);
+		assertEquals(100 + 176 + 2, right.x());
+		assertEquals(54, right.y());
 
-        @Test
-        void topRowSitsAboveTheGuiAndSpreadsLeftToRight() {
-                List<ButtonGeometry.Placement> placed = placements(inputs(true, false),
-                                ButtonRegion.TOP, ButtonRegion.TOP, ButtonRegion.TOP);
-                assertEquals(LEFT, placed.get(0).x());
-                assertEquals(TOP - ButtonGeometry.SIZE - ButtonGeometry.GAP, placed.get(0).y());
-                assertEquals(LEFT + ButtonGeometry.SIZE + ButtonGeometry.GAP, placed.get(1).x());
-                assertEquals(LEFT + 2 * (ButtonGeometry.SIZE + ButtonGeometry.GAP), placed.get(2).x());
-                assertTrue(placed.stream().allMatch(ButtonGeometry.Placement::rendered));
-        }
+		ButtonGeometry.Placement bottom = ButtonGeometry.placements(
+				List.of(anchored(2, 4, false, true)), inputs).get(0);
+		assertEquals(102, bottom.x());
+		assertEquals(50 + 166 + 4, bottom.y());
+	}
 
-        @Test
-        void columnsSitBesideTheGuiAndGrowDownward() {
-                List<ButtonGeometry.Placement> placed = placements(inputs(true, false),
-                                ButtonRegion.LEFT, ButtonRegion.RIGHT, ButtonRegion.RIGHT);
-                ButtonGeometry.Placement left = of(placed, ButtonRegion.LEFT);
-                List<ButtonGeometry.Placement> rights = placed.stream()
-                                .filter(p -> p.button().region() == ButtonRegion.RIGHT).toList();
-                assertEquals(LEFT - ButtonGeometry.SIZE - ButtonGeometry.GAP, left.x());
-                assertEquals(TOP, left.y());
-                assertEquals(LEFT + WIDTH + ButtonGeometry.GAP, rights.get(0).x());
-                assertEquals(TOP + ButtonGeometry.SIZE + ButtonGeometry.GAP, rights.get(1).y());
-        }
+	@Test
+	void thePlayerInventoryRendersEverythingAsAuthored() {
+		ButtonGeometry.Placement inBand = ButtonGeometry.placements(
+				List.of(at(80, 10)), canvas(true)).get(0);
 
-        @Test
-        void searchBarStacksUnderSearchThenBottomBelowIt() {
-                ButtonGeometry.Inputs withBar = inputs(true, false);
-                ButtonGeometry.Inputs withoutBar = inputs(false, false);
-                int barBottom = TOP + HEIGHT + ButtonGeometry.GAP + ButtonGeometry.SEARCH_BAR_HEIGHT + ButtonGeometry.GAP;
+		assertTrue(inBand.rendered(), "the container band rule does not apply to the player's own inventory");
+	}
 
-                // Under-search buttons sit directly below the bar.
-                List<ButtonGeometry.Placement> combined = placements(withBar,
-                                ButtonRegion.UNDER_SEARCH, ButtonRegion.UNDER_SEARCH, ButtonRegion.BOTTOM);
-                ButtonGeometry.Placement under = of(combined, ButtonRegion.UNDER_SEARCH);
-                ButtonGeometry.Placement bottom = of(combined, ButtonRegion.BOTTOM);
-                assertEquals(barBottom, under.y());
-                assertEquals(LEFT, under.x());
-                // The bottom row stacks below the under-search row when it is occupied…
-                assertEquals(barBottom + ButtonGeometry.SIZE + ButtonGeometry.GAP, bottom.y());
+	@Test
+	void foreignContainersHideUnanchoredButtonsInTheSlotBand() {
+		ButtonGeometry.Placement inBand = ButtonGeometry.placements(
+				List.of(at(80, 10)), canvas(false)).get(0);
 
-                // …and moves up right under the bar when it is not.
-                List<ButtonGeometry.Placement> bottomAlone = placements(withBar, ButtonRegion.BOTTOM);
-                assertEquals(barBottom, of(bottomAlone, ButtonRegion.BOTTOM).y());
+		assertFalse(inBand.rendered(), "an unanchored button over live slots must not render");
 
-                // Without the bar, the bottom row sits flush under the GUI
-                // and the under-search region has no home at all.
-                List<ButtonGeometry.Placement> bottomNoBar = placements(withoutBar, ButtonRegion.BOTTOM);
-                assertEquals(TOP + HEIGHT + ButtonGeometry.GAP, of(bottomNoBar, ButtonRegion.BOTTOM).y());
-                List<ButtonGeometry.Placement> underNoBar = placements(withoutBar, ButtonRegion.UNDER_SEARCH);
-                assertFalse(of(underNoBar, ButtonRegion.UNDER_SEARCH).rendered());
-        }
+		// Anchored buttons measure from the edges and sit outside the band.
+		ButtonGeometry.Placement anchoredOut = ButtonGeometry.placements(
+				List.of(anchored(-20, 10, true, false)), canvas(false)).get(0);
+		assertTrue(anchoredOut.rendered());
+	}
 
-        @Test
-        void recipeBookHidesTheLeftColumnOnly() {
-                List<ButtonGeometry.Placement> open = placements(inputs(true, true),
-                                ButtonRegion.LEFT, ButtonRegion.RIGHT, ButtonRegion.TOP);
-                assertFalse(of(open, ButtonRegion.LEFT).rendered());
-                assertTrue(of(open, ButtonRegion.RIGHT).rendered());
-                assertTrue(of(open, ButtonRegion.TOP).rendered());
+	@Test
+	void theInventoryBandRidesDownOnTallerContainers() {
+		ButtonGeometry.Inputs tall = new ButtonGeometry.Inputs(100, 20, 176, 222, 400, 300, false, false);
+		ButtonGeometry.Placement inInventoryBand = ButtonGeometry.placements(
+				List.of(at(2, 100)), tall).get(0);
 
-                List<ButtonGeometry.Placement> closed = placements(inputs(true, false), ButtonRegion.LEFT);
-                assertTrue(of(closed, ButtonRegion.LEFT).rendered());
-        }
+		// 100 (canvas y) + (222 - 166) taller = rides down 56.
+		assertEquals(20 + 100 + 56, inInventoryBand.y());
+	}
 
-        @Test
-        void beyondCapacityButtonsAreHiddenNotOverlapping() {
-                List<InventoryButton> crowded = new java.util.ArrayList<>();
-                for (int i = 0; i < ButtonRegion.TOP.capacity() + 3; i++) {
-                        crowded.add(button(ButtonRegion.TOP, i));
-                }
-                List<ButtonGeometry.Placement> placed = ButtonGeometry.placements(crowded, inputs(true, false),
-                                region -> true);
-                long rendered = placed.stream().filter(ButtonGeometry.Placement::rendered).count();
-                assertEquals(ButtonRegion.TOP.capacity(), rendered);
-                // Hidden ones still carry a position (edit mode shows them) but
-                // never collide with the rendered row: they are past its end.
-                for (int i = 0; i < placed.size(); i++) {
-                        for (int j = i + 1; j < placed.size(); j++) {
-                                ButtonGeometry.Placement a = placed.get(i);
-                                ButtonGeometry.Placement b = placed.get(j);
-                                boolean overlap = a.x() < b.x() + ButtonGeometry.SIZE
-                                                && b.x() < a.x() + ButtonGeometry.SIZE
-                                                && a.y() < b.y() + ButtonGeometry.SIZE
-                                                && b.y() < a.y() + ButtonGeometry.SIZE;
-                                assertFalse(overlap, "buttons " + i + " and " + j + " overlap");
-                        }
-                }
-        }
+	@Test
+	void theRecipeBookClaimsTheLeftStripWhileOpen() {
+		ButtonGeometry.Inputs withBook = new ButtonGeometry.Inputs(100, 50, 176, 166, 400, 300, false, true);
+		ButtonGeometry.Placement left = ButtonGeometry.placements(
+				List.of(at(-20, 10)), withBook).get(0);
 
-        @Test
-        void buttonsOutsideTheScreenAreHidden() {
-                // A GUI at the screen's right edge leaves no room for the right column.
-                ButtonGeometry.Inputs tight = new ButtonGeometry.Inputs(
-                                SCREEN_W - WIDTH, TOP, WIDTH, HEIGHT, SCREEN_W, SCREEN_H, false, false);
-                List<ButtonGeometry.Placement> placed = placements(tight, ButtonRegion.RIGHT);
-                assertFalse(placed.get(0).rendered());
-                // The left column still fits on the other side.
-                List<ButtonGeometry.Placement> left = placements(tight, ButtonRegion.LEFT);
-                assertTrue(left.get(0).rendered());
-        }
+		assertFalse(left.rendered());
+	}
 
-        @Test
-        void hitTestFindsTheTopmostRenderedPlacement() {
-                List<ButtonGeometry.Placement> placed = placements(inputs(true, false),
-                                ButtonRegion.TOP, ButtonRegion.BOTTOM);
-                ButtonGeometry.Placement hit = ButtonGeometry.at(placed,
-                                placed.get(0).x() + 5, placed.get(0).y() + 5);
-                assertNotNull(hit);
-                assertEquals(placed.get(0).button().id(), hit.button().id());
-                assertNull(ButtonGeometry.at(placed, 0, 0));
-        }
+	@Test
+	void offScreenPositionsDoNotRender() {
+		ButtonGeometry.Placement bottom = ButtonGeometry.placements(
+				List.of(anchored(2, 200, false, true)), canvas(false)).get(0);
+		ButtonGeometry.Placement right = ButtonGeometry.placements(
+				List.of(anchored(200, 2, true, false)), canvas(false)).get(0);
 
-        @Test
-        void disabledRegionsPlaceNothing() {
-                List<InventoryButton> buttons = List.of(button(ButtonRegion.LEFT, 0), button(ButtonRegion.RIGHT, 0));
-                List<ButtonGeometry.Placement> placed = ButtonGeometry.placements(buttons, inputs(true, false),
-                                region -> region != ButtonRegion.LEFT);
-                assertFalse(placed.get(0).rendered());
-                assertTrue(placed.get(1).rendered());
-        }
+		assertFalse(bottom.rendered());
+		assertFalse(right.rendered());
+	}
 
-        @Test
-        void dropTargetsResolveRegionAndIndex() {
-                ButtonGeometry.Inputs inputs = inputs(true, false);
-                ButtonGeometry.DropTarget top = ButtonGeometry.dropTarget(inputs,
-                                LEFT + 45, TOP - ButtonGeometry.SIZE, true);
-                assertEquals(ButtonRegion.TOP, top.region());
-                assertEquals(2, top.index());
+	@Test
+	void hitTestsFindTheTopmostRenderedButton() {
+		List<ButtonGeometry.Placement> placements = ButtonGeometry.placements(
+				List.of(at(2, 100), at(2, 100)), canvas(false));
 
-                ButtonGeometry.DropTarget under = ButtonGeometry.dropTarget(inputs,
-                                LEFT + 3, TOP + HEIGHT + ButtonGeometry.GAP + ButtonGeometry.SEARCH_BAR_HEIGHT
-                                                + ButtonGeometry.GAP + 4,
-                                true);
-                assertEquals(ButtonRegion.UNDER_SEARCH, under.region());
+		assertNotNull(ButtonGeometry.at(placements, 103, 151));
+		assertEquals(placements.get(1).button().id(),
+				ButtonGeometry.at(placements, 103, 151).button().id());
+		assertNull(ButtonGeometry.at(placements, 5, 5));
+	}
 
-                ButtonGeometry.DropTarget right = ButtonGeometry.dropTarget(inputs,
-                                LEFT + WIDTH + ButtonGeometry.GAP + 5, TOP + 45, true);
-                assertEquals(ButtonRegion.RIGHT, right.region());
-                assertEquals(2, right.index());
+	@Test
+	void editableAtFindsUnrenderedButtonsToo() {
+		List<ButtonGeometry.Placement> placements = ButtonGeometry.placements(
+				List.of(at(80, 10)), canvas(false));
 
-                assertNull(ButtonGeometry.dropTarget(inputs, LEFT + 50, TOP + 50, true));
-        }
+		assertNotNull(ButtonGeometry.editableAt(placements, 181, 61));
+	}
 
-        @Test
-        void sameButtonKeepsStableIdentityAcrossLayouts() {
-                InventoryButton button = InventoryButton.newButton(1)
-                                .withCommand("g hi")
-                                .withRegion(ButtonRegion.RIGHT)
-                                .withOrder(0);
-                List<ButtonGeometry.Placement> a = ButtonGeometry.placements(List.of(button), inputs(true, false),
-                                region -> true);
-                List<ButtonGeometry.Placement> b = ButtonGeometry.placements(List.of(button), inputs(false, false),
-                                region -> true);
-                assertEquals(a.get(0).button().id(), b.get(0).button().id());
-                assertEquals(UUID.class, a.get(0).button().id().getClass());
-        }
+	@Test
+	void overlapComparesAnchorsInAbsoluteCanvasSpace() {
+		InventoryButton existing = anchored(-20, 10, true, false);
+		List<InventoryButton> buttons = List.of(existing);
+
+		// Same absolute spot expressed unanchored: 176 - 20 = 156.
+		assertTrue(ButtonGeometry.overlapsAny(buttons, at(0, 0), 156, 10, false, false));
+		// A full button width apart is fine.
+		assertFalse(ButtonGeometry.overlapsAny(buttons, at(0, 0), 156 + 18, 10, false, false));
+		// The button itself never blocks its own move.
+		assertFalse(ButtonGeometry.overlapsAny(buttons, existing, -20, 10, true, false));
+		// Vertical overlap alone is not a collision.
+		assertFalse(ButtonGeometry.overlapsAny(buttons, at(0, 0), 0, 12, false, false));
+	}
+
+	@Test
+	void gridSnapSnapsInsideToFixedSlots() {
+		ButtonGeometry.Snapped snapped = ButtonGeometry.snap(90, 60, true);
+
+		// (98, 61) is the nearest fixed slot.
+		assertEquals(98, snapped.x());
+		assertEquals(61, snapped.y());
+	}
+
+	@Test
+	void gridSnapSnapsOutsideToTheRingGrid() {
+		// The ring grid steps by 20 from just outside the canvas; Java's
+		// truncating division means x = -25 lands on the -40 slot (the
+		// reference port's exact arithmetic).
+		ButtonGeometry.Snapped left = ButtonGeometry.snap(-25, 10, true);
+		ButtonGeometry.Snapped right = ButtonGeometry.snap(200, 10, true);
+		ButtonGeometry.Snapped top = ButtonGeometry.snap(50, -25, true);
+		ButtonGeometry.Snapped bottom = ButtonGeometry.snap(50, 200, true);
+
+		assertEquals(-40, left.x());
+		assertEquals(2, left.y());
+		assertEquals(198, right.x());
+		assertEquals(2, right.y());
+		assertEquals(48, top.x());
+		assertEquals(-40, top.y());
+		assertEquals(48, bottom.x());
+		assertEquals(188, bottom.y());
+	}
+
+	@Test
+	void freeSnapMagnetsTheBottomAndLeftZonesToFixedSlots() {
+		// The armor/offhand/crafting area collects buttons into its slots.
+		ButtonGeometry.Snapped armor = ButtonGeometry.snap(20, 10, false);
+		ButtonGeometry.Snapped free = ButtonGeometry.snap(120, 10, false);
+
+		assertEquals(25, armor.x());
+		assertEquals(8, armor.y());
+		assertEquals(120, free.x(), "the top band does not magnet");
+		assertEquals(10, free.y());
+	}
+
+	@Test
+	void atCanvasPositionDocksWithTheEdgesItPasses() {
+		InventoryButton plain = at(10, 10);
+		InventoryButton docked = ButtonGeometry.atCanvasPosition(plain, 200, 170);
+
+		assertTrue(docked.anchorRight());
+		assertTrue(docked.anchorBottom());
+		assertEquals(200 - ButtonGeometry.CANVAS_WIDTH, docked.x());
+		assertEquals(170 - ButtonGeometry.CANVAS_HEIGHT, docked.y());
+
+		InventoryButton inside = ButtonGeometry.atCanvasPosition(plain, 10, 10);
+		assertFalse(inside.anchorRight());
+		assertFalse(inside.anchorBottom());
+	}
 }

@@ -11,207 +11,97 @@ import java.util.List;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * The editor's persistence flows: every mutation the editor screen
+ * performs — create, edit-in-place, move, delete — lands in the file
+ * through the safe-write store, so a crash mid-edit loses at most the
+ * working copy in front of the screen.
+ */
 class InventoryButtonsEditingTest {
-        @TempDir
-        Path tempDir;
+	@TempDir
+	Path tempDir;
 
-        private final List<String> sent = new ArrayList<>();
+	private Path file() {
+		return tempDir.resolve("buttons.json");
+	}
 
-        private InventoryButtons withButtons(String json) throws IOException {
-                Path file = tempDir.resolve("buttons.json");
-                Files.writeString(file, json, UTF_8);
-                return new InventoryButtons(file, new ButtonActivator(sent::add, 0));
-        }
+	private InventoryButtons buttons() {
+		return new InventoryButtons(file(), new ButtonActivator(command -> { }, 0));
+	}
 
-        private static String oneButton(String name) {
-                return """
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": "%s", "command": "town spawn", "icon": "minecraft:compass" }
-                                  ]
-                                }
-                                """.formatted(name);
-        }
+	@Test
+	void upsertReplacesByIdAndPersists() throws IOException {
+		InventoryButtons buttons = buttons();
+		InventoryButton home = InventoryButton.newButton(1).withCommand("home");
 
-        @Test
-        void upsertReplacesByIdAndPersists() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                InventoryButton original = buttons.buttons().get(0);
+		buttons.upsert(home);
+		buttons.upsert(home.withCommand("town spawn").withPosition(10, 20, true, false));
 
-                buttons.upsert(original.withName("Renamed").withCommand("home"));
+		assertEquals(1, buttons.buttons().size());
+		assertEquals("town spawn", buttons.buttons().get(0).command());
+		// And it is the stored form that came back.
+		assertEquals("town spawn", reload().get(0).command());
+		assertEquals(10, reload().get(0).x());
+		assertTrue(reload().get(0).anchorRight());
+	}
 
-                assertEquals(1, buttons.buttons().size());
-                assertEquals("Renamed", buttons.buttons().get(0).name());
-                assertEquals("home", buttons.buttons().get(0).command());
-                assertEquals(List.of(buttons.buttons().get(0)), new InventoryButtons(
-                                tempDir.resolve("buttons.json"), new ButtonActivator(sent::add, 0)).buttons(),
-                                "the change must survive a reload");
-        }
+	@Test
+	void upsertAppendsUnknownIds() throws IOException {
+		InventoryButtons buttons = buttons();
+		buttons.upsert(InventoryButton.newButton(1).withCommand("one"));
 
-        @Test
-        void upsertAppendsUnknownIds() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
+		buttons.upsert(InventoryButton.newButton(2).withCommand("two"));
 
-                buttons.upsert(InventoryButton.newButton(2).withCommand("vote"));
+		assertEquals(2, buttons.buttons().size());
+		assertEquals(2, reload().size());
+	}
 
-                assertEquals(2, buttons.buttons().size());
-                assertTrue(buttons.buttons().stream().anyMatch(b -> b.name().equals("Button 2")),
-                                "the new button joins the set (position follows the region sort)");
-        }
+	@Test
+	void deleteRemovesByIdAndPersists() throws IOException {
+		InventoryButtons buttons = buttons();
+		InventoryButton first = InventoryButton.newButton(1).withCommand("one");
+		InventoryButton second = InventoryButton.newButton(2).withCommand("two");
+		buttons.upsert(first);
+		buttons.upsert(second);
 
-        @Test
-        void deleteRemovesByIdAndPersists() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                InventoryButton home = buttons.buttons().get(0);
+		buttons.delete(first.id());
 
-                buttons.delete(home.id());
+		assertEquals(1, buttons.buttons().size());
+		assertEquals("two", reload().get(0).command());
+	}
 
-                assertEquals(List.of(), buttons.buttons());
-                assertEquals(List.of(), new InventoryButtons(
-                                tempDir.resolve("buttons.json"), new ButtonActivator(sent::add, 0)).buttons());
-        }
+	@Test
+	void editorMovesPersistAnchorsToo() throws IOException {
+		InventoryButtons buttons = buttons();
+		InventoryButton home = InventoryButton.newButton(1).withCommand("home");
+		buttons.upsert(home);
 
-        @Test
-        void editModeTogglesAndDropsTheDrag() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                assertFalse(buttons.editMode());
+		assertTrue(buttons.move(home.id(), -20, 168, false, true));
 
-                buttons.toggleEditMode();
-                assertTrue(buttons.editMode());
+		InventoryButton reloaded = reload().get(0);
+		assertEquals(-20, reloaded.x());
+		assertEquals(168, reloaded.y());
+		assertTrue(reloaded.anchorBottom());
+	}
 
-                InventoryButton home = buttons.buttons().get(0);
-                buttons.drag().begin(home, 0, 0, 5, 5);
-                buttons.toggleEditMode();
+	@Test
+	void createdButtonsPersistImmediately() throws IOException {
+		InventoryButtons buttons = buttons();
 
-                assertFalse(buttons.editMode());
-                assertFalse(buttons.drag().isActive(), "leaving edit mode aborts the drag");
-        }
+		// The editor's right-click-to-create flow.
+		buttons.add(InventoryButton.newButton(1)
+				.withCommand("home")
+				.withPosition(90, 60, false, false));
 
-        @Test
-        void moveInsertsAtTheRequestedIndexAndRepacksOrders() throws IOException {
-                InventoryButtons buttons = withButtons("""
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "region": "RIGHT", "order": 0 },
-                                    { "name": "B", "command": "spawn", "icon": "minecraft:paper",
-                                      "region": "RIGHT", "order": 1 },
-                                    { "name": "C", "command": "spawn", "icon": "minecraft:book",
-                                      "region": "RIGHT", "order": 2 }
-                                  ]
-                                }
-                                """);
-                InventoryButton c = buttons.regionButtons(ButtonRegion.RIGHT).get(2);
+		InventoryButton reloaded = reload().get(0);
+		assertEquals("home", reloaded.command());
+		assertEquals(90, reloaded.x());
+		assertEquals(60, reloaded.y());
+	}
 
-                buttons.move(c.id(), ButtonRegion.RIGHT, 0);
-
-                List<InventoryButton> right = buttons.regionButtons(ButtonRegion.RIGHT);
-                assertEquals("C", right.get(0).name());
-                assertEquals("A", right.get(1).name());
-                assertEquals("B", right.get(2).name());
-                assertEquals(0, right.get(0).order(), "orders are dense after every move");
-                assertEquals(1, right.get(1).order());
-                assertEquals(2, right.get(2).order());
-        }
-
-        @Test
-        void moveBetweenRegionsKeepsTheOldRegionDense() throws IOException {
-                InventoryButtons buttons = withButtons("""
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "region": "TOP", "order": 0 },
-                                    { "name": "B", "command": "spawn", "icon": "minecraft:paper",
-                                      "region": "TOP", "order": 1 }
-                                  ]
-                                }
-                                """);
-                InventoryButton a = buttons.regionButtons(ButtonRegion.TOP).get(0);
-
-                buttons.move(a.id(), ButtonRegion.BOTTOM, 0);
-
-                assertEquals(1, buttons.regionButtons(ButtonRegion.TOP).size());
-                assertEquals(0, buttons.regionButtons(ButtonRegion.TOP).get(0).order(),
-                                "the gap closes behind the moved button");
-                assertEquals(1, buttons.regionButtons(ButtonRegion.BOTTOM).size());
-        }
-
-        @Test
-        void moveLaterAndEarlierShiftWithinTheRegion() throws IOException {
-                InventoryButtons buttons = withButtons("""
-                                {
-                                  "version": 2,
-                                  "buttons": [
-                                    { "name": "A", "command": "spawn", "icon": "minecraft:compass",
-                                      "region": "LEFT", "order": 0 },
-                                    { "name": "B", "command": "spawn", "icon": "minecraft:paper",
-                                      "region": "LEFT", "order": 1 }
-                                  ]
-                                }
-                                """);
-                InventoryButton a = buttons.regionButtons(ButtonRegion.LEFT).get(0);
-
-                buttons.moveLater(a.id());
-
-                assertEquals("B", buttons.regionButtons(ButtonRegion.LEFT).get(0).name());
-                buttons.moveEarlier(a.id());
-                assertEquals("A", buttons.regionButtons(ButtonRegion.LEFT).get(0).name());
-        }
-
-        @Test
-        void applyingAPresetKeepsTheReplacedSetRecoverable() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                ButtonPresets.Preset empty = ButtonPresets.byId(ButtonPresets.EMPTY);
-
-                buttons.applyPreset(empty);
-
-                assertTrue(buttons.buttons().isEmpty());
-                assertTrue(buttons.hasRestorePoint());
-                assertEquals(ButtonPresets.EMPTY, buttons.appliedPresetId());
-
-                assertTrue(buttons.restorePrevious());
-                assertEquals(1, buttons.buttons().size());
-                assertEquals("Home", buttons.buttons().get(0).name());
-                assertFalse(buttons.hasRestorePoint());
-                assertFalse(buttons.restorePrevious(), "only one step back");
-        }
-
-        @Test
-        void aRegularEditDropsTheRestorePoint() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                buttons.applyPreset(ButtonPresets.byId(ButtonPresets.EMPTY));
-                assertTrue(buttons.hasRestorePoint());
-
-                buttons.upsert(InventoryButton.newButton(9).withCommand("vote"));
-
-                assertFalse(buttons.hasRestorePoint(), "edits after a preset are deliberate");
-        }
-
-        @Test
-        void keepingAPresetDiscardsTheRestorePoint() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-                buttons.applyPreset(ButtonPresets.byId(ButtonPresets.EMPTY));
-
-                buttons.keepPreset();
-
-                assertFalse(buttons.hasRestorePoint());
-                assertTrue(buttons.buttons().isEmpty());
-        }
-
-        @Test
-        void presetApplicationsPersist() throws IOException {
-                InventoryButtons buttons = withButtons(oneButton("Home"));
-
-                buttons.applyPreset(ButtonPresets.byId(ButtonPresets.EVERYWHERE));
-
-                assertEquals(new InventoryButtons(tempDir.resolve("buttons.json"),
-                                new ButtonActivator(sent::add, 0)).buttons().size(),
-                                ButtonPresets.byId(ButtonPresets.EVERYWHERE).buttons().size());
-        }
+	private List<InventoryButton> reload() {
+		return new InventoryButtons(file(), new ButtonActivator(command -> { }, 0)).buttons();
+	}
 }

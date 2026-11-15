@@ -13,7 +13,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
 import net.zaminmc.zea.buttons.ButtonActivator;
-import net.zaminmc.zea.buttons.ButtonListScreen;
+import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.InventoryButtons;
 import net.zaminmc.zea.earthmc.ServerIdentity;
 import net.zaminmc.zea.chat.ChatSubsystem;
@@ -164,7 +164,7 @@ public final class ZeaClient implements ClientModInitializer {
                                 ClientCommands.literal("zeabuttons").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
                                         client.execute(() -> client.gui.setScreen(
-                                                        new ButtonListScreen(inventoryButtons)));
+                                                        new ButtonEditorScreen(null, inventoryButtons)));
                                         return 1;
                                 })));
                 ClientLifecycleEvents.CLIENT_STOPPING.register(client -> shutdownBackgroundWork());

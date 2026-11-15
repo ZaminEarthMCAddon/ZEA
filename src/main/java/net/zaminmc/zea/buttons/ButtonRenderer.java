@@ -2,7 +2,9 @@ package net.zaminmc.zea.buttons;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 
@@ -10,138 +12,120 @@ import java.util.List;
  * Draws the buttons of a container screen from the layout's placements.
  * Pure presentation: positions come from {@link ButtonGeometry}, icons
  * from {@link ButtonIcons}, tooltip text from {@link ButtonTooltips};
- * this class owns only the rectangles and colors.
+ * this class owns only the sprite and the colors.
  *
- * <p>Drawing is a slot-like box — a one-pixel border over a dark fill —
- * so buttons read as part of the GUI without new textures. A button with
- * display text draws the text instead of an icon, scaled down to fit the
- * 18-pixel box. In edit mode, buttons draw with a gold border,
- * unconfigured buttons stay visible with a hint, a ghost button offers
- * creating new ones, and an in-progress drag is drawn at its preview
- * position.
+ * <p>The background is a real texture — ZEA's own vanilla-styled button
+ * sheet ({@code zea:textures/gui/buttons.png}, five 18×18 variants in a
+ * 90×18 strip), drawn the way the reference port draws its sheet — so a
+ * button reads as a GUI control instead of the flat box the first
+ * iteration drew. The icon draws over it at 16×16 with one pixel of
+ * padding: an item stack, or one of the custom texture glyphs. The
+ * editor draws its own canvas (see {@code ButtonEditorScreen}); this
+ * renderer is the in-container view.
  */
 public final class ButtonRenderer {
-        /** Border color of an idle button (slate). */
-        private static final int BORDER = 0xFF5A5A78;
+	/** ZEA's button background sheet: five 18×18 styles in a row. */
+	public static final Identifier BUTTONS_TEXTURE =
+			Identifier.fromNamespaceAndPath("zea", "textures/gui/buttons.png");
 
-        /** Border color of a hovered button (lighter slate). */
-        private static final int HOVER_BORDER = 0xFF9A9AC8;
+	private static final int TEXTURE_WIDTH = 90;
+	private static final int TEXTURE_HEIGHT = 18;
 
-        /** Fill of an idle button (near-black). */
-        private static final int BACKGROUND = 0xB0101014;
+	private ButtonRenderer() {
+	}
 
-        /** Fill of a hovered button (dark slate). */
-        private static final int HOVER_BACKGROUND = 0xB028283C;
+	/**
+	 * Renders the buttons. Unrendered placements (over the slot band of a
+	 * foreign container, under the recipe book, off-screen) are skipped;
+	 * unusable or disabled buttons never draw in the container view — the
+	 * editor is where their work-in-progress is shown.
+	 *
+	 * @param placements the layout's resolved placements, in draw order
+	 */
+	public static void render(
+			GuiGraphicsExtractor graphics,
+			Font font,
+			List<ButtonGeometry.Placement> placements,
+			int left,
+			int top,
+			int mouseX,
+			int mouseY) {
+		for (ButtonGeometry.Placement placement : placements) {
+			InventoryButton button = placement.button();
+			if (!placement.rendered() || !button.enabled() || !button.isUsable()) {
+				continue;
+			}
+			int x = placement.x();
+			int y = placement.y();
+			boolean hovered = ButtonGeometry.contains(x, y, ButtonGeometry.SIZE, ButtonGeometry.SIZE, mouseX, mouseY);
 
-        /** Border color while editing (gold). */
-        private static final int EDIT_BORDER = 0xFFE8B14A;
+			drawBackground(graphics, x, y, button.style());
 
-        /** Border color of an unconfigured button in edit mode (dim gold). */
-        private static final int UNCONFIGURED_BORDER = 0xFF8A6A2A;
+			if (!button.text().isBlank()) {
+				drawFittedText(graphics, font, button.text(), x, y, hovered);
+			} else {
+				Identifier custom = ButtonIcons.customTextureFor(button.icon());
+				if (custom != null) {
+					graphics.blit(RenderPipelines.GUI_TEXTURED, custom, x + 1, y + 1,
+							0.0f, 0.0f, 16, 16, 16, 16);
+				} else {
+					graphics.item(ButtonIcons.iconFor(button.icon()), x + 1, y + 1);
+				}
+			}
+			if (hovered) {
+				drawBorder(graphics, x, y, 0xFFFFFFFF);
+				List<Component> lines = ButtonTooltips.lines(button,
+						ButtonIcons.isKnown(button.icon()), placement.rendered());
+				graphics.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
+			}
+		}
+	}
 
-        /** Overlay that dims disabled buttons in edit mode. */
-        private static final int DISABLED_OVERLAY = 0x66101014;
+	/** One style swatch of the sheet — the editor's style picker. */
+	public static void drawSwatch(GuiGraphicsExtractor graphics, int x, int y, int style) {
+		drawBackground(graphics, x, y, style);
+	}
 
-        /** Where the edit-mode hint line sits above the container. */
-        private static final int HINT_OFFSET_Y = -12;
+	/** The styled background sprite of one button. */
+	private static void drawBackground(GuiGraphicsExtractor graphics, int x, int y, int style) {
+		graphics.blit(RenderPipelines.GUI_TEXTURED, BUTTONS_TEXTURE, x, y,
+				(float) (style * ButtonGeometry.SIZE), 0.0f,
+				ButtonGeometry.SIZE, ButtonGeometry.SIZE, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+	}
 
-        private ButtonRenderer() {
-        }
+	/** A one-pixel frame around a button-sized square. */
+	public static void drawBorder(GuiGraphicsExtractor graphics, int x, int y, int color) {
+		drawBorder(graphics, x, y, ButtonGeometry.SIZE, ButtonGeometry.SIZE, color);
+	}
 
-        /**
-         * Renders the buttons, plus edit-mode furniture when requested.
-         * Unrendered placements (hidden by overflow, the recipe book, or a
-         * missing search bar) are skipped outside edit mode; edit mode
-         * still draws them so crowding is visible and fixable.
-         *
-         * @param placements the layout's resolved placements, in draw order
-         * @param editMode   whether button editing is active
-         * @param drag       the edit-mode drag session (idle when nothing is dragged)
-         */
-        public static void render(
-                        GuiGraphicsExtractor graphics,
-                        Font font,
-                        List<ButtonGeometry.Placement> placements,
-                        int left,
-                        int top,
-                        int mouseX,
-                        int mouseY,
-                        boolean editMode,
-                        ButtonDragSession drag) {
-                boolean dragging = drag.isActive();
-                for (ButtonGeometry.Placement placement : placements) {
-                        InventoryButton button = placement.button();
-                        boolean isDragged = dragging && button.id().equals(drag.button().id());
-                        int x = isDragged ? drag.previewX() : placement.x();
-                        int y = isDragged ? drag.previewY() : placement.y();
-                        if (!editMode) {
-                                if (!placement.rendered() || !button.enabled() || !button.isUsable()) {
-                                        continue;
-                                }
-                        }
-                        boolean hovered = !dragging
-                                        && ButtonGeometry.contains(x, y, ButtonGeometry.SIZE, ButtonGeometry.SIZE, mouseX, mouseY);
+	/** A one-pixel frame around an arbitrary rectangle. */
+	public static void drawBorder(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int color) {
+		graphics.fill(x, y, x + w, y + 1, color);
+		graphics.fill(x, y + h - 1, x + w, y + h, color);
+		graphics.fill(x, y + 1, x + 1, y + h - 1, color);
+		graphics.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
+	}
 
-                        drawBox(graphics, x, y, hovered, editMode && button.isUsable());
-                        if (editMode && !button.isUsable()) {
-                                graphics.fill(x, y, x + ButtonGeometry.SIZE, y + ButtonGeometry.SIZE, UNCONFIGURED_BORDER);
-                                graphics.fill(x + 1, y + 1, x + ButtonGeometry.SIZE - 1, y + ButtonGeometry.SIZE - 1, BACKGROUND);
-                        }
-
-                        if (!button.text().isBlank()) {
-                                drawFittedText(graphics, font, button.text(), x, y, hovered || editMode);
-                        } else {
-                                graphics.item(ButtonIcons.iconFor(button.icon()), x + 1, y + 1);
-                        }
-                        if (!button.enabled()) {
-                                graphics.fill(x, y, x + ButtonGeometry.SIZE, y + ButtonGeometry.SIZE, DISABLED_OVERLAY);
-                        }
-
-                        if (hovered) {
-                                List<Component> lines = ButtonTooltips.lines(button,
-                                                ButtonIcons.isKnown(button.icon()), placement.rendered());
-                                graphics.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
-                        }
-                }
-
-                if (editMode) {
-                        graphics.text(
-                                        font,
-                                        Component.translatable("zea.buttons.editing_hint"),
-                                        left,
-                                        top + HINT_OFFSET_Y,
-                                        0xFFFFFFFF,
-                                        true);
-                }
-        }
-
-        /** Draws text scaled down until it fits the button box, centered. */
-        private static void drawFittedText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y,
-                        boolean bright) {
-                int color = bright ? 0xFFFFFFFF : 0xFFC8C8E0;
-                int box = ButtonGeometry.SIZE - 4;
-                int width = font.width(text);
-                if (width <= box) {
-                        graphics.centeredText(font, text, x + ButtonGeometry.SIZE / 2,
-                                        y + (ButtonGeometry.SIZE - font.lineHeight) / 2, color);
-                        return;
-                }
-                // Scale to fit: draw at reduced size by trimming font scale in steps.
-                float scale = Math.min(1f, (float) box / width);
-                var pose = graphics.pose();
-                pose.pushMatrix();
-                pose.translate(x + ButtonGeometry.SIZE / 2f, y + ButtonGeometry.SIZE / 2f);
-                pose.scale(scale, scale);
-                int textY = -font.lineHeight / 2;
-                int textX = -font.width(text) / 2;
-                graphics.text(font, text, textX, textY, color, true);
-                pose.popMatrix();
-        }
-
-        private static void drawBox(GuiGraphicsExtractor graphics, int x, int y, boolean hovered, boolean configured) {
-                int border = !configured ? UNCONFIGURED_BORDER : hovered ? HOVER_BORDER : BORDER;
-                int background = hovered ? HOVER_BACKGROUND : BACKGROUND;
-                graphics.fill(x, y, x + ButtonGeometry.SIZE, y + ButtonGeometry.SIZE, border);
-                graphics.fill(x + 1, y + 1, x + ButtonGeometry.SIZE - 1, y + ButtonGeometry.SIZE - 1, background);
-        }
+	/** Draws text scaled down until it fits the button box, centered. */
+	private static void drawFittedText(GuiGraphicsExtractor graphics, Font font, String text, int x, int y,
+			boolean bright) {
+		int color = bright ? 0xFFFFFFFF : 0xFFC8C8E0;
+		int box = ButtonGeometry.SIZE - 4;
+		int width = font.width(text);
+		if (width <= box) {
+			graphics.centeredText(font, text, x + ButtonGeometry.SIZE / 2,
+					y + (ButtonGeometry.SIZE - font.lineHeight) / 2, color);
+			return;
+		}
+		// Scale to fit: draw at reduced size by trimming font scale in steps.
+		float scale = Math.min(1f, (float) box / width);
+		var pose = graphics.pose();
+		pose.pushMatrix();
+		pose.translate(x + ButtonGeometry.SIZE / 2f, y + ButtonGeometry.SIZE / 2f);
+		pose.scale(scale, scale);
+		int textY = -font.lineHeight / 2;
+		int textX = -font.width(text) / 2;
+		graphics.text(font, text, textX, textY, color, true);
+		pose.popMatrix();
+	}
 }
