@@ -15,6 +15,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
 import net.zaminmc.zea.buttons.ButtonListScreen;
+import net.zaminmc.zea.map.config.MapConfig;
 import net.zaminmc.zea.buttons.ButtonRegion;
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.notify.Notification;
@@ -559,6 +560,10 @@ public final class ZeaConfig extends Config {
         @Category(name = "Miscellaneous", desc = "Small utilities: scrollable tooltips and friends.")
         @ConfigOrder(3)
         public Miscellaneous miscellaneous = new Miscellaneous();
+
+        @Category(name = "Map", desc = "Native EarthMC map: world map, minimap, claims and players.")
+        @ConfigOrder(4)
+        public MapConfig map = new MapConfig();
 
         /** Set by the store so the MoulConfig editor's saves go through safe-write. */
         private transient Runnable saveAction;

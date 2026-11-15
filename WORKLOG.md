@@ -2636,3 +2636,240 @@ queried with another client's holders — each client's budget must be
 built from its own registry, exactly as in production.
 
 `./gradlew build` green; **719 tests, 0 failures** (was 718).
+
+## 2026-11-15 (session 10) — Map subsystem Phase 0 research + Phase 1 core
+
+### Phase 0: source research (the map spec's mandatory preliminary)
+
+Full reports live in `docs/map/RESEARCH.md` (findings, 10 required
+outputs, inspection log) and `docs/map/ARCHITECTURE.md` (design). Both
+were written before any map code.
+
+**EarthMC-Map-Addon** (branch `1.21.11`, local clone): all 17 required
+commits read in full diff, ~25 more surveyed with 8 deep-reads (via a
+research subagent, spot-verified against the clone). Key sources read
+directly: `TownyMapMod` (world resolution, claim pipeline),
+`TownyMapConfig` (URLs), `SquaremapApiClient` (996 lines: ETag/gzip/
+max-age floors/idle backoff/geometry overrides),
+`SquaremapTileRenderer` (771: LRU, budgets, parent fallback),
+`TownyMinimapOverlay` (mask snapshots, merged runs), `ChunkRings`,
+`TownData`, `PlayerMarker`, keybinds, mixins json. Xaero itself is
+closed source — only its mixin surface is visible.
+
+**NEU Dungeon Map**: the 5 required files + `Position`,
+`GuiPositionEditor…`, shaders; 3 named commits + 8 extra. Editor
+philosophy and the 16-option config surface extracted for adaptation.
+
+**ZEA-REPO**: every file (17): schemas, validate.py, CI, manifest —
+tile extension plan written into ARCHITECTURE §7.
+
+**Live endpoint verification (2026-11-15)**: `settings.json` (both
+world keys), markers.json headers (`max-age=120`, **ETag per
+content-encoding** `W/"…-gzip"`), tile headers (`max-age=7200,
+stale-while-revalidate=600`, strong ETag), `/map/v1/players` body —
+**the new feed carries a `world` field per player** (cross-world
+isolation is now data-supported), `{"max":800,"current":327}`, feed
+`max-age=1, must-revalidate`. Moon docs: 35k×17.5k, one outpost per
+town. Map docs: visibility rules verbatim.
+
+markers.json format verified from a live 10.7 MB capture: top-level
+array of layers; `towny` polygons with `points` nesting
+**polygons → rings → `{x,z}` vertices**; `chunky` World Border
+polyline (x −64512..64511, z −32256..32255).
+
+### Phase 1: core implemented (`net.zaminmc.zea.map`)
+
+- **model**: `MapWorld` (dimension→world rules incl. both lunar
+  dimensions→`earthmc_moon`), `TileId` (world+source+zoom+x+z),
+  `PlayerMarker` (feed parse + `inWorld`), `TownClaim` ((world,key)
+  identity, rings, bbox, covers/withRings/geometrySignature),
+  `MapCamera` (zoom-around-anchor, pan, view bounds, clamps),
+  `Freshness` (last-success vs last-attempt vs failing vs refused).
+- **geometry**: `ChunkRings` — own implementation of the boundary walk
+  with two deliberate improvements: sorted iteration (deterministic
+  rings, which geometry signatures need) and right-turn preference at
+  diagonal pinches (separate rings, valid GeoJSON — the reference could
+  produce a figure-eight depending on HashSet order).
+- **source**: `MapHttp` (conditional GET: gzip always, ETag+IMS,
+  per-encoding validator discipline, Cache-Control floors, bearer-only-
+  to-the-feed, typed `HttpRefusal`), `SquaremapClient` (per-world
+  validators + freshness bookkeeping; 304 = success keeping previous
+  data), `MarkersParser` (live 3-level points shape, per-marker
+  try/catch, nation from tooltip, world-border polyline),
+  `SquaremapEndpoints` (fixed hosts; key never sent to squaremap).
+- **config**: `MapConfig` MoulConfig category wired into `ZeaConfig`
+  (Chat-style: gates directly on Map + Minimap/World map/Shared display
+  subcategories; ~40 options incl. API key, EarthMC-only default,
+  north-up default).
+
+### Bugs found and fixed during development
+
+- `CompletionException` wrapping: `thenApply` wraps source failures, so
+  refusal detection must walk the cause chain (one `getCause()` level
+  missed the `HttpRefusal`; diagnosed with a scratch future-chain
+  probe).
+- MoulConfig drops a category whose fields are *all* subcategories —
+  an intermediate category needs at least one direct option
+  (`everyCategoryCarriesItsOptions` caught it; Chat's layout is the
+  house answer).
+- Generic inference collapse on `thenApply(...).exceptionallyCompose`
+  for `List<PlayerMarker>` — fixed with an explicitly typed local.
+
+### Verification
+
+- Full-document parse: the real 10.7 MB markers.json → **5,814/5,814
+  towns**, 119 multi-ring, 5,272 with nation, world border kept,
+  Amsterdam ≈588 chunks (Netherlands) in 429 ms — confirming parsing
+  must stay off the render thread, as designed.
+- `./gradlew build` green; **800 tests, 0 failures** (was 719; +81:
+  ChunkRings 11, MapHttp 7, SquaremapClient 7, Freshness 7, MapWorld 9,
+  PlayerMarker 6, TileIdAndCamera 15, MarkersParser 9,
+  SquaremapEndpoints 4, MapConfigStructure 6). Live-data test fixture:
+  `src/test/resources/map/markers-fixture.json` (trimmed from the
+  capture: Etna, holed Middelburg, nationless Mount_Baldy, Los_Altos,
+  a skippable icon, verbatim border layer).
+
+### Not done yet (next sessions)
+
+Tile cache + GPU upload pipeline, ClaimStore/PlayerStore, world map
+screen, minimap HUD, /zeamap + keybinds, map editor, ZEA-REPO client,
+claim-command pipeline, visual verification. Nothing committed yet
+(the spec says commit only on request).
+
+## 2026-11-15 (session 11) — Map subsystem Phase 2: caches, stores, v4 client
+
+The data core under the rendering: everything pure and unit-tested,
+Minecraft still not imported anywhere in `net.zaminmc.zea.map`.
+
+### `map.projection.MapProjection` (new)
+
+One coordinate frame conversion for every surface: world ⇄ screen
+under a camera, surface size and rotation; tile pyramid math.
+- Rotation expressed once, as the angle north is turned away from
+  screen-up; `rotationForYaw(yaw) = yaw + 180°` pins Minecraft's yaw
+  convention (0 = south, 90 = west) so rotate-with-player points the
+  player's heading up. Round-trips are exact inverses at any angle.
+- `chooseTileZoom` follows ARCHITECTURE §4:
+  `MAX_ZOOM + floor(log2(ppb)) + QUALITY_ZOOM_BIAS`, clamped. First
+  draft computed the floor by doubling — wrong at the zoom-out end
+  (it let the +2 bias pick zoom 2 at 1/64 px/block); the architecture's
+  formula shrinks the bias past the pyramid floor, which is also the
+  resource-sane behavior. `Math.log2` does not exist in Java;
+  `Math.getExponent` is the exact `floor(log2)` for normalized doubles
+  and immune to the power-of-two rounding a computed log suffers at
+  step boundaries.
+- Tile math pinned to the live instance: 512 px tiles, zoom 5 = 1:1,
+  span 512·2^(5−zoom); floor-division indices (Earth's west border
+  −64512 is tile −126, −64513 is −127); `regionWithin` gives the
+  parent-fallback UV sub-rect and rejects non-descendants; the
+  visible-tile range uses the surface diagonal so it is a correct
+  superset under rotation.
+
+### `map.cache.TileCache<T>` (new)
+
+The imagery store: lifecycle (LOADING → QUEUED → READY / FAILED),
+access-order LRU (1024), pinned overview (zoom ≤ 2), a 128-image
+reserve for the minimap's world, per-entry ETag/IMS that die with the
+entry (`d2b6a024`), 404-vs-retryable failure ladders (60 s vs
+0.4→3.2 s ×5 then 60 s), generation stamps, and claim-for-upload with
+claimed-entry immunity (`aa92179f`'s remove-then-close, expressed as a
+claimed flag so a revalidating entry can keep its old image drawable
+while the replacement uploads).
+- Generic over the decoded image type: production will instantiate
+  `TileCache<NativeImage>`, tests run `byte[]`. GPU handles stay
+  render-side keyed by `TileId`.
+- Every retired image leaves through `drainDisposals()`, drained on
+  the render thread — a fetch thread never frees image memory, and a
+  rejected (stale-generation) completion hands its image to the same
+  channel because the fetcher cannot know which thread would be safe.
+
+### `map.source.squaremap.TileFetcher<T>` (new)
+
+Drives tiles into the cache: per-world semaphore (8), validators from
+the cache's ticket, 304 → `revalidated`, 200 → decode on the fetch
+thread → `complete`, 404/429/5xx/transport → the matching failure
+ladder, decoder seam injected (production: `NativeImage::read`). The
+optional API key is unreachable from here by construction — squaremap
+never sees it. `SquaremapUrls.tile` added as a default method so the
+existing test stubs keep compiling.
+
+### `map.cache.ClaimStore` (new)
+
+The claim state machine with the full bridge from Phase 0: pendings
+(12 s) → optimistic single-chunk delta in neutral colors (20 s, only
+the chunk the map has not published — `c41b0185`) → v4 API geometry
+override replacing the town's rings in place (180 s, dropped when the
+published town covers it with equal chunk count — `62c1f9a7`).
+Earth-only guard on API chunks (`eb0c3ba`), instance fast path for
+unchanged towns (`7ea2bb8d`), unclaims caught at send, and
+`TownClaim.coversBlock` (even-odd over all rings, holes excluded) to
+retire optimistic chunks the map adopted.
+
+### `map.cache.PlayerStore` (new)
+
+Per-world marker lists split by the feed's own `world` field (blank =
+legacy, belongs to any world), rebuilt only when the feed content
+changes — identical documents keep every instance. Keeps the previous
+snapshot + timestamps for the renderer's interpolation anchors. A
+parsed-empty feed clears (an empty server); a failed fetch never
+reaches the store at all.
+
+### `map.source.earthmcapi.EarthMcApiClient` (new) + `MapHttp.post`
+
+`POST /v4/towns` with the `name + coordinates` template; parses
+`coordinates.townBlocks` into `ChunkRings` keys (malformed pairs
+skipped). Unknown towns and 404/400 complete empty; 429/5xx/transport
+retry on the 0.4→3.2 s ladder (5 attempts) and only then fail.
+Concurrency gated to 4 — the observed 429 threshold, not the
+documented 180/min. No key is ever sent: town claims are public data.
+`MapHttp.post` reuses the Fetched/refusal/gzip plumbing; retry base
+injectable so tests run the ladder instantly.
+
+### Bugs found and fixed during development
+
+- **Evicted-but-queued double free** (`TileCache`): an entry evicted
+  while QUEUED stayed in the upload queue, so the render thread would
+  claim an already-retired image. Surfaced by writing the
+  mass-eviction test before trusting the eviction path; eviction now
+  dequeues its victim.
+- **Stale-generation poisoning** (`TileCache`): a completion rejected
+  by generation left its LOADING entry in the map forever, blocking
+  every future load of that tile. Rejection now retires the slot (and
+  clears a stuck revalidation flag).
+- **Hot revalidation loop** (`TileCache`): a failed revalidation left
+  the entry stale, so the scheduler would immediately re-ask — a
+  persistently failing server polled at frame rate. Failures now push
+  `validatedAtMs` forward by the retryable delay.
+- **`clearWorld` claimed-entry leak** (`TileCache`): a claimed LRU node
+  kept its image counted after the world clear. Claimed nodes now
+  leave the LRU without disposing — the uploader owns that disposal
+  through its finish path.
+- **Operator precedence** (`ClaimStore`): the instance-reuse condition
+  mixed `&&` with `?:` and parsed wrong; extracted to `isUnchanged`.
+  Also an NPE when confirming an unclaim with no optimistic map, and
+  a hand-rolled chunk-key packing that duplicated `ChunkRings.key`.
+- **Tooling incident**: the session's indentation helper halved the
+  tabs of any file containing 2-tab lines — including the perfectly
+  healthy `TownClaim.java`, which had no git history to restore from.
+  Rewritten verbatim from the session's read of it; the script now
+  only converts spaces→tabs by default and halving is an explicit
+  `--halve` flag. Lesson recorded: never run a lossy whole-file
+  transform without a committed copy to diff against.
+
+### Verification
+
+`./gradlew build` green; **864 tests, 0 failures** (was 800; +64:
+MapProjection 14, TileCache 18, TileFetcher 7, ClaimStore 12,
+PlayerStore 8, EarthMcApiClient 7 — the fetcher and client suites run
+against real local HTTP servers, covering 304/404/429 paths, the
+ladder, the gate and late-answer retirement end to end).
+
+### Not done yet (next sessions)
+
+Render layer: NativeImage decode + GPU upload queue (budgets 5/frame,
+1.5 ms), TileRenderer with zoom-0 under-layer, parent fallback,
+coverage-sticky LOD swap. Then WorldMapScreen, MinimapHud,
+MapEditorScreen, `/zeamap` + keybinds, lifecycle wiring (schedulers,
+world resolution, generation), RepoMapClient, claim-command chat
+integration, and the visual checklist on the live server. Still
+nothing committed (spec: commit only on request).
