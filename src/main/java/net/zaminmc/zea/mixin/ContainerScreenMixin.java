@@ -25,6 +25,7 @@ import net.zaminmc.zea.duck.ScreenWidgetAccess;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.rarity.RarityEngine;
+import net.zaminmc.zea.market.tooltip.MarketTooltipEditor;
 import net.zaminmc.zea.rarity.RarityTooltipEditor;
 import net.zaminmc.zea.search.InventorySearch;
 import net.zaminmc.zea.search.SearchBarWidget;
@@ -310,6 +311,7 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                                 lines.addAll(SlotIndicators.tooltipLines(containerSlot, locks));
                         }
                 }
+                MarketTooltipEditor.edit(lines, stack);
                 cir.setReturnValue(lines);
         }
 
