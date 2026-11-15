@@ -1,6 +1,6 @@
 package net.zaminmc.zea.market.model;
 
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
@@ -19,15 +19,18 @@ import java.util.List;
  * interface — the transaction controls stay disabled when the fields
  * they would calculate from are missing.
  *
- * <p>{@code preview} is the actual item stack from the server's
- * {@code [Item Preview]} hover when one could be extracted; the display
- * name alone is never trusted to identify an item. {@code rawLines} keeps
- * the original message text for the debug view and for fixtures.
+ * <p>{@code preview} is the item template from the server's
+ * {@code [Item Preview]} hover when one could be extracted — the template
+ * rather than a resolved stack, because identity never needs to
+ * instantiate the item and the wire data is exactly what fingerprints
+ * encode. The display name alone is never trusted to identify an item.
+ * {@code rawLines} keeps the original message text for the debug view
+ * and for fixtures.
  */
 public record ShopResponse(
 		@Nullable String owner,
 		ShopDirection direction,
-		@Nullable ItemStack preview,
+		@Nullable ItemStackTemplate preview,
 		@Nullable String itemDisplay,
 		@Nullable BigDecimal price,
 		@Nullable PriceScope priceScope,
