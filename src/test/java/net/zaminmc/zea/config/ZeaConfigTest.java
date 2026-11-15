@@ -23,7 +23,11 @@ class ZeaConfigTest {
                 assertEquals(ZeaConfig.CURRENT_VERSION, config.configVersion());
                 assertTrue(config.enabledExtraFeedIds().isEmpty(), "no extra tabs by default");
                 assertTrue(config.smoothChatEnabled(), "smooth chat defaults to on");
-                assertEquals(200, config.smoothChatDurationMillis());
+                assertEquals(500, config.smoothChatDurationMillis(),
+                        "Chatting's arrival duration is the default");
+                assertTrue(config.smoothScrollingEnabled(), "smooth scrolling defaults to on");
+                assertEquals(150, config.smoothScrollingDurationMillis(),
+                        "Chatting's scroll glide duration is the default");
                 assertTrue(config.historyEnabled(), "persistent history defaults to on");
                 assertEquals(7, config.historyRetentionDays());
                 assertEquals(7L * 86_400_000L, config.historyRetentionMillis());

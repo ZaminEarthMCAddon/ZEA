@@ -3008,3 +3008,139 @@ MinimapHud (HUD layer registration), MapEditorScreen, `/zeamap` +
 keybinds, lifecycle wiring (schedulers, world resolution, generation
 bumps), RepoMapClient, claim-command chat integration, and the visual
 checklist on the live server.
+
+## 2026-11-15 (session 13) — The chat rebuilt on the Chatting model, and the tooltip crash re-fixed
+
+### The sandbox recycle, and what the rebase revealed
+
+This session's sandbox was recycled and handed back the repo at 79409e7;
+the transcript recorded four later commits (the map subsystem, the
+tooltip-crash fix, the chat live requests, the inventory buttons
+rebuild), and `git fsck` found none of them on disk. This session
+rebuilt what was reconstructable — the tooltip crash fix (its two
+one-line edits and the regression invariant were fully known) and the
+whole Chatting-parity chat rework below — and then the push corrected
+the picture: the map subsystem (sessions 10-12 above) had reached
+origin from the surviving copy, and the rebase landed it back beneath
+this session's commits; the inventory-utilities rebuild (d6b0d00,
+buttons v2) had been in the shared history all along. The one genuinely
+missing piece is the chat live-request batch's trade pacing (the
+five-minute limiter with its toast); it stays on the backlog.
+
+### Part 1: the rarity tooltip crash, re-fixed
+
+`ContainerScreenMixin.zea$rarityTooltip` and
+`CreativeScreenMixin.zea$rarityTooltip` both take a
+`CallbackInfoReturnable` and write the edited list back with
+`cir.setReturnValue(...)` — without `cancellable = true`, which makes
+the first frame that runs the hook throw and the whole screen crash
+(the "insane crashes" live report). Both handlers now declare the flag.
+The invariant is pinned by `InjectionCancellableTest`: every compiled
+`@Inject` handler taking a `CallbackInfoReturnable` must declare
+`cancellable = true`, checked against the build's class files the way
+`ChatWidgetsFocusTest` checks the focus overrides — the bug class fails
+the build instead of the game.
+
+### Part 2: the chat, rebuilt 1:1 on Polyfrost's Chatting
+
+The player pointed at Chatting as the reference for the search bar, the
+search and clear buttons, and "the chat smoothness thing". Chatting is
+GPL-3.0 while ZEA is LGPL-3.0, so nothing was copied — the behavior was
+read off its sources (research/chatting) and re-implemented against
+ZEA's own seams, with every hook verified against the 26.3 bytecode
+(vineflower decompile of the mapped jar).
+
+**Search bar.** Chatting's field: one quarter of the screen wide, 12
+pixels tall, on the row above the input (the tab strip's row), its
+right edge `n * 11 + 12` pixels in from the screen edge, a vanilla
+bordered `EditBox` (no flat restyle, no hint), 100-character ceiling.
+It shows when a search opens and its space stays reserved either way,
+so opening a search never reflows the tab strip; the strip's maximum
+now reserves the box plus the buttons' geometry with two gaps' worth of
+clearance.
+
+**Search button functionality.** Chatting's open/close dance exactly:
+opening silences vanilla's command suggestions (`setAllowSuggestions(false)`
+— not just hiding them, because the async completion callback reshows a
+hidden popup), moves the caret from the input (which vanilla builds to
+never lose focus) to the search field; closing hands the caret back,
+re-arms the suggestions and refreshes them for the input's text. The
+search closes when the field loses focus — Chatting's rule, polled per
+frame from the render path — and on the screen going away. One
+documented deviation: focus landing on ZEA's own row widgets (the tab
+strip, the action buttons) does not close the search, because a search
+composes with the selected feed; Chatting's tabs are drawn directly on
+the screen and never take focus, so its close never sees this case.
+Ctrl+F and the search hotkey still work alongside Chatting's button.
+
+**Clear history button.** Chatting's action (`clearMessages(false)`,
+keeping the up-arrow recall) was already ZEA's, extended over ZEA's
+persistent store; what changed is the look — the button now draws a
+trash can (lid, body, slits — own pixels, Chatting's icon in spirit)
+and both buttons show Chatting's single yellow-line tooltips
+("Search Chat" / "Clear Chat History"). The buttons moved to Chatting's
+exact grid: 9×9 on an 11-pixel pitch, rightmost starting at
+`width - 12`, vertically centered in the 12-pixel row (offset 2).
+
+**Smooth chat (arrival).** `SmoothChat` was rebuilt on Chatting's
+window model: each arriving message opens one animation window — the
+whole chat starts one line low and glides up on Chatting's quartic
+ease-out while the message's own wrapped lines fade in — replacing the
+old shift-remainder model (which glided the push of N lines without a
+fade). Back-to-back messages restart the window and drop the first's
+fade set, exactly Chatting's behavior. The offset stays zero while the
+player is scrolled up (vanilla pins the view; translating it would push
+pinned content) but the fade still applies. The fade rides a single
+`@ModifyArgs` on `forEachLine`'s per-line `accept` call, which covers
+both the background pass and the text pass in one injection — the
+consumer interface is private to ChatComponent, so a wrap's handler
+could not name it, while the argument shape needs no private type. The
+line height comes from `ChatGeometry.entryHeight` (vanilla's own
+formula), which is Chatting's constant 9 when the spacing option is at
+its default — the honest generalization of the same curve.
+
+**Smooth scrolling.** New: Chatting's `ChatScrolling` model, the piece
+ZEA never had. The renderer's scroll position is an animated float
+chasing the vanilla anchor on a quadratic ease-out: armed only by real
+scroll events (`scrollChat` head, guarded against the add path's
+internal pin scroll), gliding only jumps of more than one line (a
+single notch snaps, as Chatting ships), riding along with the anchor
+shifts a burst of arriving messages produces, and clamped at zero.
+Three `@ModifyExpressionValue` injections re-route exactly the render
+reads — the line-indexing pair in `forEachLine` and the scrollbar's one
+— while every write, the pin scroll and the new-message flag keep the
+raw anchor. Because the animation moves content inside the chat's own
+clip, nothing outside the chat element moves; the dev.26 drift that
+killed the previous pose-translate scroll experiment cannot recur.
+The step runs at the private `extractRenderState` head, which both the
+visible path and the click-capture path flow through, so hit-testing
+reads the position the player sees.
+
+**Config.** "Smooth chat duration" defaults to Chatting's 500 ms;
+new "Smooth scrolling" (on) and "Smooth scrolling duration" (150 ms)
+options with the same 50–500 slider range; the smooth-chat option text
+no longer claims scrolling stays instant.
+
+### Test
+
+`ChatScrollingTest` pins the glide: armed multi-line jumps animate from
+the current position, single notches and unarmed jumps snap, the curve
+is quadratic ease-out (checked with the stamp's own int-divided
+progress), a mid-flight message shift carries the animation and still
+lands on the shifted anchor, zero duration snaps everywhere, negative
+positions clamp, and one arm animates exactly one jump.
+`SmoothChatTest` was rewritten for the window model: the glide starts
+one line low and settles exactly, the quartic curve, scrolled-up
+stopping the glide but not the fade, only the window's lines fading, a
+second message restarting the window and dropping the first's set,
+zero duration disabling, and the percent curve itself.
+`ZeaConfigTest` pins the new defaults; `MixinSurfaceTest` pins the new
+surfaces (`forEachLine`, the private `extractRenderState` overload,
+`LineConsumer.accept` — the private interfaces load reflectively — and
+the suggestion popup's `commandSuggestions` field and methods).
+
+`./gradlew build` green in the rebased tree; **918 tests, 0 failures**
+(session 12 left 907; the chat work adds 11). In-game
+verification of the search field's look on the tab row, the scroll
+glide's feel at both GUI scales, and the arrival fade's density on
+busy channels is the live checklist for the next session.

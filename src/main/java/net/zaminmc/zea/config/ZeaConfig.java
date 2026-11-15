@@ -325,32 +325,46 @@ public final class ZeaConfig extends Config {
         /** Chat appearance and motion. */
         public static final class ChatInterface {
                 @ConfigOption(name = "Smooth chat", desc = "Animate new messages: they glide into "
-                                + "place instead of jumping. Scrolling stays instant, like vanilla. "
-                                + "Right-click copying and search are unaffected.")
+                                + "place and fade in instead of jumping, the way Polyfrost's Chatting "
+                                + "animates arrivals. Right-click copying and search are unaffected.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
                 public boolean smoothChat = true;
 
                 @ConfigOption(name = "Smooth chat duration", desc = "How long one arrival animation "
-                                + "takes, in milliseconds. Lower is snappier.")
+                                + "takes, in milliseconds. Chatting's default is 500.")
                 @ConfigEditorSlider(minValue = MIN_SMOOTH_CHAT_MILLIS, maxValue = MAX_SMOOTH_CHAT_MILLIS,
                                 minStep = 10)
                 @ConfigOrder(1)
-                public int smoothChatDurationMillis = 200;
+                public int smoothChatDurationMillis = 500;
+
+                @ConfigOption(name = "Smooth scrolling", desc = "Animate the chat scroll position: "
+                                + "wheel and key scrolling glide to their target instead of jumping "
+                                + "line by line, the way Chatting scrolls.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean smoothScrolling = true;
+
+                @ConfigOption(name = "Smooth scrolling duration", desc = "How long one scroll glide "
+                                + "takes, in milliseconds. Chatting's default is 150.")
+                @ConfigEditorSlider(minValue = MIN_SMOOTH_CHAT_MILLIS, maxValue = MAX_SMOOTH_CHAT_MILLIS,
+                                minStep = 10)
+                @ConfigOrder(3)
+                public int smoothScrollingDurationMillis = 150;
 
                 @ConfigOption(name = "Search button", desc = "Show a search button at the right end "
                                 + "of the chat tab row. It opens and closes the chat search — the "
                                 + "same thing Ctrl+F does — so the search never depends on knowing "
                                 + "the hotkey.")
                 @ConfigEditorBoolean
-                @ConfigOrder(2)
+                @ConfigOrder(4)
                 public boolean searchButton = true;
 
                 @ConfigOption(name = "Clear history button", desc = "Show a clear button at the right "
                                 + "end of the chat tab row. One click empties the visible chat and "
                                 + "this server's saved history.")
                 @ConfigEditorBoolean
-                @ConfigOrder(3)
+                @ConfigOrder(5)
                 public boolean clearHistoryButton = true;
         }
 
@@ -673,6 +687,17 @@ public final class ZeaConfig extends Config {
         /** The smooth-chat animation length, clamped to the slider range. */
         public int smoothChatDurationMillis() {
                 return (int) Math.clamp(chat.chatInterface.smoothChatDurationMillis,
+                                MIN_SMOOTH_CHAT_MILLIS, MAX_SMOOTH_CHAT_MILLIS);
+        }
+
+        /** Whether the scroll position animates between anchor jumps; on by default. */
+        public boolean smoothScrollingEnabled() {
+                return chat.chatInterface.smoothScrolling;
+        }
+
+        /** The smooth-scroll animation length, clamped to the slider range. */
+        public int smoothScrollingDurationMillis() {
+                return (int) Math.clamp(chat.chatInterface.smoothScrollingDurationMillis,
                                 MIN_SMOOTH_CHAT_MILLIS, MAX_SMOOTH_CHAT_MILLIS);
         }
 
