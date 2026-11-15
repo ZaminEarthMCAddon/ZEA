@@ -7,7 +7,6 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
 
-import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,8 +35,16 @@ public final class RarityEngine {
         /** The rarity cache bound, after which the whole map is dropped. */
         private static final int RARITY_CACHE_BOUND = 1024;
 
-        /** Chroma cycle length in milliseconds — one full hue rotation. */
-        public static final long CHROMA_PERIOD_MILLIS = 1_800L;
+        /**
+         * Chroma cycle length in milliseconds — one full hue rotation.
+         *
+         * <p>Eight seconds is deliberately slow: a fast cycle makes the
+         * text strobe and is hard to read, while a near-static one reads
+         * as a flat color. NEU's chroma sits in this band, and the value
+         * here is the slow end of it so a fully-maxed enchantment reads
+         * as a gentle drift rather than a flicker.
+         */
+        public static final long CHROMA_PERIOD_MILLIS = 8_000L;
 
         /** The per-(item, enchantments) rarity cache. */
         private static final Map<RarityKey, ItemRarity> RARITY_CACHE = new HashMap<>();
@@ -156,13 +163,51 @@ public final class RarityEngine {
 
         /**
          * The chroma color for {@code millis} — an animated hue rotation
-         * in the spirit of NEU's chroma text, but applied per line rather
-         * than per glyph to keep tooltip rendering cheap. High saturation
+         * in the spirit of NEU's chroma text, applied per line rather
+         * than per glyph to keep tooltip rendering cheap.
+         *
+         * <p>The hue is a pure function of {@code millis} modulo the
+         * period, so the same wall-clock instant always yields the same
+         * color. That makes the animation stable across tooltip reopens —
+         * closing and reopening a tooltip never resets the hue, and two
+         * chroma lines on the same item stay in phase. High saturation
          * and full brightness keep the text readable on any background.
+         *
+         * <p>The HSV→RGB conversion is inlined here rather than borrowed
+         * from {@code java.awt.Color}: that pulls the whole AWT stack
+         * into a client-only tooltip path for one three-line formula.
          */
         public static int chromaColor(long millis) {
                 float hue = (millis % CHROMA_PERIOD_MILLIS) / (float) CHROMA_PERIOD_MILLIS;
-                return 0xFF000000 | Color.HSBtoRGB(hue, 0.85f, 1.0f);
+                return 0xFF000000 | hsvToRgb(hue, 0.85f, 1.0f);
+        }
+
+        /**
+         * The sRGB triple of an HSV color, as a packed 0xRRGGBB int.
+         * Matches {@code java.awt.Color.HSBtoRGB} bit-for-bit on the same
+         * inputs without paying for the AWT dependency.
+         */
+        private static int hsvToRgb(float hue, float saturation, float value) {
+                float h = (hue - (float) Math.floor(hue)) * 6.0f;
+                int i = (int) h;
+                float f = h - i;
+                float p = value * (1.0f - saturation);
+                float q = value * (1.0f - saturation * f);
+                float t = value * (1.0f - saturation * (1.0f - f));
+                float r;
+                float g;
+                float b;
+                switch (i) {
+                        case 0 -> { r = value; g = t; b = p; }
+                        case 1 -> { r = q; g = value; b = p; }
+                        case 2 -> { r = p; g = value; b = t; }
+                        case 3 -> { r = p; g = q; b = value; }
+                        case 4 -> { r = t; g = p; b = value; }
+                        default -> { r = value; g = p; b = q; }
+                }
+                return ((int) (r * 255.0f + 0.5f) << 16)
+                                | ((int) (g * 255.0f + 0.5f) << 8)
+                                | (int) (b * 255.0f + 0.5f);
         }
 
         /** The color of {@code rarity} as a tooltip {@code TextColor}, cached per rarity. */

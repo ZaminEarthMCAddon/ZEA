@@ -548,15 +548,15 @@ class RarityFieldTest {
 
         @Test
         void chromaCycleIsExactlyOneRotationPerPeriod() {
-                assertEquals(1800L, RarityEngine.CHROMA_PERIOD_MILLIS);
+                assertEquals(8_000L, RarityEngine.CHROMA_PERIOD_MILLIS);
                 int start = RarityEngine.chromaColor(0L);
-                int half = RarityEngine.chromaColor(900L);
-                int full = RarityEngine.chromaColor(1800L);
+                int half = RarityEngine.chromaColor(4_000L);
+                int full = RarityEngine.chromaColor(8_000L);
                 assertEquals(start, full, "one period must return to the same color");
                 assertTrue(start != half, "half a period must move the hue");
                 // The saturation and brightness the readability check
                 // relies on (HSV .85/1.0): every sample fully opaque.
-                for (long t = 0; t < 1800; t += 50) {
+                for (long t = 0; t < 8_000; t += 50) {
                         int rgb = RarityEngine.chromaColor(t);
                         assertEquals(0xFF000000, rgb & 0xFF000000);
                 }
