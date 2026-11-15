@@ -62,103 +62,103 @@ import java.util.Objects;
  */
 public final class TileTextures implements TileUploads.Sink<NativeImage>, TileCache.Disposer<NativeImage> {
 
-        /** Largest tile edge accepted for upload; the pyramid publishes 512. */
-        public static final int MAX_UPLOAD_EDGE = 1024;
+	/** Largest tile edge accepted for upload; the pyramid publishes 512. */
+	public static final int MAX_UPLOAD_EDGE = 1024;
 
-        private final Map<TileId, Handle> handles = new HashMap<>();
+	private final Map<TileId, Handle> handles = new HashMap<>();
 
-        private record Handle(GpuTexture texture, GpuTextureView view, NativeImage image) {
-        }
+	private record Handle(GpuTexture texture, GpuTextureView view, NativeImage image) {
+	}
 
-        @Override
-        public boolean upload(TileId id, NativeImage image) {
-                Objects.requireNonNull(id, "id");
-                Objects.requireNonNull(image, "image");
-                int width = image.getWidth();
-                int height = image.getHeight();
-                if (width <= 0 || height <= 0 || width > MAX_UPLOAD_EDGE || height > MAX_UPLOAD_EDGE) {
-                        return false;
-                }
-                GpuDevice device = RenderSystem.getDevice();
-                GpuTexture texture = null;
-                GpuTextureView view = null;
-                try {
-                        texture = device.createTexture("zea map tile " + id.texturePath(),
-                                        GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
-                                        GpuFormat.RGBA8_UNORM, width, height, 1, 1);
-                        if (texture == null) {
-                                return false;
-                        }
-                        device.createCommandEncoder().writeToTexture(texture, image);
-                        view = device.createTextureView(texture);
-                } catch (RuntimeException failure) {
-                        if (texture != null) {
-                                texture.close();
-                        }
-                        if (view != null) {
-                                view.close();
-                        }
-                        return false;
-                }
-                // The GPU copy owns the pixels from here: closing the CPU image
-                // now returns its megabyte instead of holding it until the cache
-                // retires the entry, and that later disposal of the emptied
-                // husk is a guarded no-op.
-                image.close();
-                free(id);
-                handles.put(id, new Handle(texture, view, image));
-                return true;
-        }
+	@Override
+	public boolean upload(TileId id, NativeImage image) {
+		Objects.requireNonNull(id, "id");
+		Objects.requireNonNull(image, "image");
+		int width = image.getWidth();
+		int height = image.getHeight();
+		if (width <= 0 || height <= 0 || width > MAX_UPLOAD_EDGE || height > MAX_UPLOAD_EDGE) {
+			return false;
+		}
+		GpuDevice device = RenderSystem.getDevice();
+		GpuTexture texture = null;
+		GpuTextureView view = null;
+		try {
+			texture = device.createTexture("zea map tile " + id.texturePath(),
+					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
+					GpuFormat.RGBA8_UNORM, width, height, 1, 1);
+			if (texture == null) {
+				return false;
+			}
+			device.createCommandEncoder().writeToTexture(texture, image);
+			view = device.createTextureView(texture);
+		} catch (RuntimeException failure) {
+			if (texture != null) {
+				texture.close();
+			}
+			if (view != null) {
+				view.close();
+			}
+			return false;
+		}
+		// The GPU copy owns the pixels from here: closing the CPU image
+		// now returns its megabyte instead of holding it until the cache
+		// retires the entry, and that later disposal of the emptied
+		// husk is a guarded no-op.
+		image.close();
+		free(id);
+		handles.put(id, new Handle(texture, view, image));
+		return true;
+	}
 
-        @Override
-        public void dispose(TileId id, NativeImage image) {
-                Objects.requireNonNull(id, "id");
-                Objects.requireNonNull(image, "image");
-                // Only the handle this image was uploaded from may die: a
-                // replacement's disposal arrives after the new handle exists,
-                // and freeing by id alone would destroy it.
-                Handle handle = handles.get(id);
-                if (handle != null && handle.image() == image) {
-                        handles.remove(id);
-                        handle.texture().close();
-                        handle.view().close();
-                }
-                image.close();
-        }
+	@Override
+	public void dispose(TileId id, NativeImage image) {
+		Objects.requireNonNull(id, "id");
+		Objects.requireNonNull(image, "image");
+		// Only the handle this image was uploaded from may die: a
+		// replacement's disposal arrives after the new handle exists,
+		// and freeing by id alone would destroy it.
+		Handle handle = handles.get(id);
+		if (handle != null && handle.image() == image) {
+			handles.remove(id);
+			handle.texture().close();
+			handle.view().close();
+		}
+		image.close();
+	}
 
-        /**
-         * The drawable view of an uploaded tile, or null while the tile has
-         * no GPU copy. Render thread only.
-         */
-        public GpuTextureView viewOf(TileId id) {
-                Handle handle = handles.get(Objects.requireNonNull(id, "id"));
-                return handle == null ? null : handle.view();
-        }
+	/**
+	 * The drawable view of an uploaded tile, or null while the tile has
+	 * no GPU copy. Render thread only.
+	 */
+	public GpuTextureView viewOf(TileId id) {
+		Handle handle = handles.get(Objects.requireNonNull(id, "id"));
+		return handle == null ? null : handle.view();
+	}
 
-        /** Frees every handle — shutdown, and full cache clears. */
-        public void freeAll() {
-                for (Handle handle : handles.values()) {
-                        handle.texture().close();
-                        handle.view().close();
-                }
-                handles.clear();
-        }
+	/** Frees every handle — shutdown, and full cache clears. */
+	public void freeAll() {
+		for (Handle handle : handles.values()) {
+			handle.texture().close();
+			handle.view().close();
+		}
+		handles.clear();
+	}
 
-        /**
-         * The shared tile sampler: edge-clamped so a parent-fallback region
-         * never filters in the texels of the tile's opposite side, linear so
-         * the massively minified overview layer stays smooth instead of
-         * shimmering. Owned by the sampler cache; never closed here.
-         */
-        public static GpuSampler tileSampler() {
-                return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
-        }
+	/**
+	 * The shared tile sampler: edge-clamped so a parent-fallback region
+	 * never filters in the texels of the tile's opposite side, linear so
+	 * the massively minified overview layer stays smooth instead of
+	 * shimmering. Owned by the sampler cache; never closed here.
+	 */
+	public static GpuSampler tileSampler() {
+		return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+	}
 
-        private void free(TileId id) {
-                Handle handle = handles.remove(id);
-                if (handle != null) {
-                        handle.texture().close();
-                        handle.view().close();
-                }
-        }
+	private void free(TileId id) {
+		Handle handle = handles.remove(id);
+		if (handle != null) {
+			handle.texture().close();
+			handle.view().close();
+		}
+	}
 }
