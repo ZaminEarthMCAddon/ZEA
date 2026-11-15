@@ -26,6 +26,7 @@ import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
+import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
@@ -68,6 +69,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static ExecutorService captureExecutor;
         private static PasteService pasteService;
         private static CaptureRecorder captureRecorder;
+        private static MarketSubsystem market;
 
         public static ClientLifecycle lifecycle() {
                 return lifecycle;
@@ -93,6 +95,11 @@ public final class ZeaClient implements ClientModInitializer {
 
         public static ZeaConfig config() {
                 return config;
+        }
+
+        /** The physical-shop market subsystem. */
+        public static MarketSubsystem market() {
+                return market;
         }
 
         @Override
@@ -123,6 +130,7 @@ public final class ZeaClient implements ClientModInitializer {
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
                 slotLocks = new SlotLocks(new SlotLockStore(configDir.resolve("zea/slotlocks.json")));
+                market = new MarketSubsystem(lifecycle);
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
