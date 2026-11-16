@@ -150,10 +150,15 @@ public final class MarketScreen extends Screen {
 	 * every resize, so GUI-scale changes keep everything reachable.
 	 */
 	private void computeGeometry() {
-		panelWidth = clamp((int) (this.width * SCREEN_FRACTION), MIN_WIDTH,
-				Math.min(MAX_WIDTH, this.width - 16));
-		panelHeight = clamp((int) (this.height * SCREEN_FRACTION), MIN_HEIGHT,
-				Math.min(MAX_HEIGHT, this.height - 16));
+		// The caps come first, the floors second: the design minimum is
+		// itself capped by the available screen, so a small logical GUI
+		// (large GUI scale) fills the screen instead of overflowing it.
+		int widthCap = Math.min(MAX_WIDTH, this.width - 16);
+		int heightCap = Math.min(MAX_HEIGHT, this.height - 16);
+		panelWidth = clamp((int) (this.width * SCREEN_FRACTION),
+				Math.min(MIN_WIDTH, widthCap), widthCap);
+		panelHeight = clamp((int) (this.height * SCREEN_FRACTION),
+				Math.min(MIN_HEIGHT, heightCap), heightCap);
 		left = (this.width - panelWidth) / 2;
 		top = (this.height - panelHeight) / 2;
 		listLeft = left + PADDING;

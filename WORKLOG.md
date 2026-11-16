@@ -3761,3 +3761,60 @@ search bar and the button zones — lands on top of dev.57, re-based.
 `./gradlew build` and the full suite pass on the re-based tree (the
 zone math, drop target, migrations, presets and share round-trips are
 pinned by the updated button test classes).
+
+## 2026-11-16 (session 18) — The market browser rebuilt: the listings interface the feature wanted
+
+The first browser was a 460x360 shell — thin search, three tabs, an
+empty rectangle — the presentation landed before the interface it
+presents existed. This session rebuilt the presentation on top of the
+(already real) observation pipeline, and added the one model piece the
+old screen had papered over.
+
+### What changed
+
+- **The listing model.** One row per physical shop — an EarthMC shop
+  trades one item in one direction, so one shop is one listing, and a
+  sign that flips direction updates the same listing instead of
+  splitting it. The row's advert is the shop's latest server-verified
+  observation, falling back to its latest sign-only advert with the
+  source type preserved. The grouped search model was removed rather
+  than maintained twice.
+- **Direction-aware sorting.** Price sorts put the player's best offer
+  first — cheapest when buying from, highest payout when selling to —
+  with unjudgeable listings (no price, no scope, per-bulk without a
+  bulk size) sinking below the judged ones in both directions and ties
+  breaking by shop id. The comparator's own tests caught a real bug:
+  reversing the whole chain would have floated unjudgeable rows to the
+  top on the sell-to side.
+- **Town and nation from claim geometry.** A resolver seam over the
+  claim store: real point-in-claim tests at the sign position, no text
+  guessing. The claim cache is constructed in ZeaClient so the map
+  subsystem's pending fetch pipeline can share the instance; until
+  claims flow, town and nation are simply unavailable — never guessed.
+- **The browser itself.** Adaptive window (~72% of the logical screen,
+  capped 1120x720, floors capped by the screen itself so a large GUI
+  scale fills instead of overflowing — verified by arithmetic at scale
+  1/2/3 and small-window sizes), header with refresh/close, full-width
+  search with inline clear, the three views wired to the query
+  pipeline, a cycling sort control, and the two-panel main area:
+  dense rows (identity icon, direction tag, offer, shop line, stale
+  marking) and the full details panel with both timestamps, source
+  confidence, and the nation spawn action that exists only when a
+  nation is known and dispatches the real command. Selection follows
+  shop identity across refreshes; arrows walk the list; wheel scrolls.
+  Rendering reads only the in-memory index — no parsing, disk,
+  network or world access per frame.
+
+### Verification
+
+`./gradlew test` green — 1131 tests, 0 failures (+18: listing model
+composition, filter sides, search over item/owner/town, sign-only
+labelling, town-lookup plumbing, sort orders including the
+direction-aware price rules and the unjudgeable sink, tie
+determinism, cycle order). Three of those tests initially asserted the
+wrong thing and the implementation was right: a flipped sign moves the
+shop to the other view; the raw-price sort legitimately ranks a priced
+advert that lacks a bulk size; the town lookup receives (x, z) and no
+y. Not verified in-game (no live client): rendering itself; the
+geometry is verified by calculation, the interactions by unit tests of
+the pipeline beneath them.
