@@ -3931,6 +3931,95 @@ bar at each GUI scale, buttons from editor to real inventory across
 container types, the idle notice on a non-EarthMC server, and both
 map surfaces against live EarthMC data — the live checklist.
 
+## 2026-11-17 (session 21) — The RPG tooltip repaired onto the equipment allowlist
+
+The tooltip task came back as a repair order with an acceptance sheet,
+and the audit confirmed every regression it listed. The classifier
+admitted four categories the spec excludes outright — food, shields,
+shears, elytra — so a golden apple carried a nutrition block and a
+shield showed a rarity footer. The stat lines explained their own
+arithmetic ("Damage: 10 (7 base + 3 Sharpness V)"), sweeping printed
+as a raw ratio, durability carried an Unbreaking-inflated "effective
+~6244" beside the real maximum, every enchantment consumed a line of
+prose, the footer said "EPIC" with no equipment type, custom names
+were skipped by the recolor path, and a Ctrl-held diagnostic mode
+reimplemented — badly — what F3+H already does. Bows, crossbows,
+tridents, maces and spears carried stats but no rarity at all.
+
+### The repair
+
+Three commits. The classifier now answers exactly the spec's
+allowlist — the four tool families, the six weapon families, the four
+armor slots — and the tooltip editor asks it once, first, so an
+unsupported item returns before anything touches its lines: name,
+lore, enchantment rendering, advanced diagnostics, all byte-for-byte
+vanilla. The elytra resolves to OTHER through the armor-attribute
+test that already separated it from a real chestplate.
+
+The stat lines render final values only — "Damage: +10 [5]" with the
+contributing enchantment's level in the bracket, "+75%" for the sweep
+ratio, seconds for draw and reload times, current/maximum for
+durability and nothing else. Enchantments group into one
+alphabetized, comma-wrapped section of blue names (red for curses,
+the maxed tier color at the cap, grey for foreign command-placed
+entries). The footer is "EPIC SWORD", bold, rarity-colored, inserted
+before Minecraft's own advanced lines. Custom names keep their exact
+text and take the rarity color on a rendering copy; the stack is
+never modified. The Ctrl mode is gone. Tridents gained their melee
+and thrown numbers from the 26.3 bytecode — flat 8.0 thrown damage,
+2.5 blocks per tick, 10-tick charge — and the dedicated weapon
+classes now rate (diamond-class tier) so a maxed bow reaches
+Legendary.
+
+Two formula corrections came out of the audit itself: the base mining
+speed reads the tool's correct-for-drops family rule (8.0 on a
+diamond pickaxe) rather than the 1.0 wrong-tool default the same
+component carries, and Impaling stays a conditional line rather than
+folding into the trident's thrown damage.
+
+### The two bugs only the live client could show
+
+The first F3+H pass rendered the RPG block and the footer but the
+native trailer was *gone* — no `minecraft:diamond_sword`, no
+component count — while a plain diamond kept both. The bytecode told
+the story: 26.3's attribute emitter writes its blank in front of the
+"When in Main Hand" header and nothing after the entries, so with
+advanced tooltips on the identifier and the count follow the entries
+directly, and the removal — which scanned to the next blank —
+swallowed them whole. The removal now consumes the emitter's leading
+blank with the section, stops at the next blank, another section's
+header or any native advanced line, and repeats for the "When worn:"
+group family.
+
+The second bug was a constant: the identifier literal is styled
+`ChatFormatting.DARK_GRAY`, 0x555555, and the matcher carried
+0x3F3F3F — the pixel dump of the rendered tooltip showed (85,85,85),
+the identifier never matched, and with it unrecognized the scan
+walked straight through it even after the first fix. Both are now
+pinned by removal-seam tests against a marker predicate, and the
+final layout was read back from the screen: RPG block, "EPIC SWORD",
+`minecraft:diamond_sword`, "19 component(s)", in that order.
+
+### Verification, line by line from the pixels
+
+Every supported family hovered and transcribed through the vision
+model: sword (enchanted, plain, custom-named), pickaxe, axe, shovel,
+hoe, bow, crossbow, trident, mace, spear, and all four armor slots.
+The unsupported matrix — golden apple, enchanted book, potion,
+shield, elytra, spawn egg, diamond block, plain/named/lore diamonds —
+kept pure vanilla tooltips, lore text intact, no footer, no recolor.
+The long enchantment list wraps at comma boundaries into two clean
+lines; conditional enchantments state their condition (Smite V "(vs
+undead): +12.5", Impaling "(vs aquatic mobs)") instead of folding
+into the damage. The player died mid-session and dropped the lot, so
+the matrix was re-given and re-read — the reads above are from the
+rebuilt inventory.
+
+`./gradlew test` green throughout: **1225 tests, 0 failures** on the
+rebased tree (+13 over the session: the equipment exclusions, the
+compact formats, the grouped section, the trident throw, the
+rule-based mining speed, the footer label, and the four
+attribute-removal seams).
 ## 2026-11-17 (session 16, P0 port) — The shop-quantity chat bypass
 
 ### The regression
