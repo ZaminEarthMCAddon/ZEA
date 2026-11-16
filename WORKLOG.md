@@ -4183,3 +4183,72 @@ the paren-percent quirk). In-game verification — typing `e` into the
 bar on a container screen, the dimmed empty slots in matching mode,
 `2+2 = 4` beside the expression, and the floating box on a long
 result — is the live checklist for the next session.
+
+## 2026-11-17 — Branch consolidation: three feature branches into develop
+
+### The report
+
+"Push and then merge branches and then delete old branch. Do not delete
+without merging into develop, and do not delete the develop branch."
+Three unmerged branches sat beside develop (which had advanced to
+dev.63 while they waited): `fix/search-bar-fixes` (the search bar
+typing/calculator/dimming fixes), `fix/shop-quantity-chat-bypass` (the
+P0 shop quantity routing fix, based on dev.62), and
+`session16-parallel-implementation` (the HUD manager, native discovery
+with the ZEA-REPO consumer, spawn command links, the advertisement
+message filters, ZeaPaths, and its own shop fix and search bar
+rebuild, based on dev.35).
+
+### The merges
+
+Oldest-base last, each verified with the full suite before the next:
+
+1. `fix/shop-quantity-chat-bypass` merged clean — its base (dev.62)
+   was three commits behind develop's head.
+2. `session16-parallel-implementation` needed 17 conflict resolutions.
+   Where develop had superseded the parallel session's architecture,
+   develop won: the button system stays on the zone model (develop's
+   dev.36+ rebuild; session16's free-placement editor changes were
+   written against the pre-zone editor), and ChatTabBar keeps
+   develop's focus fix and test-pinned label colors. Where session16's
+   work was additive, it merged in: the HUD manager, discovery, map
+   engine, spawn links, the four ad-category classifiers and filters,
+   ZeaPaths, `ButtonRenderer.fitLabel` (the readability floor +
+   ellipsis policy, ported into develop's renderer and pinned by
+   `ButtonRendererFitTest`), the preset row's fitted labels, and
+   `SearchBarLayout`. `FeedFilter` grew a fifth constructor argument —
+   the hidden-ad-categories supplier — composing with develop's
+   `GlobalVisibility` instead of replacing it (one control per kind).
+   The ad categories are hidden from Global through their own toggles,
+   so `GlobalVisibility.TOGGLEABLE` stays as develop pinned it and the
+   test excludes them with a documented reason. The search bar kept
+   develop's zone-friendly vertical (near the screen bottom, so
+   UNDER_HOTBAR and ABOVE_SEARCH keep their geometry) and adopted the
+   P1 appearance: vanilla text-field sprites, hover frame, no
+   placeholder, GUI-relative horizontal centering through the shared
+   `SearchBarLayout` (ButtonGeometry's `SEARCH_BAR_HEIGHT` follows the
+   sprite field's 20). `MultiPlayerGameModeMixin` keeps both
+   observers (market at HEAD, discovery at TAIL); `MessagePayload`
+   unions both sides' payloads.
+3. `fix/search-bar-fixes` needed three conflict resolutions. The
+   container mixin's key routing and empty-slot dimming applied clean
+   on top. `SearchBarWidget` was combined by hand: the session16
+   foundation (bordered sprite field, no placeholder, shared layout)
+   now carries the NEC result overlay — inline after the typed text
+   through `EditBoxAccessor`'s scroll state, the floating marquee
+   fallback box, and the token-class syntax highlighter. Vanilla 26.3's
+   own `EditBox.capturesInput()` backs the "e" rule.
+
+### Verification
+
+`./gradlew build` green after each merge; the suite read **1314 tests,
+0 failures** after the session16 merge and **1335 tests, 0 failures**
+after the search bar merge (+21: the calculator, layout and label-fit
+tests, less the superseded duplicates). All three branch tips verified
+as ancestors of develop before any deletion.
+
+### Deletions
+
+`fix/search-bar-fixes`, `fix/shop-quantity-chat-bypass` and
+`session16-parallel-implementation` deleted on the remote and locally
+after the containment check; `develop` kept, as instructed.
