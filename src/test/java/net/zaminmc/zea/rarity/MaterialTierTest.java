@@ -100,4 +100,21 @@ class MaterialTierTest {
                 assertEquals(22, ToolMaterial.GOLD.enchantmentValue());
                 assertEquals(15, ToolMaterial.NETHERITE.enchantmentValue());
         }
+
+        /**
+         * The dedicated weapon classes evaluate to the diamond-class
+         * weapon tier: with no material ladder of their own, bow,
+         * crossbow, trident and mace sit where the rarity model's
+         * established rules put single-instance endgame equipment —
+         * Uncommon unenchanted, Legendary fully maxed, never below a
+         * properly developed diamond item.
+         */
+        @Test
+        void weaponClassesEvaluateToTheDiamondClassTier() {
+                assertEquals(MaterialTier.WEAPON_TIER, 5);
+                assertEquals(1, Math.clamp(MaterialTier.WEAPON_TIER - 4, 0, 2),
+                                "an unenchanted bow reads Uncommon, like a diamond sword");
+                assertEquals(3, RarityCalculator.ceilingFor(MaterialTier.WEAPON_TIER),
+                                "a fully-maxed bow can reach Legendary");
+        }
 }

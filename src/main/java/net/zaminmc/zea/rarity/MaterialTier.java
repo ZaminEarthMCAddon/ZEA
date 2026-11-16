@@ -3,9 +3,13 @@ package net.zaminmc.zea.rarity;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.ToolMaterial;
+import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.equipment.EquipmentAsset;
 import net.minecraft.world.item.equipment.EquipmentAssets;
 import net.minecraft.world.item.equipment.Equippable;
@@ -18,15 +22,15 @@ import java.util.Optional;
  * What a supported item is made of, resolved from Minecraft 26.3's actual
  * registries — never from item-name substrings.
  *
- * <p>Two families of supported items exist, with separate ladders because
+ * <p>Three families of supported items exist, with separate ladders because
  * their materials differ:
  *
  * <ul>
- *   <li><b>Tools</b> (swords, pickaxes, axes, shovels, hoes — the vanilla
- *       {@code #minecraft:swords}/{@code #minecraft:axes}/... item tags):
- *       the material is recovered by matching the item's own component
- *       values ({@code max_damage}, {@code enchantable}) against the
- *       public {@link ToolMaterial} records. Every vanilla tool material
+ *   <li><b>Tools</b> (swords, pickaxes, axes, shovels, hoes, spears — the
+ *       vanilla {@code #minecraft:swords}/{@code #minecraft:axes}/...
+ *       item tags): the material is recovered by matching the item's own
+ *       component values ({@code max_damage}, {@code enchantable}) against
+ *       the public {@link ToolMaterial} records. Every vanilla tool material
  *       has a unique (durability, enchantability) pair — verified for the
  *       26.3 values — so the pair identifies the record exactly. A
  *       modified or unknown fingerprint falls back to tier 0, never to a
@@ -36,17 +40,28 @@ import java.util.Optional;
  *       key, matched against the {@link EquipmentAssets} constants —
  *       registry identity, not a name check. Turtle armor counts as
  *       diamond tier.</li>
+ *   <li><b>Weapons</b> (bow, crossbow, trident, mace — the items
+ *       vanilla still models with dedicated classes): these have no
+ *       material ladder of their own — there is no wooden bow — so
+ *       they sit at the diamond-class tier 5, the project's consistent
+ *       fallback for single-instance endgame equipment. The result: an
+ *       unenchanted bow reads Uncommon like an unenchanted diamond
+ *       sword, and a fully-maxed bow reaches Legendary, exactly as the
+ *       rarity model's established rules dictate for tier-5 gear.</li>
  * </ul>
  *
- * <p>Tiers run 0..6 on both ladders. The user-facing meaning of a tier
- * (material rarity, ceiling) lives in {@link RarityCalculator}; this class
- * only answers "what is it made of".
+ * <p>Tiers run 0..6 on the tool and armor ladders. The user-facing meaning
+ * of a tier (material rarity, ceiling) lives in {@link RarityCalculator};
+ * this class only answers "what is it made of".
  */
 public final class MaterialTier {
         /** Tool progression, lowest to highest. Gold is durable-material-wise below stone. */
         private static final ToolMaterial[] TOOL_LADDER = {
                         ToolMaterial.WOOD, ToolMaterial.GOLD, ToolMaterial.STONE, ToolMaterial.COPPER,
                         ToolMaterial.IRON, ToolMaterial.DIAMOND, ToolMaterial.NETHERITE};
+
+        /** The diamond-class tier the dedicated weapon classes evaluate to. */
+        static final int WEAPON_TIER = 5;
 
         /** Armor progression, lowest to highest; turtle sits with diamond. */
         private static final Map<ResourceKey<EquipmentAsset>, Integer> ARMOR_TIERS = Map.ofEntries(
@@ -70,7 +85,9 @@ public final class MaterialTier {
         public enum Kind {
                 TOOL,
                 ARMOR,
-                /** Not a supported tool or armor piece: rarity never applies. */
+                /** Bow/crossbow/trident/mace: the diamond-class weapon fallback. */
+                WEAPON,
+                /** Not a supported tool, weapon or armor piece: rarity never applies. */
                 UNSUPPORTED
         }
 
@@ -97,8 +114,16 @@ public final class MaterialTier {
                 Item item = stack.getItem();
                 var holder = item.builtInRegistryHolder();
                 if (holder.is(ItemTags.SWORDS) || holder.is(ItemTags.PICKAXES) || holder.is(ItemTags.AXES)
-                                || holder.is(ItemTags.SHOVELS) || holder.is(ItemTags.HOES)) {
+                                || holder.is(ItemTags.SHOVELS) || holder.is(ItemTags.HOES)
+                                || holder.is(ItemTags.SPEARS)) {
                         return new Evaluation(Kind.TOOL, toolTier(stack));
+                }
+                // The dedicated weapon classes carry no material of their
+                // own; the diamond-class tier 5 is the established fallback
+                // for single-instance endgame weapons.
+                if (item instanceof BowItem || item instanceof CrossbowItem
+                                || item instanceof TridentItem || item instanceof MaceItem) {
+                        return new Evaluation(Kind.WEAPON, WEAPON_TIER);
                 }
                 if (holder.is(ItemTags.HEAD_ARMOR) || holder.is(ItemTags.CHEST_ARMOR)
                                 || holder.is(ItemTags.LEG_ARMOR) || holder.is(ItemTags.FOOT_ARMOR)) {
