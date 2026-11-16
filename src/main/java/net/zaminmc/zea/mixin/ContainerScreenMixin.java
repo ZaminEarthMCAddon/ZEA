@@ -250,17 +250,18 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         }
 
         /**
-         * After the item: the non-matching dim (matching mode only — empty
-         * slots are left alone, there is nothing to find in them), the
-         * lock padlock, the binding digit, and the pairing candidate
-         * highlight on hotbar slots while the lock key is held.
+         * After the item: the non-matching dim (matching mode only —
+         * empty slots dim too, exactly like NEU, so a search leaves
+         * nothing in the inventory undimmed), the lock padlock, the
+         * binding digit, and the pairing candidate highlight on
+         * hotbar slots while the lock key is held.
          */
         @Inject(method = "extractSlot", at = @At("TAIL"))
         private void zea$searchDimAndSlotIndicators(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY,
                         CallbackInfo ci) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
                 InventorySearch search = ZeaClient.search();
-                if (search.matchingActive() && !search.query().isBlank() && !slot.getItem().isEmpty()
+                if (search.matchingActive() && !search.query().isBlank()
                                 && !search.slotMatches(self, zea$slotIndex(slot))) {
                         ZeaConfig config = ZeaClient.config();
                         int intensity = config == null ? SearchOverlay.DEFAULT_DIM_INTENSITY
@@ -361,11 +362,15 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
 
         /**
          * Key routing, in priority order: the button-editor keybind
-         * (opens the NEU-style editor over this screen), the search bar
-         * (while focused it owns every key — Esc first leaves matching
-         * mode, then focus, and the inventory key defocuses instead of
-         * closing, so typing never triggers the number-key swaps or
-         * anything else underneath), and the slot lock key.
+         * (opens the NEU-style editor over this screen), the search
+         * bar, and the slot lock key. While the bar is focused it
+         * owns the keyboard the way vanilla's creative search does:
+         * Esc first leaves matching mode, then focus; the field sees
+         * its editing keys; and every other key is captured — plain
+         * letters arrive as charTyped and insert into the field, the
+         * inventory key E included, so typing "e" is never
+         * interrupted. Esc or a click outside defocuses; hotbar
+         * swaps and E-to-close never fire mid-typing.
          */
         @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
         private void zea$handleKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
@@ -389,16 +394,20 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                                 cir.setReturnValue(true);
                                 return;
                         }
-                        if (Minecraft.getInstance().options.keyInventory.matches(event)) {
-                                self.setFocused(null);
+                        if (bar.keyPressed(event)) {
                                 cir.setReturnValue(true);
                                 return;
                         }
-                        // The field sees the key; anything it does not want is
-                        // still swallowed so hotbar keys never fire mid-typing.
-                        bar.keyPressed(event);
-                        cir.setReturnValue(true);
-                        return;
+                        if (bar.capturesInput()) {
+                                // The vanilla creative-search rule: a
+                                // focused, editable field captures every
+                                // remaining key. The letter E inserts as
+                                // text via charTyped instead of defocusing
+                                // the bar mid-word.
+                                cir.setReturnValue(true);
+                                return;
+                        }
+                        self.setFocused(null);
                 }
                 ZeaConfig config = ZeaClient.config();
                 boolean locksOn = config != null && config.slotLockingEnabled();

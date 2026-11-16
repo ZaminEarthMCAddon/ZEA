@@ -4080,3 +4080,106 @@ the map elements against live squaremap imagery, the filters against
 real chat, and a full restart round-trip — is the live checklist for
 the next session. The `JDK 25` requirement (fabric-loom 1.19.4) needs
 `-Dorg.gradle.java.home` pointed at a Java 25 runtime on this machine.
+## 2026-11-17 (session 16) — Search bar: the typing-interrupt fix, NEC calculator, dimmed empties
+
+### The live report
+
+Three complaints on one screen, worked on the fresh
+`fix/search-bar-fixes` branch off develop (6f6455c):
+
+1. Typing **e** into the search bar interrupted typing — the letter
+   never landed.
+2. The empty inventory/container slot did not darken the way item
+   slots do (in matching mode).
+3. The calculator "sucked": a bare `2` echoed `= 2`, and the result
+   hung at the far end of the bar instead of next to the expression —
+   with a pointer to port/adapt Rijzzz' NotEnoughCalculator (the JEI
+   search-bar calculator, LGPL-3.0) for the ZEA bar.
+
+### The hunt
+
+- **The E interrupt was ZEA's own "politeness".** The key router
+  treated the inventory key specially while the bar was focused:
+  defocus instead of close. But the default inventory key *is* E, so
+  every attempt to type an "e" yanked focus before the character event
+  could land. Vanilla already solved this exact problem for the
+  creative search box
+  (`CreativeModeInventoryScreen.keyPressed`, decompiled from the
+  loom-cached 26.3 jar): the field gets the key first, and a field
+  that `capturesInput()` swallows everything else — letters arrive as
+  `charTyped`, and `super.keyPressed` (with the E-to-close) is simply
+  never reached.
+- **The dim gap was deliberate-but-wrong.** The search-dim injection
+  carried `!slot.getItem().isEmpty()` — "empty slots are left alone,
+  there is nothing to find in them". The NEU research notes in this
+  very file say it plainly: *empty slots darken too*. ZEA's deviation
+  was the bug.
+- **The calculator** was a clean but minimal shunting-yard (`+ - * /`,
+  parens, unary minus) that echoed bare numbers and right-aligned the
+  result. NEC (cloned to `research/nec`, read in full:
+  `CalculatorManager`, `ExpressionTokenizer`, `ExpressionParser`,
+  `ExpressionEvaluator`, `ResultFormatter`, `SyntaxHighlighter`,
+  `REIOverlayRenderer`) proved both behaviors wrong on paper: NEC's
+  `looksLikeCalculation` gate rejects bare numbers ("usually an item
+  count search, not math"), and its overlay draws the result at
+  `textX + queryWidth` — immediately after the typed text — with a
+  floating tooltip box as the overflow fallback.
+
+### The fix
+
+- **`ContainerScreenMixin.zea$handleKeys`** now follows vanilla's
+  creative rule: Esc first (matching mode, then focus), then
+  `bar.keyPressed(event)` for the editing keys, then
+  `bar.capturesInput()` captures every remaining key. The inventory
+  key defocus special-case is gone — typing `e` inserts an `e`; Esc
+  or a click outside defocuses; E-to-close works again once the bar
+  is unfocused; hotbar swaps stay dead mid-typing.
+- **The dim injection** drops the `isEmpty` guard: in matching mode
+  every non-matching slot dims, empty ones included — NEU parity,
+  documented.
+- **`Calculator` is rebuilt on NEC's grammar** (lexer → implicit-
+  multiplication pass → recursive descent with NEC's precedence
+  chain, BigDecimal with a 50-digit context): `^` (right-assoc),
+  `!`, glued-`%` percentage vs spaced modulo (`100+10%` = 110),
+  bitwise `& | ~ << >>`, `x`/`X` as multiplication, implicit
+  multiplication, `0b/0x/0o` literals (radix in → radix out:
+  `0x1F` shows `0x1F`), units `k m b t s st stack stacks`, `pi`/`e`,
+  `ans`, `$vars` (session-scoped, reserved names refuse), and the
+  NEC function set minus the SkyBlock tables/taxes/units — `sqrt abs
+  floor ceil round log ln sin cos tan rad deg min max gcd lcm xor
+  pct clamp avg hex bin oct fmt`. NEC's gate (`looksLikeCalculation`)
+  and its incomplete-expression suppression are the entry point, so
+  bare numbers, plain words and half-typed expressions show nothing.
+  NEC quirks kept deliberately: `%` after `)` is modulo (so `(1+1)%`
+  is incomplete), radix literals propagate. NEC's SkyBlock surface —
+  XP tables, bz/ah taxes, the `e/h/sc/dc/eb` units — is dropped as
+  meaningless off SkyBlock; `$vars` stay session-scoped instead of
+  NEC's config persistence.
+- **`SearchBarWidget`** draws the result after the *visible* text
+  (an `EditBoxAccessor` mixin exposes `displayPos`/`textX`, because
+  the field scrolls long input and vanilla exposes neither), and
+  when it no longer fits beside the expression, into NEC's floating
+  dark box under the bar (above it when the screen ends first) with
+  the same 4-second sine marquee. A `TextFormatter` (26.3's
+  `EditBox.addFormatter`) colors the input with NEC's palette —
+  runs built with `FormattedCharSequence.forward` + `composite`, from
+  a per-character color map computed over the whole value so tokens
+  split by the caret still color correctly; matching mode keeps the
+  plain white query.
+- `zea.mixins.json` registers `EditBoxAccessor`;
+  `MixinSurfaceTest` pins `EditBox#displayPos/textX`;
+  `MixinPackageHygieneTest` already proves the accessor shape is
+  loadable (registered, interface, all-@Accessor).
+
+### Verification
+
+`./gradlew test` green: **975 tests, 0 failures** (the calculator
+suite grew from 12 cases to 33: the gate, units, constants, radix,
+functions, percentages, bitwise, implicit multiplication, `$vars`,
+`ans`, formatting, and the old precedence/paren/negative regression
+set — five first-draft expectations were corrected against traced
+NEC semantics: comma grouping on `2^10`, radix carry on `0x1F`, and
+the paren-percent quirk). In-game verification — typing `e` into the
+bar on a container screen, the dimmed empty slots in matching mode,
+`2+2 = 4` beside the expression, and the floating box on a long
+result — is the live checklist for the next session.

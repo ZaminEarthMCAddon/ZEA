@@ -86,27 +86,54 @@ preset templates' shape — and render nowhere until configured.
 
 ## Inventory search bar
 
-- The bar renders at the very bottom of the screen, spanning the
-  container's width (not on the creative screen, which has its own
-  search). Single click focuses it.
-- **Calculator**: typing an arithmetic expression shows the result in
-  the bar (`39 + 4 = 43`): `+ - * /`, parentheses, decimals, unary
-  minus, BigDecimal arithmetic, division by zero and incomplete
-  expressions simply show nothing. The expression is preserved; the
-  result is an overlay.
-- **Double-click** toggles matching mode (the bar turns gold):
-  items whose tooltip text matches the query get a subtle colored
-  highlight and border; everything else is dimmed. Empty slots are left
-  alone. Matching is case-insensitive, searches the item's full tooltip
-  text (name, lore, enchantments), and supports `|` as OR. Clearing the
-  query restores the inventory immediately.
+- The bar renders near the bottom of the screen, horizontally centered
+  on the container GUI's own bounds (not on the creative screen, which
+  has its own search). Single click focuses it.
+- **Calculator** (the grammar is NotEnoughCalculator's, LGPL-3.0, adapted;
+  the SkyBlock tables, taxes and storage units are dropped): numbers,
+  `+ - * / % ^ !`, `x` as multiplication (`2x3`), implicit
+  multiplication (`2(3+4)`, `2sqrt(4)`), parentheses, percentages
+  (`100+10%` = 110; a spaced `%` is modulo instead), bitwise
+  `& | ~ << >>` and `xor(a,b)`, radix literals `0b101 0x1F 0o17`
+  (they shape the result too: `0x1F` shows `0x1F`), units `k m b t` and
+  `s st stack stacks` (= 64; `2k` = 2,000), the constants `pi` and
+  `e`, `ans` (the previous result), session variables (`$x = 5`, then
+  `$x * 2`; reserved names refuse), and the functions `sqrt abs floor
+  ceil round log ln sin cos tan rad deg min max gcd lcm xor pct clamp
+  avg hex bin oct fmt` (`hex(255)` shows `0xFF`, `fmt(1500000)`
+  shows `1.5m`). Arithmetic is BigDecimal, 50 significant digits,
+  results group digits and cap at ten fraction digits.
+- **A bare number shows nothing.** NEC's gate, deliberately: `2` is not
+  a calculation, and neither is `diamond sword` or an unfinished
+  `2+`. A query must carry an operator, parenthesis, function,
+  constant, variable or unit before a result appears.
+- **The result sits next to the expression** — `2+2 = 4` reads as one
+  line, placed after the typed text (following the field's scroll)
+  with NEC-style syntax highlighting on the input (dark-aqua numbers,
+  aqua units and constants, yellow functions, red operators, purple
+  words). When the expression grows too long for the result to fit
+  beside it, the result moves into a small dark box under the bar
+  (above it if the screen ends first) that slowly scrolls long
+  numbers sideways — NEC's floating fallback. The expression is
+  always preserved; the result is an overlay.
 - Matching mode cannot take a frame down: an out-of-range slot index
   cannot reach the slot list, and a stack whose tooltip explodes
   degrades to its hover name.
-- While the bar is focused it owns the keyboard: Esc leaves matching
-  mode first, then focus; the inventory key defocuses instead of
-  closing; number keys never trigger hotbar swaps mid-typing. Opening a
-  different container resets query and mode.
+- **Double-click** toggles matching mode (the bar turns gold): items
+  whose tooltip text matches the query get a subtle colored highlight
+  and border; everything else is dimmed — empty slots too, exactly
+  like NEU, so a search leaves nothing undimmed. Matching is
+  case-insensitive, searches the item's full tooltip text (name,
+  lore, enchantments), and supports `|` as OR. Clearing the query
+  restores the inventory immediately.
+- While the bar is focused it owns the keyboard, the vanilla
+  creative-search rule: Esc leaves matching mode first, then focus;
+  plain letters — the inventory key E included — type into the bar
+  instead of interrupting it, so `e` finally inserts an `e`; number
+  keys never trigger hotbar swaps mid-typing; and E-to-close only
+  works once the bar is unfocused (Esc or a click outside releases
+  it). Opening a different container resets query and mode (but `ans`
+  and `$` variables last the whole game session).
 - The per-slot search text is cached against the stack it was built
   from and revalidated with `ItemStack.matches`, so it rebuilds only
   when a stack actually changes.
