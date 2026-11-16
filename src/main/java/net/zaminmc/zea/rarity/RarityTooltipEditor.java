@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -357,24 +358,26 @@ public final class RarityTooltipEditor {
         }
 
         /**
-         * Removes the vanilla "When in Main Hand" / "When on Body"
-         * attribute section — the lines between the header and the next
-         * blank line. The stat block reproduces these numbers in a
-         * cleaner form, so the redundant vanilla listing is dropped.
-         * Enchantment lines and lore sit outside this section and are
-         * untouched. If no attribute section is present (a server
-         * tooltip that omits it), nothing is removed.
+         * Removes the vanilla attribute section — the lines between an
+         * {@code item.modifiers.*} header ("When in Main Hand:",
+         * "When on Chest:", …) and the next blank line. The stat block
+         * reproduces these numbers in a cleaner form, so the redundant
+         * vanilla listing is dropped. The header is recognized by its
+         * translation key, not its display text: 26.3 renamed the chest
+         * header ("When on Body:" became "When on Chest:") and added
+         * group headers ("When worn:", "When equipped:", "When held:"),
+         * and matching the key keeps every current and future slot
+         * group covered without a hardcoded string list drifting behind
+         * the game. Enchantment lines and lore sit outside this section
+         * and are untouched — plain-text lore never carries the
+         * translatable contents a real header has. If no attribute
+         * section is present (a server tooltip that omits it), nothing
+         * is removed.
          */
         private static void removeVanillaAttributeSection(List<Component> lines) {
                 int headerIndex = -1;
                 for (int i = 0; i < lines.size(); i++) {
-                        String text = lines.get(i).getString();
-                        if (text.equals("When in Main Hand:")
-                                        || text.equals("When in Off Hand:")
-                                        || text.equals("When on Body:")
-                                        || text.equals("When on Head:")
-                                        || text.equals("When on Legs:")
-                                        || text.equals("When on Feet:")) {
+                        if (isAttributeSectionHeader(lines.get(i))) {
                                 headerIndex = i;
                                 break;
                         }
@@ -395,6 +398,21 @@ public final class RarityTooltipEditor {
                 for (int i = end - 1; i >= headerIndex; i--) {
                         lines.remove(i);
                 }
+        }
+
+        /**
+         * Whether the line is a vanilla attribute-section header: a
+         * translatable component keyed under {@code item.modifiers.}
+         * (mainhand, offhand, chest, armor, saddle, …). Vanilla builds
+         * exactly these components for its "When in Main Hand:" style
+         * headings, so the key test matches them all without pinning
+         * any translated wording — and a plain-text lore line that
+         * merely spells the same words is not fooled for a header.
+         * Package-private as the pure seam the styling tests pin.
+         */
+        static boolean isAttributeSectionHeader(Component line) {
+                return line.getContents() instanceof TranslatableContents contents
+                                && contents.getKey().startsWith("item.modifiers.");
         }
 
         /**

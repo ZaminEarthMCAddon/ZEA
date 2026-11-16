@@ -1,11 +1,15 @@
 package net.zaminmc.zea.rarity;
 
+import net.minecraft.network.chat.Component;
 import net.zaminmc.zea.VanillaBootstrap;
 import org.junit.jupiter.api.Test;
 
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.EnchantmentStyle;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.isAttributeSectionHeader;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.styleForLevels;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The enchantment styling tiers, pinned through the pure
@@ -58,5 +62,41 @@ class EnchantmentStylingTest {
         void staticMaxedFallbackIsGold() {
                 assertEquals(0xFFAA00, RarityEngine.STATIC_MAXED_COLOR,
                                 "the animation-off maxed color is the gold (&6) tier");
+        }
+
+        /**
+         * Every 26.3 attribute header is a translatable
+         * {@code item.modifiers.*} component, whatever the display text
+         * resolves to — including the renamed chest header and the
+         * group headers (worn, equipped, held, saddled) the old
+         * hardcoded string list missed.
+         */
+        @Test
+        void attributeHeadersMatchByTranslationKey() {
+                for (String key : new String[] {
+                                "item.modifiers.mainhand", "item.modifiers.offhand",
+                                "item.modifiers.head", "item.modifiers.chest",
+                                "item.modifiers.legs", "item.modifiers.feet",
+                                "item.modifiers.armor", "item.modifiers.body",
+                                "item.modifiers.any", "item.modifiers.hand",
+                                "item.modifiers.saddle"}) {
+                        assertTrue(isAttributeSectionHeader(Component.translatable(key)),
+                                        key + " is an attribute header");
+                }
+        }
+
+        /**
+         * A plain-text line that merely spells a header's words is not
+         * a header — server lore survives the attribute-section removal
+         * even when it mimics the vanilla wording.
+         */
+        @Test
+        void plainTextLookalikeIsNotAHeader() {
+                assertFalse(isAttributeSectionHeader(
+                                Component.literal("When in Main Hand:")));
+                assertFalse(isAttributeSectionHeader(
+                                Component.literal("When on Chest:")));
+                assertFalse(isAttributeSectionHeader(Component.literal("When on Body:")));
+                assertFalse(isAttributeSectionHeader(Component.empty()));
         }
 }
