@@ -96,7 +96,7 @@ public final class ChatSubsystem {
                 // (the dev.23 live crash; ChatSubsystemWiringTest pins the
                 // compiled order).
                 this.feedFilter = new FeedFilter(this.classifications, this.feedSelection,
-                                config::globalVisibility, config::tradePacingEnabled);
+                                config::globalVisibility, config::tradePacingEnabled, config::hiddenChatCategories);
                 this.dispatcher = new MultiChannelDispatcher(
                                 this::sendCommand,
                                 new DispatchFeedback(),

@@ -12,14 +12,19 @@ import java.util.List;
  * classification failure never hides a message.
  *
  * <p>Order (specific before generic): writing-channel report, trade
- * wait, private message, death, vote, crate win, Discord, system,
- * tagged channel (local/trade/nation/town), global. The trade wait
- * runs early because its line is a server report the pacing model
- * syncs from, not chat to read. Discord and the tagged channels run
- * before global so their bracketed headers are never read as affiliation
- * brackets; the writing-channel report runs first because it feeds server
- * channel state. Global is last: its bracket + name + colon anchor is the
- * weakest of the chat shapes.
+ * wait, private message, death, vote, crate win, Discord recruitment (a
+ * Discord forward with recruitment language — runs before plain Discord
+ * so the more specific shape wins), Discord, system, promo banner, item
+ * showcase, crate lucky, tagged channel (local/trade/nation/town),
+ * global. The trade wait runs early because its line is a server report
+ * the pacing model syncs from, not chat to read. Discord and the tagged
+ * channels run before global so their bracketed headers are never read
+ * as affiliation brackets; the writing-channel report runs first because
+ * it feeds server channel state. Global is last: its bracket + name +
+ * colon anchor is the weakest of the chat shapes. The four
+ * advertisement-shaped categories (recruitment, banner, showcase, lucky)
+ * sit before the channel shapes so a formatted ad is never mistaken for
+ * ordinary chat.
  */
 public final class ClassificationPipeline {
         private final List<MessageClassifier> classifiers;
@@ -32,8 +37,12 @@ public final class ClassificationPipeline {
                                 new DeathClassifier(),
                                 new VoteClassifier(),
                                 new CrateWinClassifier(),
+                                new DiscordRecruitmentClassifier(),
                                 new DiscordClassifier(),
                                 new SystemClassifier(),
+                                new PromoBannerClassifier(),
+                                new ItemShowcaseClassifier(),
+                                new CrateLuckyClassifier(),
                                 new TaggedChannelChatClassifier(),
                                 new GlobalChatClassifier()));
         }

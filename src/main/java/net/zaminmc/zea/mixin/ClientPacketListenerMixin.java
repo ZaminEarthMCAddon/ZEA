@@ -71,4 +71,21 @@ public abstract class ClientPacketListenerMixin {
                         TradeToast.showFull(minecraft, TradeGate.MAX_QUEUED);
                 }
         }
+
+        /**
+         * Notes every executed command for the discovery subsystem's
+         * navigation history — the single point all command origins flow
+         * through, so a spawn command issued by a ZEA chat link, typed by
+         * hand or sent by any other feature is recorded exactly once. The
+         * subsystem filters to the relevant commands and does its own
+         * gating (discovery on, EarthMC).
+         */
+        @Inject(method = "sendCommand", at = @At("HEAD"))
+        private void zea$noteNavigationCommand(String command, CallbackInfo ci) {
+                net.zaminmc.zea.discovery.DiscoverySubsystem discovery = ZeaClient.discovery();
+                if (discovery == null) {
+                        return;
+                }
+                discovery.onCommandIssued(command);
+        }
 }

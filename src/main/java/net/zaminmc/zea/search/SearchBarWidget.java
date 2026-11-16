@@ -1,25 +1,32 @@
 package net.zaminmc.zea.search;
 
-import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.navigation.FocusNavigationEvent;
 import net.minecraft.network.chat.Component;
+import net.zaminmc.zea.buttons.ButtonGeometry;
 
 /**
- * The inventory search bar: a borderless, flat-background edit box shown
- * at the bottom of the screen while a container GUI is open. Text editing,
- * cursor and selection are all vanilla {@link EditBox} behavior — this
- * class adds the NEU-style dark panel with its one-pixel frame, the gold
- * outline while inventory-matching mode is active, and the right-aligned
- * calculator result.
+ * The inventory search bar: a real Minecraft text field shown beneath the
+ * container GUI. It is a plain vanilla {@link EditBox} with its native
+ * bordered look — the {@code widget/text_field} sprites, which draw the
+ * background, the border on all four sides and swap to the highlighted
+ * variant while the field is focused — so the field reads as part of the
+ * GUI instead of a floating translucent strip. Vanilla also owns the text
+ * layout: bordered fields indent the text four pixels from the left edge
+ * and center it vertically by the font metrics ({@code (height - 8) / 2}),
+ * which keeps the text, selection and cursor inside the field at every
+ * GUI scale.
  *
- * <p>Dimensions follow the reference mock measured in GUI units: 202 wide
- * by 22 tall — two-thirds of the bar's look is breathing room, which is
- * what keeps the caret and the calculator result readable at every GUI
- * scale. The field itself stays empty when no query has been entered; a
- * placeholder would fight the calculator's live result overlay.
+ * <p>The bar keeps two state visuals of its own, drawn over the sprite:
+ * the gold outline while inventory-matching mode is active (NEU tinted
+ * its bar gold the same way), and a quiet white frame while the mouse is
+ * over an unfocused field — the hovered state the vanilla sprites do not
+ * carry. There is deliberately no placeholder text: an empty field is a
+ * clean empty field, and the search button and double-click affordance
+ * teach the interaction.
  *
  * <p>The calculator result is an overlay, not the field's value: the
  * expression stays exactly as typed and the {@code = result} rides on
@@ -27,24 +34,34 @@ import net.minecraft.network.chat.Component;
  * caret. It is computed at most once per distinct input — the same
  * input replays the cached result every frame.
  *
+ * <p>Position and size are decided by the shared layout math
+ * ({@link SearchBarLayout}) used identically by the runtime container
+ * mixin and the button editor's preview — the editor previews this exact
+ * widget, not a lookalike. The bar is horizontally centered on the
+ * container GUI's own bounds (never the framebuffer) and sits near the
+ * screen's bottom edge.
+ *
  * <p>Focus arrives programmatically (click routing in the container
  * mixin) and Tab/arrows are refused like the chat search bar, so the
  * field never joins the screen's focus navigation.
  */
 public final class SearchBarWidget extends EditBox {
-        /** Width of the bar, in GUI units; from the reference mock. */
-        public static final int WIDTH = 202;
+        /** Height of the bar — vanilla's standard field height, which the field sprites are drawn for. */
+        public static final int HEIGHT = 20;
 
-        /** Height of the bar, in GUI units; tall enough for the caret at every scale. */
-        public static final int HEIGHT = 22;
+        /**
+         * Horizontal inset between the bar and the container GUI's side
+         * edges: the bar is centered on the GUI's bounds, not the
+         * framebuffer, and reads as attached to it.
+         */
+        public static final int MARGIN = 8;
 
         /** Gap between the bar and the bottom edge of the screen. */
         public static final int BOTTOM_MARGIN = 5;
 
-        private static final int BACKGROUND = 0x99000000;
-        private static final int FRAME = 0xFF000000;
-        private static final int RESULT_BACKDROP = 0xB0000000;
         private static final int MATCHING_BORDER = 0xFFE8B14A;
+        private static final int HOVER_BORDER = 0x64FFFFFF;
+        private static final int RESULT_BACKDROP = 0xB0000000;
         private static final int RESULT_EQUALS_COLOR = 0xFFFFFF55;
         private static final int RESULT_VALUE_COLOR = 0xFF55FF55;
 
@@ -56,8 +73,6 @@ public final class SearchBarWidget extends EditBox {
 
         public SearchBarWidget(Font font, int x, int y, int width, InventorySearch search) {
                 super(font, x, y, width, HEIGHT, Component.translatable("zea.search.bar"));
-                setBordered(false);
-                setHeight(HEIGHT);
                 setMaxLength(Calculator.MAX_INPUT_LENGTH);
                 this.search = search;
                 this.font = font;
@@ -71,31 +86,36 @@ public final class SearchBarWidget extends EditBox {
         @Override
         public void extractWidgetRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY,
                         float partialTick) {
-                if (visible) {
-                        extractor.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), BACKGROUND);
-                        extractor.fill(getX(), getY(), getX() + getWidth(), getY() + 1, FRAME);
-                        extractor.fill(getX(), getY() + getHeight() - 1, getX() + getWidth(),
-                                        getY() + getHeight(), FRAME);
-                        extractor.fill(getX(), getY(), getX() + 1, getY() + getHeight(), FRAME);
-                        extractor.fill(getX() + getWidth() - 1, getY(), getX() + getWidth(),
-                                        getY() + getHeight(), FRAME);
-                        if (search.mode() == InventorySearch.Mode.MATCHING) {
-                                extractor.fill(getX() - 1, getY() - 1, getX() + getWidth() + 1, getY(), MATCHING_BORDER);
-                                extractor.fill(getX() - 1, getY() + getHeight(), getX() + getWidth() + 1,
-                                                getY() + getHeight() + 1, MATCHING_BORDER);
-                                extractor.fill(getX() - 1, getY() - 1, getX(), getY() + getHeight() + 1,
-                                                MATCHING_BORDER);
-                                extractor.fill(getX() + getWidth(), getY() - 1, getX() + getWidth() + 1,
-                                                getY() + getHeight() + 1, MATCHING_BORDER);
-                        }
-                }
                 super.extractWidgetRenderState(extractor, mouseX, mouseY, partialTick);
-                if (visible && calculatorEnabled && search.mode() == InventorySearch.Mode.CALCULATOR) {
+                if (!visible) {
+                        return;
+                }
+                // State visuals go over the vanilla sprite, never under it:
+                // the sprite would cover anything drawn first.
+                if (search.mode() == InventorySearch.Mode.MATCHING) {
+                        // One-pixel frame just outside the field's own border,
+                        // so all four sides stay visible against both the
+                        // sprite and the GUI behind it.
+                        drawFrame(extractor, getX() - 1, getY() - 1, getWidth() + 2, getHeight() + 2,
+                                        MATCHING_BORDER);
+                } else if (!isFocused()
+                                && ButtonGeometry.contains(getX(), getY(), getWidth(), getHeight(), mouseX, mouseY)) {
+                        drawFrame(extractor, getX(), getY(), getWidth(), getHeight(), HOVER_BORDER);
+                }
+                if (calculatorEnabled && search.mode() == InventorySearch.Mode.CALCULATOR) {
                         drawResult(extractor);
                 }
         }
 
-        /** Draws the cached calculator result, right-aligned inside the bar. */
+        /** A one-pixel frame around a rectangle — the bar's own state outline. */
+        private static void drawFrame(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int color) {
+                extractor.fill(x, y, x + w, y + 1, color);
+                extractor.fill(x, y + h - 1, x + w, y + h, color);
+                extractor.fill(x, y + 1, x + 1, y + h - 1, color);
+                extractor.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
+        }
+
+        /** Draws the cached calculator result, right-aligned inside the field's padded area. */
         private void drawResult(GuiGraphicsExtractor extractor) {
                 String input = getValue();
                 if (input.equals(cachedInput)) {
@@ -114,7 +134,7 @@ public final class SearchBarWidget extends EditBox {
                 }
                 int x = getX() + getWidth() - totalWidth - 3;
                 int y = getY() + (HEIGHT - font.lineHeight + 1) / 2;
-                extractor.fill(x - 2, getY(), getX() + getWidth(), getY() + HEIGHT, RESULT_BACKDROP);
+                extractor.fill(x - 2, getY() + 1, getX() + getWidth() - 1, getY() + getHeight() - 1, RESULT_BACKDROP);
                 extractor.text(font, equals, x, y, RESULT_EQUALS_COLOR, true);
                 extractor.text(font, cachedResult, x + font.width(equals), y, RESULT_VALUE_COLOR, true);
         }

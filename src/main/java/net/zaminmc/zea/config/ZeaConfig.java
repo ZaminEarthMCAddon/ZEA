@@ -15,6 +15,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
+import net.zaminmc.zea.chat.model.MessageCategory;
 import net.zaminmc.zea.map.config.MapConfig;
 import net.zaminmc.zea.market.config.MarketConfig;
 import net.zaminmc.zea.chat.feeds.Feeds;
@@ -152,6 +153,52 @@ public final class ZeaConfig extends Config {
                                 + "message every five minutes.")
                 @ConfigOrder(9)
                 public TradeChat tradeChat = new TradeChat();
+
+                @Category(name = "Message filters", desc = "Hide the server's advertisement-shaped noise — "
+                                + "each category is classified by structure, so ordinary messages that merely "
+                                + "mention the same words are never hidden. Hidden messages stay retrievable: "
+                                + "they leave the General tab but are never deleted.")
+                @ConfigOrder(10)
+                public ChatFilters filters = new ChatFilters();
+        }
+
+        /** The optional advertisement-shaped message filters, each independently toggleable. */
+        public static final class ChatFilters {
+                @ConfigOption(name = "Crate reward announcements", desc = "Hide the parenthesized \"got lucky "
+                                + "and received … /vote\" announcements in General. Real crate wins keep their "
+                                + "own category and tab; normal talk about crates is never hidden.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean hideCrateRewards = true;
+
+                @ConfigOption(name = "Discord recruitment ads", desc = "Hide Discord-forwarded recruitment "
+                                + "advertisements (\"NEW PLAYERS! … type /t join X\") in General. Messages that "
+                                + "are merely forwarded from Discord stay.")
+                @ConfigEditorBoolean
+                @ConfigOrder(1)
+                public boolean hideDiscordRecruitment = true;
+
+                @ConfigOption(name = "Promotional banners", desc = "Hide the centered promotional command "
+                                + "banners (a lone \"/premium\" line between blank rows). Ordinary messages "
+                                + "that mention a command are never hidden.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean hidePromoBanners = true;
+
+                @ConfigOption(name = "Item showcase ads", desc = "Hide advertisements disguised as item "
+                                + "showcases (\"… is holding [Dragon]\" with an item component). Linked items "
+                                + "without that shape stay.")
+                @ConfigEditorBoolean
+                @ConfigOrder(3)
+                public boolean hideItemShowcaseAds = true;
+
+                @ConfigOption(name = "Click-to-visit spawn commands", desc = "Make /n spawn and /t spawn "
+                                + "commands in chat clickable: clicking one sends that exact command to the "
+                                + "server (never through your selected channel). Nothing happens without a "
+                                + "deliberate click.")
+                @ConfigEditorBoolean
+                @ConfigOrder(4)
+                public boolean clickToVisitSpawnCommands = false;
         }
 
         /**
@@ -829,7 +876,34 @@ public final class ZeaConfig extends Config {
                 return new GlobalVisibility(hidden);
         }
 
-        /** Whether the trade channel's sends are paced against the server's reported cooldown; on by default. */
+        /**
+         * The advertisement-shaped categories the message filters hide on
+         * the General feed, per the four independent toggles. Built per
+         * call — the set is tiny and the toggles live-edit.
+         */
+        public Set<MessageCategory> hiddenChatCategories() {
+                Set<MessageCategory> hidden = EnumSet.noneOf(MessageCategory.class);
+                if (chat.filters.hideCrateRewards) {
+                        hidden.add(MessageCategory.CRATE_LUCKY);
+                }
+                if (chat.filters.hideDiscordRecruitment) {
+                        hidden.add(MessageCategory.DISCORD_RECRUITMENT);
+                }
+                if (chat.filters.hidePromoBanners) {
+                        hidden.add(MessageCategory.PROMO_BANNER);
+                }
+                if (chat.filters.hideItemShowcaseAds) {
+                        hidden.add(MessageCategory.ITEM_SHOWCASE);
+                }
+                return hidden;
+        }
+
+        /** Whether spawn commands in chat are click-to-visit; off by default. */
+        public boolean clickToVisitSpawnCommandsEnabled() {
+                return chat.filters.clickToVisitSpawnCommands;
+        }
+
+        /** Whether the trade channel's sends are paced against the server's cooldown; on by default. */
         public boolean tradePacingEnabled() {
                 return chat.tradeChat.pacing;
         }

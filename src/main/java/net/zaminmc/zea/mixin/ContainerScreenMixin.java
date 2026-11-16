@@ -19,6 +19,7 @@ import net.zaminmc.zea.buttons.ButtonRenderer;
 import net.zaminmc.zea.buttons.InventoryButton;
 import net.zaminmc.zea.buttons.InventoryButtons;
 import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.duck.ContainerScreenAccess;
 import net.zaminmc.zea.duck.HoveredSlotAccess;
 import net.zaminmc.zea.duck.RecipeBookAccess;
 import net.zaminmc.zea.duck.ScreenWidgetAccess;
@@ -28,6 +29,7 @@ import net.zaminmc.zea.rarity.RarityEngine;
 import net.zaminmc.zea.market.tooltip.MarketTooltipEditor;
 import net.zaminmc.zea.rarity.RarityTooltipEditor;
 import net.zaminmc.zea.search.InventorySearch;
+import net.zaminmc.zea.search.SearchBarLayout;
 import net.zaminmc.zea.search.SearchBarWidget;
 import net.zaminmc.zea.search.SearchOverlay;
 import net.zaminmc.zea.slots.SlotGuard;
@@ -64,7 +66,7 @@ import java.util.List;
  * the hover state.
  */
 @Mixin(AbstractContainerScreen.class)
-public abstract class ContainerScreenMixin implements HoveredSlotAccess {
+public abstract class ContainerScreenMixin implements HoveredSlotAccess, ContainerScreenAccess {
         @Shadow
         protected int leftPos;
 
@@ -92,6 +94,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         /** The search bar of this screen instance; created on init. */
         @Nullable
         private SearchBarWidget zea$searchBar;
+
+        @Override
+        public int zea$imageWidth() {
+                return imageWidth;
+        }
+
+        @Override
+        public int zea$imageHeight() {
+                return imageHeight;
+        }
 
         // ------------------------------------------------------------------
         // Init: the search bar widget
@@ -152,26 +164,23 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         }
 
         /**
-         * Places the bar at the bottom of the screen, horizontally centered
-         * — the reference mock's layout (202x22 GUI units, five off the
-         * bottom edge). The layout stays live: resize and recipe-book
-         * toggles re-place it, and the y never leaves the screen.
+         * Places the bar under the GUI, horizontally centered on the GUI's
+         * own bounds — never the framebuffer — through the shared layout
+         * math ({@link SearchBarLayout}) the button editor's preview also
+         * uses. The layout stays live: resize and recipe-book toggles
+         * re-place it, and the y never leaves the screen.
          */
         private void zea$positionSearchBar(AbstractContainerScreen<?> self) {
                 SearchBarWidget bar = zea$searchBar;
                 if (bar == null) {
                         return;
                 }
-                // The reference mock's layout: the mock's 404x44 physical
-                // pixels are 202x22 GUI units at its scale 2, horizontally
-                // centered, five units off the bottom edge. Width clamps
-                // down on narrow windows; the y never leaves the screen.
-                int width = Math.min(SearchBarWidget.WIDTH, self.width - 8);
-                int y = Math.clamp(self.height - SearchBarWidget.HEIGHT - SearchBarWidget.BOTTOM_MARGIN, 0,
-                                self.height - SearchBarWidget.HEIGHT);
-                bar.setX((self.width - width) / 2);
-                bar.setY(y);
-                bar.setWidth(width);
+                // The shared layout: horizontally centered on the GUI's
+                // own bounds (never the framebuffer), vertically near the
+                // screen's bottom edge and clamped onto it. The editor
+                // preview goes through the same math, so what it shows is
+                // what renders here.
+                SearchBarLayout.apply(bar, leftPos, imageWidth, self.height);
         }
 
         /** The layout inputs for this screen right now. */

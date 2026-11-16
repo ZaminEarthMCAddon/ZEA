@@ -67,7 +67,7 @@ public final class ButtonGeometry {
          * bottom edge with a small margin, and the above-search row hangs
          * above it.
          */
-        public static final int SEARCH_BAR_HEIGHT = 22;
+        public static final int SEARCH_BAR_HEIGHT = 20;
         public static final int SEARCH_BAR_BOTTOM_MARGIN = 5;
 
         /**

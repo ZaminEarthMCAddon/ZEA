@@ -6,8 +6,10 @@ import net.zaminmc.zea.chat.classify.ClassificationCache;
 import net.zaminmc.zea.chat.model.MessageCategory;
 import net.zaminmc.zea.chat.model.TradeWait;
 
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -36,7 +38,9 @@ import java.util.function.Supplier;
  *
  * <p>The Global tab is the aggregate, so its predicate is the user's
  * per-type choice ({@link GlobalVisibility} — read live, so a settings
- * change applies to the next message without re-selecting anything);
+ * change applies to the next message without re-selecting anything)
+ * plus the advertisement-shaped filter toggles (Discord recruitment,
+ * promo banners, item showcases, crate lucky lines — also read live),
  * with nothing hidden the predicate disappears entirely and vanilla
  * shows everything, unclassified formats included. A feed without the
  * full set shows only its categories. And while trade pacing is on,
@@ -68,122 +72,129 @@ import java.util.function.Supplier;
  * is closed; an empty string means open but not narrowing anything yet.
  */
 public final class FeedFilter {
-	/** What vanilla itself installs when nothing should be hidden. */
-	private static final Predicate<GuiMessage> SHOW_EVERYTHING = message -> true;
+        /** What vanilla itself installs when nothing should be hidden. */
+        private static final Predicate<GuiMessage> SHOW_EVERYTHING = message -> true;
 
-	private final ClassificationCache cache;
-	private final FeedSelection selection;
-	private final Supplier<GlobalVisibility> globalVisibility;
-	private final BooleanSupplier hideTradeWaitLines;
-	private String searchQuery;
+        private final ClassificationCache cache;
+        private final FeedSelection selection;
+        private final Supplier<GlobalVisibility> globalVisibility;
+        private final BooleanSupplier hideTradeWaitLines;
+        /** The advertisement-shaped categories the user's filter toggles currently hide. */
+        private final Supplier<Set<MessageCategory>> optionalHiddenCategories;
+        private String searchQuery;
 
-	public FeedFilter(ClassificationCache cache, FeedSelection selection,
-					Supplier<GlobalVisibility> globalVisibility, BooleanSupplier hideTradeWaitLines) {
-		this.cache = Objects.requireNonNull(cache, "cache must not be null");
-		this.selection = Objects.requireNonNull(selection, "selection must not be null");
-		this.globalVisibility = Objects.requireNonNull(globalVisibility,
-						"globalVisibility must not be null");
-		this.hideTradeWaitLines = Objects.requireNonNull(hideTradeWaitLines,
-						"hideTradeWaitLines must not be null");
-	}
+        public FeedFilter(ClassificationCache cache, FeedSelection selection,
+                                        Supplier<GlobalVisibility> globalVisibility, BooleanSupplier hideTradeWaitLines,
+                                        Supplier<Set<MessageCategory>> optionalHiddenCategories) {
+                this.cache = Objects.requireNonNull(cache, "cache must not be null");
+                this.selection = Objects.requireNonNull(selection, "selection must not be null");
+                this.globalVisibility = Objects.requireNonNull(globalVisibility,
+                                                "globalVisibility must not be null");
+                this.hideTradeWaitLines = Objects.requireNonNull(hideTradeWaitLines,
+                                                "hideTradeWaitLines must not be null");
+                this.optionalHiddenCategories = Objects.requireNonNull(optionalHiddenCategories,
+                                                "optionalHiddenCategories must not be null");
+        }
 
-	/** The active search query, or {@code null} when the search is closed. */
-	public String searchQuery() {
-		return searchQuery;
-	}
+        /** The active search query, or {@code null} when the search is closed. */
+        public String searchQuery() {
+                return searchQuery;
+        }
 
-	/**
-	 * Sets the search query. {@code null} closes the search; a blank
-	 * query keeps it open without filtering. Callers re-apply the filter
-	 * through {@link #apply(ChatComponent)} for the change to take
-	 * effect.
-	 */
-	public void setSearchQuery(String query) {
-		this.searchQuery = query;
-	}
+        /**
+         * Sets the search query. {@code null} closes the search; a blank
+         * query keeps it open without filtering. Callers re-apply the filter
+         * through {@link #apply(ChatComponent)} for the change to take
+         * effect.
+         */
+        public void setSearchQuery(String query) {
+                this.searchQuery = query;
+        }
 
-	/**
-	 * The predicate for the selected feed composed with the search
-	 * query and the wait-line hide, or {@code null} when none of them
-	 * filters anything.
-	 */
-	public Predicate<GuiMessage> currentFilter() {
-		Predicate<GuiMessage> filter = feedPredicate();
-		Predicate<GuiMessage> bySearch = searchPredicate(searchQuery);
-		if (filter == null) {
-			filter = bySearch;
-		} else if (bySearch != null) {
-			filter = filter.and(bySearch);
-		}
-		if (hideTradeWaitLines.getAsBoolean()) {
-			Predicate<GuiMessage> notWaitLine = message ->
-							!(cache.classificationOf(message.content()).payload() instanceof TradeWait);
-			filter = filter == null ? notWaitLine : notWaitLine.and(filter);
-		}
-		return filter;
-	}
+        /**
+         * The predicate for the selected feed composed with the search
+         * query and the wait-line hide, or {@code null} when none of them
+         * filters anything.
+         */
+        public Predicate<GuiMessage> currentFilter() {
+                Predicate<GuiMessage> filter = feedPredicate();
+                Predicate<GuiMessage> bySearch = searchPredicate(searchQuery);
+                if (filter == null) {
+                        filter = bySearch;
+                } else if (bySearch != null) {
+                        filter = filter.and(bySearch);
+                }
+                if (hideTradeWaitLines.getAsBoolean()) {
+                        Predicate<GuiMessage> notWaitLine = message ->
+                                                        !(cache.classificationOf(message.content()).payload() instanceof TradeWait);
+                        filter = filter == null ? notWaitLine : notWaitLine.and(filter);
+                }
+                return filter;
+        }
 
-	/**
-	 * The predicate {@link #apply(ChatComponent)} installs — like
-	 * {@link #currentFilter()}, except "nothing filters" becomes an
-	 * always-true predicate instead of {@code null}, because vanilla's
-	 * chat crashes on a null filter when the next message arrives.
-	 * Always an {@link Installed} wrapper so the retention wrap in
-	 * ChatComponentMixin can recognize ZEA's filters.
-	 */
-	public Installed installableFilter() {
-		Predicate<GuiMessage> filter = currentFilter();
-		return new Installed(filter != null ? filter : SHOW_EVERYTHING);
-	}
+        /**
+         * The predicate {@link #apply(ChatComponent)} installs — like
+         * {@link #currentFilter()}, except "nothing filters" becomes an
+         * always-true predicate instead of {@code null}, because vanilla's
+         * chat crashes on a null filter when the next message arrives.
+         * Always an {@link Installed} wrapper so the retention wrap in
+         * ChatComponentMixin can recognize ZEA's filters.
+         */
+        public Installed installableFilter() {
+                Predicate<GuiMessage> filter = currentFilter();
+                return new Installed(filter != null ? filter : SHOW_EVERYTHING);
+        }
 
-	/** Installs (or clears) the filter on the live chat component. */
-	public void apply(ChatComponent chat) {
-		chat.setVisibleMessageFilter(installableFilter());
-	}
+        /** Installs (or clears) the filter on the live chat component. */
+        public void apply(ChatComponent chat) {
+                chat.setVisibleMessageFilter(installableFilter());
+        }
 
-	private Predicate<GuiMessage> feedPredicate() {
-		Feed feed = selection.selected();
-		if (feed.showsEverything()) {
-			GlobalVisibility visibility = globalVisibility.get();
-			if (visibility.showsEverything()) {
-				return null;
-			}
-			return message -> !visibility.hides(categoryOf(message));
-		}
-		return message -> feed.shows(cache.classificationOf(message.content()));
-	}
+        private Predicate<GuiMessage> feedPredicate() {
+                Feed feed = selection.selected();
+                if (feed.showsEverything()) {
+                        Set<MessageCategory> hidden = EnumSet.noneOf(MessageCategory.class);
+                        hidden.addAll(globalVisibility.get().hidden());
+                        hidden.addAll(optionalHiddenCategories.get());
+                        if (hidden.isEmpty()) {
+                                return null;
+                        }
+                        return message -> !hidden.contains(categoryOf(message));
+                }
+                return message -> feed.shows(cache.classificationOf(message.content()));
+        }
 
-	private MessageCategory categoryOf(GuiMessage message) {
-		return cache.classificationOf(message.content()).category();
-	}
+        private MessageCategory categoryOf(GuiMessage message) {
+                return cache.classificationOf(message.content()).category();
+        }
 
-	/** Case-insensitive substring match over the flattened message text. */
-	private static Predicate<GuiMessage> searchPredicate(String query) {
-		if (query == null || query.isBlank()) {
-			return null;
-		}
-		String needle = query.toLowerCase(Locale.ROOT);
-		return message -> message.content().getString().toLowerCase(Locale.ROOT).contains(needle);
-	}
+        /** Case-insensitive substring match over the flattened message text. */
+        private static Predicate<GuiMessage> searchPredicate(String query) {
+                if (query == null || query.isBlank()) {
+                        return null;
+                }
+                String needle = query.toLowerCase(Locale.ROOT);
+                return message -> message.content().getString().toLowerCase(Locale.ROOT).contains(needle);
+        }
 
-	/**
-	 * The predicate shape ZEA installs as the vanilla chat filter. A
-	 * plain delegating wrapper: its only job is to be recognizably
-	 * ZEA's, so the retention wrap in ChatComponentMixin can store away
-	 * the messages these predicates reject without touching the drop
-	 * semantics of any other filter that ever occupies the field
-	 * (vanilla's chat-trust filter, other mods').
-	 */
-	public static final class Installed implements Predicate<GuiMessage> {
-		private final Predicate<GuiMessage> delegate;
+        /**
+         * The predicate shape ZEA installs as the vanilla chat filter. A
+         * plain delegating wrapper: its only job is to be recognizably
+         * ZEA's, so the retention wrap in ChatComponentMixin can store away
+         * the messages these predicates reject without touching the drop
+         * semantics of any other filter that ever occupies the field
+         * (vanilla's chat-trust filter, other mods').
+         */
+        public static final class Installed implements Predicate<GuiMessage> {
+                private final Predicate<GuiMessage> delegate;
 
-		Installed(Predicate<GuiMessage> delegate) {
-			this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-		}
+                Installed(Predicate<GuiMessage> delegate) {
+                        this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
+                }
 
-		@Override
-		public boolean test(GuiMessage message) {
-			return delegate.test(message);
-		}
-	}
+                @Override
+                public boolean test(GuiMessage message) {
+                        return delegate.test(message);
+                }
+        }
 }

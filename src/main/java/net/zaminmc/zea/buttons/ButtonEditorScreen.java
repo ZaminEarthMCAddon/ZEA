@@ -277,8 +277,11 @@ public final class ButtonEditorScreen extends Screen {
                         context.fill(x, y, x + PRESET_BUTTON_WIDTH, y + PRESET_BUTTON_HEIGHT,
                                         hover ? HOVER_FILL : IDLE_FILL);
                         ButtonRenderer.drawBorder(context, x, y, PRESET_BUTTON_WIDTH, PRESET_BUTTON_HEIGHT, PANEL_BORDER);
-                        context.centeredText(font, Component.translatable(presets.get(i).nameKey()),
-                                        x + PRESET_BUTTON_WIDTH / 2, y + 5, 0xFFFFFFFF);
+                        // Labels fit their own button — "Buttons Everywhere" is
+                        // wider than the 82-pixel preset and must shrink, not spill.
+                        ButtonRenderer.drawFittedCenteredText(context, font,
+                                        Component.translatable(presets.get(i).nameKey()).getString(),
+                                        x + PRESET_BUTTON_WIDTH / 2, y + 5, PRESET_BUTTON_WIDTH - 8, 0xFFFFFFFF);
                 }
                 if (owner.hasRestorePoint()) {
                         context.text(font, Component.translatable("zea.buttons.list.applied"),

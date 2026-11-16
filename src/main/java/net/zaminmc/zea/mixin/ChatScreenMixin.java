@@ -476,12 +476,24 @@ public abstract class ChatScreenMixin {
          * destination (events) nothing is intercepted and vanilla plain
          * chat stands.
          *
-         * <p>Slash commands stay vanilla in both branches — a player typing
-         * a command means the command (and a manual {@code /msg} still
-         * works: its echo lands on the PMs tab and becomes the reply
-         * target). The interception mirrors what vanilla does next: the
-         * normalized text enters the up-arrow recall, and cancelling lets
-         * the caller's close-or-clear behavior run unchanged.
+         * <p>Except when a shop transaction is pending: EarthMC's physical
+         * shops collect the quantity as the next plain chat message ("Enter
+         * in chat, how many you wish to BUY."), and channel routing would
+         * turn that "16" into "/global 16" — a garbled channel message the
+         * shop never reads. While {@link ShopTransactionInput} is armed, the
+         * next eligible plain message is deliberately <b>not</b> intercepted
+         * at all: falling through lets vanilla send it through
+         * {@code connection.sendChat} unmodified, with no prefix, no
+         * duplication and no recall of the shop state — the one-shot state
+         * is consumed by the send itself. Slash commands are never shop
+         * input and keep their normal pathway.
+         *
+         * <p>Slash commands stay vanilla in all other branches too — a
+         * player typing a command means the command (and a manual
+         * {@code /msg} still works: its echo lands on the PMs tab and
+         * becomes the reply target). The interception mirrors what vanilla
+         * does next: the normalized text enters the up-arrow recall, and
+         * cancelling lets the caller's close-or-clear behavior run unchanged.
          */
         @Inject(method = "handleChatInput", at = @At("HEAD"), cancellable = true)
         private void zea$sendToTargets(String text, boolean addRecent, CallbackInfo ci) {

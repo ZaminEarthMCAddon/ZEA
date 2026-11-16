@@ -6,16 +6,20 @@ package net.zaminmc.zea.chat.model;
  * (writable destinations).
  */
 public enum MessageCategory {
-	GLOBAL,
-	LOCAL,
-	TRADE,
-	NATION,
-	TOWN,
-	PRIVATE_MESSAGE,
-	DISCORD,
-	VOTE,
-	CRATE_WIN,
-	DEATH,
-	SYSTEM,
-	UNCLASSIFIED
+        GLOBAL,
+        LOCAL,
+        TRADE,
+        NATION,
+        TOWN,
+        PRIVATE_MESSAGE,
+        DISCORD,
+        DISCORD_RECRUITMENT,
+        VOTE,
+        CRATE_WIN,
+        CRATE_LUCKY,
+        DEATH,
+        SYSTEM,
+        PROMO_BANNER,
+        ITEM_SHOWCASE,
+        UNCLASSIFIED
 }

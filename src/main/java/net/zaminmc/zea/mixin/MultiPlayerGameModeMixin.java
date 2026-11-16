@@ -27,12 +27,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * The drop key over a hovered slot is a THROW container input and is
  * handled by the container screen mixin instead.
  *
- * <p>The market observes {@code useItemOn} because right-clicking a
- * block is what triggers EarthMC's shop response: recording the used
+ * <p>The market observes {@code useItemOn} at HEAD because right-clicking
+ * a block is what triggers EarthMC's shop response: recording the used
  * block is what lets the market correlate that response with the
  * physical sign it came from, including its position and its attached
  * chest. Purely observational — the interaction is never modified,
  * cancelled or reordered.
+ *
+ * <p>Discovery also notes {@code useItemOn}, hooked at TAIL with the
+ * interaction's result: a failed use (out of reach, refused) is not a
+ * shop interaction, anything the server accepted is — the subsystem's
+ * own gating (discovery on, EarthMC, the block being a sign) applies
+ * there. Both handlers only read the interaction and never modify it.
  */
 @Mixin(MultiPlayerGameMode.class)
 public abstract class MultiPlayerGameModeMixin {
@@ -59,5 +65,28 @@ public abstract class MultiPlayerGameModeMixin {
                         return;
                 }
                 ZeaClient.market().onBlockUse(minecraft.level, hit);
+        }
+
+        /**
+         * Notes every block use for the discovery subsystem, which filters
+         * it down to shop-sign interactions. Hooked at TAIL with the
+         * interaction's result: a failed use (out of reach, refused) is not
+         * a shop interaction, anything the server accepted is — the
+         * subsystem's own gating (discovery on, EarthMC, the block being a
+         * sign) applies there. The returnable is cancellable per the mixin
+         * house rule (every returnable handler declares it); this handler
+         * only reads the result and never cancels or edits it.
+         */
+        @Inject(method = "useItemOn", at = @At("TAIL"), cancellable = true)
+        private void zea$noteBlockUse(LocalPlayer player, InteractionHand hand, BlockHitResult hit,
+                        CallbackInfoReturnable<InteractionResult> cir) {
+                if (!cir.getReturnValue().consumesAction()) {
+                        return;
+                }
+                net.zaminmc.zea.discovery.DiscoverySubsystem discovery = ZeaClient.discovery();
+                if (discovery == null) {
+                        return;
+                }
+                discovery.onBlockUse(hit.getBlockPos());
         }
 }

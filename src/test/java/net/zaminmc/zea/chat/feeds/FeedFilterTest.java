@@ -113,8 +113,9 @@ class FeedFilterTest {
         private final FeedSelection selection = new FeedSelection(Feeds.GLOBAL);
         private GlobalVisibility visibility = GlobalVisibility.SHOW_EVERYTHING;
         private boolean hideTradeWaitLines;
+        private Set<MessageCategory> hiddenAdCategories = Set.of();
         private final FeedFilter filter = new FeedFilter(cache, selection,
-                        () -> visibility, () -> hideTradeWaitLines);
+                        () -> visibility, () -> hideTradeWaitLines, () -> hiddenAdCategories);
 
         private GuiMessage message(String text) {
                 return new GuiMessage(0, Component.literal(text), new MessageSignature(new byte[256]),
@@ -137,11 +138,12 @@ class FeedFilterTest {
         @Test
         void feedFilterRequiresItsCollaborators() {
                 assertThrows(NullPointerException.class,
-                                () -> new FeedFilter(null, selection, () -> visibility, () -> false));
+                                () -> new FeedFilter(null, selection, () -> visibility, () -> false, Set::of));
                 assertThrows(NullPointerException.class,
-                                () -> new FeedFilter(cache, null, () -> visibility, () -> false));
-                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, null, () -> false));
-                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, () -> visibility, null));
+                                () -> new FeedFilter(cache, null, () -> visibility, () -> false, Set::of));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, null, () -> false, Set::of));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, () -> visibility, null, Set::of));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, () -> visibility, () -> false, null));
         }
 
         /**

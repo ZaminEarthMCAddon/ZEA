@@ -66,8 +66,9 @@ class ButtonGeometryTest {
 
                 assertEquals(8, slot.x());
                 // The row hangs above the bottom bar: screen minus the bar's
-                // bottom margin (5), its height (22) and the gap.
-                assertEquals(240 - 5 - 22 - 2 - 18, slot.y());
+                // bottom margin (5), its height (20, the vanilla field sprite)
+                // and the gap.
+                assertEquals(240 - 5 - ButtonGeometry.SEARCH_BAR_HEIGHT - 2 - 18, slot.y());
                 assertEquals(9, ButtonGeometry.Zone.ABOVE_SEARCH.capacity);
                 assertNull(ButtonGeometry.slotRect(ButtonGeometry.Zone.ABOVE_SEARCH, 9, screen(true)));
         }

@@ -13,10 +13,14 @@ public sealed interface MessagePayload permits
                 TaggedChannelChat,
                 PrivateMessage,
                 DiscordMessage,
+                DiscordRecruitmentMessage,
                 VoteMessage,
                 CrateWinMessage,
+                CrateLuckyMessage,
                 DeathMessage,
                 SystemMessage,
+                PromoBannerMessage,
+                ItemShowcaseMessage,
                 TradeWait,
                 WritingChannelReport {
 
