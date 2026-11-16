@@ -3930,3 +3930,36 @@ and the lang keys. Not verified in-game (no live client here): the
 bar at each GUI scale, buttons from editor to real inventory across
 container types, the idle notice on a non-EarthMC server, and both
 map surfaces against live EarthMC data — the live checklist.
+
+## 2026-11-17 (session 16, P0 port) — The shop-quantity chat bypass
+
+### The regression
+
+Channel routing rewrote the shop transaction's quantity: EarthMC's
+physical shops collect the quantity as the next plain chat message
+("Enter in chat, how many you wish to BUY."), and `zea$sendToTargets`
+turned that "16" into "/global 16" on the Global tab — a garbled
+channel message the shop never reads. This is the release-blocking
+defect the live report opened with.
+
+### The fix
+
+`ShopTransactionInput` — a one-shot pending state in the chat subsystem:
+the explicit quantity prompt arms it (armed in the capture pipeline
+before any display filter can hide the line), the next eligible plain
+message consumes it, and `zea$sendToTargets` deliberately does not
+intercept that message — vanilla's own `connection.sendChat` sends it
+exactly as typed. No prefix, no duplication, no recall of the state;
+slash commands and blank text are never consumed and never consume it;
+the state expires after 30 s and clears on disconnect; re-arming with a
+new prompt refreshes it. The selected channel is never changed.
+
+### Verification
+
+`./gradlew test` green; **1231 tests, 0 failures** (this branch's suite
+plus the new `ShopTransactionInputTest`: prompt recognition in both
+directions and case/padding variants, quantities and `all` bypassing
+exactly as typed, slash commands and blank text leaving the state armed,
+expiry, disconnect clearing, re-arm refresh). In-game verification with
+both channel selections, BUY and SELL flows, and the normal-message
+checklist afterward is the live checklist for the next session.

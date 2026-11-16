@@ -22,6 +22,7 @@ import net.zaminmc.zea.chat.feeds.OutgoingMessage;
 import net.zaminmc.zea.chat.feeds.OutgoingRouter;
 import net.zaminmc.zea.chat.feeds.PrivateMessaging;
 import net.zaminmc.zea.chat.feeds.SendTargets;
+import net.zaminmc.zea.chat.feeds.ShopTransactionInput;
 import net.zaminmc.zea.chat.feeds.TradeGate;
 import net.zaminmc.zea.chat.feeds.UnreadTracker;
 import net.zaminmc.zea.chat.feeds.WriteChannel;
@@ -73,6 +74,7 @@ public final class ChatSubsystem {
         private final CaptureRecorder capture;
         private final UnreadTracker unread;
         private final TradeGate tradeGate;
+        private final ShopTransactionInput shopInput = new ShopTransactionInput();
         private final PrivateMessaging privateMessaging = new PrivateMessaging();
 
         public ChatSubsystem(ClientLifecycle lifecycle, ClassificationPipeline classification, ZeaConfig config,
@@ -144,6 +146,7 @@ public final class ChatSubsystem {
                         sendTargets.clear();
                         unread.clear();
                         tradeGate.clear();
+                        shopInput.clear();
                         privateMessaging.clear();
                         feedFilter.setSearchQuery(null);
                         feedFilter.apply(client.gui.hud.getChat());
@@ -154,6 +157,12 @@ public final class ChatSubsystem {
 
         /** Classified stream entry point; feeds, presentation and notifications subscribe here. */
         private void onCaptured(CapturedMessage captured) {
+                // The shop quantity prompt arms before anything else sees the
+                // message: display filters may hide the line later, but the
+                // next typed message must still go out as the raw shop input.
+                if (ShopTransactionInput.isQuantityPrompt(captured.text())) {
+                        shopInput.arm(System.currentTimeMillis());
+                }
                 ClassifiedMessage classified = classifications.classify(captured);
                 if (classified.payload() instanceof WritingChannelReport report) {
                         channelState.applyReport(report);
@@ -282,6 +291,11 @@ public final class ChatSubsystem {
         }
 
         /** The trade channel's pacing state; see {@link TradeGate}. */
+        /** The one-shot pending shop-quantity state; see {@link ShopTransactionInput}. */
+        public ShopTransactionInput shopInput() {
+                return shopInput;
+        }
+
         public TradeGate tradeGate() {
                 return tradeGate;
         }

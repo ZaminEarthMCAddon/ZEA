@@ -16,6 +16,7 @@ import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.chat.feeds.MultiSendInteraction;
 import net.zaminmc.zea.chat.feeds.MultiSendResult;
 import net.zaminmc.zea.chat.feeds.SendTargets;
+import net.zaminmc.zea.chat.feeds.ShopTransactionInput;
 import net.zaminmc.zea.chat.feeds.WriteChannel;
 import net.zaminmc.zea.chat.render.ChatButtonBar;
 import net.zaminmc.zea.chat.render.ChatCopier;
@@ -489,6 +490,16 @@ public abstract class ChatScreenMixin {
                         return;
                 }
                 String message = ((ChatScreen) (Object) this).normalizeChatMessage(text);
+                // The pending shop input outranks every routing: EarthMC's
+                // physical shops collect the quantity as the next plain chat
+                // message, and channel routing would turn that "16" into
+                // "/global 16" — a garbled channel message the shop never
+                // reads. Not cancelling hands the message to vanilla's own
+                // send, exactly as typed; the one-shot state is consumed by
+                // the send itself (ShopTransactionInput).
+                if (chat.shopInput().shouldBypass(message, System.currentTimeMillis())) {
+                        return;
+                }
                 SendTargets targets = chat.sendTargets();
                 if (MultiSendInteraction.shouldIntercept(
                         targets, ZeaClient.config().multiSendEnabled(), message)) {
