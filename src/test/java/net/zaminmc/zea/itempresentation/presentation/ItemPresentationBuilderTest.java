@@ -186,9 +186,12 @@ class ItemPresentationBuilderTest {
                                                 2.5, -0.6, true)),
                                 Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.MACE, stats);
-                assertEquals("Smash Attack: +6 past 1.5 blocks fallen "
-                                + "(+4/block to 3, +2/block to 8, +1/block after)",
+                assertEquals("Smash Attack: +6 past 1.5 blocks fallen",
                                 lineStarting(lines, "Smash Attack:").getString());
+                // The band breakdown rides its own indented detail line —
+                // the combined single line clipped at narrow-window edges.
+                assertEquals("  +4/block to 3, +2/block to 8, +1/block after",
+                                lines.get(lines.indexOf(lineStarting(lines, "Smash Attack:")) + 1).getString());
                 assertEquals("Density Bonus: +2.5/block fallen", lineStarting(lines, "Density Bonus:").getString());
                 assertEquals("Breach: -60% armor effectiveness", lineStarting(lines, "Breach:").getString());
                 assertTrue(containsLineStarting(lines, "Wind Burst:"));
@@ -211,7 +214,7 @@ class ItemPresentationBuilderTest {
                                 "food must not show weapon-style damage statistics");
         }
 
-        /** Durability with Unbreaking shows the effective maximum alongside the raw. */
+        /** Durability with Unbreaking shows the effective maximum on its own detail line. */
         @Test
         void durabilityWithUnbreakingShowsEffectiveMaximum() {
                 ItemStatistics stats = new ItemStatistics(
@@ -219,10 +222,11 @@ class ItemPresentationBuilderTest {
                                 Optional.of(new ItemStatistics.Durability(1561, 1561, 4.0)),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
-                Component durabilityLine = lineStarting(lines, "Durability:");
-                assertTrue(durabilityLine.getString().contains("effective"),
-                                "Unbreaking must surface the effective maximum");
-                assertEquals("Durability: 1561 / 1561  (effective ~6244)", durabilityLine.getString());
+                assertEquals("Durability: 1561 / 1561", lineStarting(lines, "Durability:").getString());
+                // The effective expectation is an indented detail line —
+                // the combined line clipped at narrow-window screen edges.
+                assertEquals("  effective ~6244",
+                                lines.get(lines.indexOf(lineStarting(lines, "Durability:")) + 1).getString());
         }
 
         /** An item with no populated statistics shows nothing. */

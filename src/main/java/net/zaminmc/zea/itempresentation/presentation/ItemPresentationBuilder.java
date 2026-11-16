@@ -52,7 +52,7 @@ public final class ItemPresentationBuilder {
                 statistics.projectile().ifPresent(projectile -> lines.addAll(projectileLines(category, projectile)));
                 statistics.smashDamage().ifPresent(smash -> lines.addAll(smashLines(smash)));
                 statistics.food().ifPresent(food -> lines.addAll(foodLines(food)));
-                statistics.durability().ifPresent(durability -> lines.add(durabilityLine(durability)));
+                statistics.durability().ifPresent(durability -> lines.addAll(durabilityLines(durability)));
                 if (!lines.isEmpty()) {
                         lines.add(0, Component.empty());
                         lines.add(Component.empty());
@@ -193,9 +193,15 @@ public final class ItemPresentationBuilder {
                                 bands.append("to ").append(format(band.upTo()));
                         }
                 }
+                // The band breakdown is a detail line under the headline,
+                // not a parenthetical: as one line the pair ran past the
+                // screen edge on narrow windows, and vanilla tooltips
+                // never wrap — the split keeps every glyph on screen at
+                // any GUI scale.
                 lines.add(statLine("Smash Attack",
                                 "+" + format(smash.fallBonus(smash.fallThreshold()))
-                                + " past " + format(smash.fallThreshold()) + " blocks fallen (" + bands + ")"));
+                                + " past " + format(smash.fallThreshold()) + " blocks fallen"));
+                lines.add(detailLine(bands.toString()));
                 if (smash.densityPerFallenBlock() > 0.0) {
                         lines.add(statLine("Density Bonus",
                                         "+" + format(smash.densityPerFallenBlock()) + "/block fallen"));
@@ -224,13 +230,20 @@ public final class ItemPresentationBuilder {
                 return lines;
         }
 
-        /** The durability line: current / maximum, with effective maximum when Unbreaking applies. */
-        private static Component durabilityLine(ItemStatistics.Durability durability) {
-                String value = durability.current() + " / " + durability.maximum();
+        /**
+         * The durability line: current / maximum, with the Unbreaking-
+         * adjusted expectation as a detail line beneath. The effective
+         * value lives on its own indented line for the same reason the
+         * smash bands do — the combined line clipped at narrow-window
+         * screen edges, and tooltips never wrap.
+         */
+        private static List<Component> durabilityLines(ItemStatistics.Durability durability) {
+                List<Component> lines = new ArrayList<>();
+                lines.add(statLine("Durability", durability.current() + " / " + durability.maximum()));
                 if (durability.unbreakingFactor() > 1.0) {
-                        value += "  (effective ~" + durability.effectiveMaximum() + ")";
+                        lines.add(detailLine("effective ~" + durability.effectiveMaximum()));
                 }
-                return statLine("Durability", value);
+                return lines;
         }
 
         /** A tick count as both ticks and seconds, the way players read draw times. */
@@ -247,6 +260,15 @@ public final class ItemPresentationBuilder {
                                 .withColor(LABEL_GRAY);
                 line.append(Component.literal(value).withColor(VALUE_WHITE));
                 return line;
+        }
+
+        /**
+         * A grey indented continuation under a stat line — the band
+         * breakdowns and effective-value notes that qualify the number
+         * above them without repeating a label.
+         */
+        private static Component detailLine(String value) {
+                return Component.literal("  " + value).withColor(LABEL_GRAY);
         }
 
         /**
