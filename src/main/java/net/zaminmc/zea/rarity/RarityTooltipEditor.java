@@ -97,8 +97,14 @@ public final class RarityTooltipEditor {
         /** The gray a foreign (incompatible, command-placed) enchantment wears. */
         private static final int FOREIGN_GRAY = 0xAAAAAA;
 
-        /** The dark gray vanilla styles its advanced item-identifier line with. */
-        private static final int ADVANCED_ID_GRAY = 0x3F3F3F;
+        /**
+         * The color vanilla styles its advanced registry-identifier
+         * literal with — {@link ChatFormatting#DARK_GRAY}, 0x555555.
+         * Pixel-verified against the rendered tooltip: the identifier
+         * line and the component-count line both wear this gray, and
+         * the identifier match depends on it being exact.
+         */
+        private static final int ADVANCED_ID_GRAY = 0x555555;
 
         private RarityTooltipEditor() {
         }
@@ -164,7 +170,7 @@ public final class RarityTooltipEditor {
                         return;
                 }
                 if (!statLines.isEmpty()) {
-                        removeVanillaAttributeSection(lines);
+                        removeVanillaAttributeSections(lines, line -> isNativeAdvancedLine(line, stack));
                 }
                 removeVanillaEnchantmentLines(lines, enchantments);
                 // The stat block carries its own leading and trailing
@@ -492,45 +498,79 @@ public final class RarityTooltipEditor {
         }
 
         /**
-         * Removes the vanilla attribute section — the lines between an
-         * {@code item.modifiers.*} header ("When in Main Hand:",
-         * "When on Chest:", …) and the next blank line. The stat block
-         * reproduces these numbers in a cleaner form, so the redundant
-         * vanilla listing is dropped. The header is recognized by its
+         * Removes every vanilla attribute section — for each, the blank
+         * vanilla emits in front of the {@code item.modifiers.*} header
+         * ("When in Main Hand:", "When on Chest:", …), the header and
+         * the attribute entries that follow. The stat block reproduces
+         * these numbers in a cleaner form, so the redundant vanilla
+         * listing is dropped. The header is recognized by its
          * translation key, not its display text: 26.3 renamed the chest
          * header ("When on Body:" became "When on Chest:") and added
          * group headers ("When worn:", "When equipped:", "When held:"),
          * and matching the key keeps every current and future slot
          * group covered without a hardcoded string list drifting behind
-         * the game. Enchantment lines and lore sit outside this section
-         * and are untouched — plain-text lore never carries the
-         * translatable contents a real header has. If no attribute
-         * section is present (a server tooltip that omits it), nothing
-         * is removed.
+         * the game. A section ends at the next blank line, the next
+         * section's header, or a native advanced-tooltip line — with
+         * F3+H enabled the advanced trailer (the registry identifier
+         * and the component count) follows the entries with no blank
+         * between, and it must survive untouched. Enchantment lines and
+         * lore sit outside these sections and are untouched —
+         * plain-text lore never carries the translatable contents a
+         * real header has. If no attribute section is present (a
+         * server tooltip that omits it), nothing is removed.
+         *
+         * <p>The advanced-line test arrives as a predicate so the seam
+         * is pure and testable without a hovered stack; the live caller
+         * passes {@code line -> isNativeAdvancedLine(line, stack)}.
          */
-        private static void removeVanillaAttributeSection(List<Component> lines) {
-                int headerIndex = -1;
-                for (int i = 0; i < lines.size(); i++) {
-                        if (isAttributeSectionHeader(lines.get(i))) {
-                                headerIndex = i;
+        static void removeVanillaAttributeSections(List<Component> lines,
+                        java.util.function.Predicate<Component> isAdvancedLine) {
+                boolean removed = true;
+                while (removed) {
+                        removed = false;
+                        int headerIndex = -1;
+                        for (int i = 0; i < lines.size(); i++) {
+                                if (isAttributeSectionHeader(lines.get(i))) {
+                                        headerIndex = i;
+                                        break;
+                                }
+                        }
+                        if (headerIndex < 0) {
                                 break;
                         }
-                }
-                if (headerIndex < 0) {
-                        return;
-                }
-                // The section runs from the header through the next blank
-                // line (inclusive). A missing closing blank is treated as
-                // the end of the tooltip.
-                int end = headerIndex + 1;
-                while (end < lines.size() && !lines.get(end).getString().isEmpty()) {
-                        end++;
-                }
-                if (end < lines.size() && lines.get(end).getString().isEmpty()) {
-                        end++;
-                }
-                for (int i = end - 1; i >= headerIndex; i--) {
-                        lines.remove(i);
+                        // The blank the attribute emitter writes in front
+                        // of its header belongs to the section; consuming
+                        // it here keeps the blank structure deterministic
+                        // for whatever the insertion paths add.
+                        int start = headerIndex;
+                        if (start > 0 && lines.get(start - 1).getString().isEmpty()) {
+                                start--;
+                        }
+                        int end = headerIndex + 1;
+                        while (end < lines.size()) {
+                                Component line = lines.get(end);
+                                if (line.getString().isEmpty()
+                                                || isAttributeSectionHeader(line)
+                                                || isAdvancedLine.test(line)) {
+                                        break;
+                                }
+                                end++;
+                        }
+                        // A trailing blank is consumed only when ordinary
+                        // content follows it — never when it separates the
+                        // section from another header (the next loop
+                        // iteration owns that blank) or from the advanced
+                        // trailer (which keeps its separator).
+                        if (end < lines.size() && lines.get(end).getString().isEmpty()
+                                        && end + 1 < lines.size()
+                                        && !isAttributeSectionHeader(lines.get(end + 1))
+                                        && !isAdvancedLine.test(lines.get(end + 1))) {
+                                end++;
+                        }
+                        for (int i = end - 1; i >= start; i--) {
+                                lines.remove(i);
+                        }
+                        removed = true;
                 }
         }
 

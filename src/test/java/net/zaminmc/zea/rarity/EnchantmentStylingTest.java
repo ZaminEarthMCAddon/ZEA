@@ -5,9 +5,13 @@ import net.zaminmc.zea.VanillaBootstrap;
 import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.EnchantmentStyle;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.footerLabel;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.isAttributeSectionHeader;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.removeVanillaAttributeSections;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.styleForLevels;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -113,5 +117,91 @@ class EnchantmentStylingTest {
                 assertEquals("LEGENDARY BOW", footerLabel(ItemRarity.LEGENDARY, ItemCategory.BOW));
                 assertEquals("COMMON CHESTPLATE", footerLabel(ItemRarity.COMMON, ItemCategory.CHESTPLATE));
                 assertEquals("UNCOMMON TRIDENT", footerLabel(ItemRarity.UNCOMMON, ItemCategory.TRIDENT));
+        }
+
+        // ------------------------------------------------------------------
+        // Attribute-section removal (the pure seam, with a marker predicate)
+        // ------------------------------------------------------------------
+
+        /** A predicate marking the advanced-trailer marker line used by the tests. */
+        private static boolean isMarker(Component line) {
+                return line.getString().equals("minecraft:test_item");
+        }
+
+        /**
+         * The plain removal: the emitter's blank, the header and the
+         * entries go; everything before and after survives.
+         */
+        @Test
+        void attributeRemovalDropsBlankHeaderAndEntries() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("Sharpness V"),
+                                Component.empty(),
+                                Component.translatable("item.modifiers.mainhand"),
+                                Component.literal("7 Attack Damage"),
+                                Component.literal("1.6 Attack Speed")));
+                removeVanillaAttributeSections(lines, EnchantmentStylingTest::isMarker);
+                assertEquals(List.of("Test Sword", "Sharpness V"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        /**
+         * The regression the live F3+H pass caught: with advanced
+         * tooltips on, the identifier and the component count follow
+         * the attribute entries with no blank between, and the removal
+         * must stop at the advanced trailer instead of swallowing it.
+         */
+        @Test
+        void attributeRemovalStopsAtTheAdvancedTrailer() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("Sharpness V"),
+                                Component.empty(),
+                                Component.translatable("item.modifiers.mainhand"),
+                                Component.literal("7 Attack Damage"),
+                                Component.literal("minecraft:test_item"),
+                                Component.literal("14 component(s)")));
+                removeVanillaAttributeSections(lines, EnchantmentStylingTest::isMarker);
+                assertEquals(List.of("Test Sword", "Sharpness V",
+                                "minecraft:test_item", "14 component(s)"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        /**
+         * Repeated slot-group sections — 26.3's "When worn:" family —
+         * are all removed, each with its own leading blank, and the
+         * blank between two sections belongs to the one that follows.
+         */
+        @Test
+        void attributeRemovalHandlesRepeatedGroupSections() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Chestplate"),
+                                Component.literal("Protection IV"),
+                                Component.empty(),
+                                Component.translatable("item.modifiers.armor"),
+                                Component.literal("+8 Armor"),
+                                Component.empty(),
+                                Component.translatable("item.modifiers.chest"),
+                                Component.literal("+2 Armor Toughness"),
+                                Component.literal("minecraft:test_item")));
+                removeVanillaAttributeSections(lines, EnchantmentStylingTest::isMarker);
+                assertEquals(List.of("Test Chestplate", "Protection IV", "minecraft:test_item"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        /**
+         * No header means nothing is removed — a server tooltip that
+         * omits the attribute listing passes through untouched.
+         */
+        @Test
+        void attributeRemovalWithoutHeaderChangesNothing() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("server lore"),
+                                Component.literal("minecraft:test_item")));
+                removeVanillaAttributeSections(lines, EnchantmentStylingTest::isMarker);
+                assertEquals(List.of("Test Sword", "server lore", "minecraft:test_item"),
+                                lines.stream().map(Component::getString).toList());
         }
 }
