@@ -8,19 +8,23 @@ package net.zaminmc.zea.chat.model;
  * exhaustively over every known structure.
  */
 public sealed interface MessagePayload permits
-		MessagePayload.None,
-		ChannelChat,
-		TaggedChannelChat,
-		PrivateMessage,
-		DiscordMessage,
-		VoteMessage,
-		CrateWinMessage,
-		DeathMessage,
-		SystemMessage,
-		WritingChannelReport {
+                MessagePayload.None,
+                ChannelChat,
+                TaggedChannelChat,
+                PrivateMessage,
+                DiscordMessage,
+                DiscordRecruitmentMessage,
+                VoteMessage,
+                CrateWinMessage,
+                CrateLuckyMessage,
+                DeathMessage,
+                SystemMessage,
+                PromoBannerMessage,
+                ItemShowcaseMessage,
+                WritingChannelReport {
 
-	/** No structured payload; the original component is all there is. */
-	record None() implements MessagePayload {
-		public static final None INSTANCE = new None();
-	}
+        /** No structured payload; the original component is all there is. */
+        record None() implements MessagePayload {
+                public static final None INSTANCE = new None();
+        }
 }

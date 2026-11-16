@@ -81,6 +81,18 @@ public final class JsonStore {
                 SafeFileWriter.writeAtomically(file, json.getBytes(StandardCharsets.UTF_8));
         }
 
+        /**
+         * {@link #save} for background paths where a failed write must not
+         * bubble into a tick handler: the failure is logged, never thrown.
+         */
+        public void saveUnchecked(Path file, Object value) {
+                try {
+                        save(file, value);
+                } catch (IOException e) {
+                        LOGGER.warn("Could not save {}: {}", file, e.toString());
+                }
+        }
+
         private <T> T recoverFromCorruption(Path file, Supplier<T> fallback, Exception cause) {
                 if (cause != null) {
                         LOGGER.warn("Store {} is corrupt ({}); falling back to defaults", file, cause.toString());

@@ -5,11 +5,13 @@ import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.zaminmc.zea.chat.classify.ClassificationCache;
 import net.zaminmc.zea.chat.model.MessageCategory;
 
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Applies the selected display feed — and, while a chat search is open,
@@ -80,14 +82,19 @@ public final class FeedFilter {
         private final ClassificationCache cache;
         private final FeedSelection selection;
         private final BooleanSupplier hideServerBroadcasts;
+        /** The advertisement-shaped categories the user's filter toggles currently hide. */
+        private final Supplier<Set<MessageCategory>> optionalHiddenCategories;
         private String searchQuery;
 
         public FeedFilter(ClassificationCache cache, FeedSelection selection,
-                        BooleanSupplier hideServerBroadcasts) {
+                        BooleanSupplier hideServerBroadcasts,
+                        Supplier<Set<MessageCategory>> optionalHiddenCategories) {
                 this.cache = Objects.requireNonNull(cache, "cache must not be null");
                 this.selection = Objects.requireNonNull(selection, "selection must not be null");
                 this.hideServerBroadcasts = Objects.requireNonNull(hideServerBroadcasts,
                                 "hideServerBroadcasts must not be null");
+                this.optionalHiddenCategories = Objects.requireNonNull(optionalHiddenCategories,
+                                "optionalHiddenCategories must not be null");
         }
 
         /** The active search query, or {@code null} when the search is closed. */
@@ -142,10 +149,15 @@ public final class FeedFilter {
         private Predicate<GuiMessage> feedPredicate() {
                 Feed feed = selection.selected();
                 if (feed.showsEverything()) {
-                        if (!hideServerBroadcasts.getAsBoolean()) {
+                        Set<MessageCategory> hidden = EnumSet.noneOf(MessageCategory.class);
+                        if (hideServerBroadcasts.getAsBoolean()) {
+                                hidden.addAll(SERVER_BROADCASTS);
+                        }
+                        hidden.addAll(optionalHiddenCategories.get());
+                        if (hidden.isEmpty()) {
                                 return null;
                         }
-                        return message -> !SERVER_BROADCASTS.contains(
+                        return message -> !hidden.contains(
                                         cache.classificationOf(message.content()).category());
                 }
                 return message -> feed.shows(cache.classificationOf(message.content()));

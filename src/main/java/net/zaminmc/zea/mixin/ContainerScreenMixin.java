@@ -19,6 +19,7 @@ import net.zaminmc.zea.buttons.ButtonRenderer;
 import net.zaminmc.zea.buttons.InventoryButton;
 import net.zaminmc.zea.buttons.InventoryButtons;
 import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.duck.ContainerScreenAccess;
 import net.zaminmc.zea.duck.HoveredSlotAccess;
 import net.zaminmc.zea.duck.RecipeBookAccess;
 import net.zaminmc.zea.duck.ScreenWidgetAccess;
@@ -27,6 +28,7 @@ import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.rarity.RarityEngine;
 import net.zaminmc.zea.rarity.RarityTooltipEditor;
 import net.zaminmc.zea.search.InventorySearch;
+import net.zaminmc.zea.search.SearchBarLayout;
 import net.zaminmc.zea.search.SearchBarWidget;
 import net.zaminmc.zea.search.SearchOverlay;
 import net.zaminmc.zea.slots.SlotGuard;
@@ -63,7 +65,7 @@ import java.util.List;
  * the hover state.
  */
 @Mixin(AbstractContainerScreen.class)
-public abstract class ContainerScreenMixin implements HoveredSlotAccess {
+public abstract class ContainerScreenMixin implements HoveredSlotAccess, ContainerScreenAccess {
         @Shadow
         protected int leftPos;
 
@@ -91,6 +93,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         /** The search bar of this screen instance; created on init. */
         @Nullable
         private SearchBarWidget zea$searchBar;
+
+        @Override
+        public int zea$imageWidth() {
+                return imageWidth;
+        }
+
+        @Override
+        public int zea$imageHeight() {
+                return imageHeight;
+        }
 
         // ------------------------------------------------------------------
         // Init: the search bar widget
@@ -150,15 +162,13 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                 }
         }
 
-        /** Moves the bar to its spot under the GUI; the layout stays live. */
+        /** Moves the bar to its centered spot under the GUI; the layout stays live. */
         private void zea$positionSearchBar(AbstractContainerScreen<?> self) {
                 SearchBarWidget bar = zea$searchBar;
                 if (bar == null) {
                         return;
                 }
-                bar.setX(leftPos);
-                bar.setY(topPos + imageHeight + ButtonGeometry.GAP);
-                bar.setWidth(imageWidth);
+                SearchBarLayout.apply(bar, leftPos, topPos, imageWidth, imageHeight);
         }
 
         /** The layout inputs for this screen right now. */
@@ -171,7 +181,10 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                                 self.width,
                                 self.height,
                                 self instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen,
-                                self instanceof RecipeBookAccess access && access.zea$recipeBookOpen());
+                                self instanceof RecipeBookAccess access && access.zea$recipeBookOpen(),
+                                // The bar reserves its strip below the GUI;
+                                // docked buttons shift under it.
+                                zea$searchBar == null ? 0 : SearchBarWidget.BOTTOM_BAND);
         }
 
         private List<ButtonGeometry.Placement> zea$placements(InventoryButtons buttons,

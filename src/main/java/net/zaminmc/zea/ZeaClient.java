@@ -6,12 +6,14 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.zaminmc.zea.buttons.ButtonActivator;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.InventoryButtons;
@@ -24,8 +26,17 @@ import net.zaminmc.zea.chat.classify.ClassificationPipeline;
 import net.zaminmc.zea.config.ConfigScreen;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
+import net.zaminmc.zea.config.ZeaPaths;
+import net.zaminmc.zea.discovery.DiscoveryCommands;
+import net.zaminmc.zea.discovery.DiscoveryStore;
+import net.zaminmc.zea.discovery.DiscoverySubsystem;
+import net.zaminmc.zea.discovery.RepoClient;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
+import net.zaminmc.zea.hud.HudCommands;
+import net.zaminmc.zea.hud.HudSubsystem;
+import net.zaminmc.zea.map.MapEngine;
+import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
@@ -63,6 +74,11 @@ public final class ZeaClient implements ClientModInitializer {
         private static InventorySearch search;
         private static SlotLocks slotLocks;
         private static ZeaConfig config;
+        private static HudSubsystem hud;
+        private static MapEngine mapEngine;
+        private static DiscoverySubsystem discovery;
+        private static RepoClient repoClient;
+        private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
         private static ExecutorService shareExecutor;
         private static ExecutorService captureExecutor;
@@ -95,16 +111,34 @@ public final class ZeaClient implements ClientModInitializer {
                 return config;
         }
 
+        /** The universal HUD element subsystem; see {@code /zeahud}. */
+        public static HudSubsystem hud() {
+                return hud;
+        }
+
+        /** The map rendering engine behind the map HUD elements. */
+        public static MapEngine mapEngine() {
+                return mapEngine;
+        }
+
+        /** The native discovery subsystem; see {@code /zeadiscovery}. */
+        public static DiscoverySubsystem discovery() {
+                return discovery;
+        }
+
         @Override
         public void onInitializeClient() {
                 LOGGER.info("ZEA loading");
                 Path configDir = FabricLoader.getInstance().getConfigDir();
-                config = new ZeaConfigStore(configDir.resolve("zea.json")).load();
+                // The organized config/zea/ layout; the historical flat
+                // config/zea.json migrates into it once, with a backup kept.
+                ZeaPaths paths = new ZeaPaths(configDir);
+                config = new ZeaConfigStore(paths.migrateMainConfig()).load();
                 historyExecutor = newHistoryExecutor();
                 lifecycle = new ClientLifecycle();
                 captureExecutor = newIoExecutor("ZEA-Capture");
                 captureRecorder = new CaptureRecorder(
-                                        configDir.resolve("zea/capture"),
+                                        paths.captureDir(),
                                         ComponentJson::serialize,
                                         captureExecutor,
                                         Minecraft.getInstance()::execute,
@@ -116,13 +150,55 @@ public final class ZeaClient implements ClientModInitializer {
                                                 new ClassificationPipeline(),
                                                 config,
                                                 captureRecorder,
-                                                configDir.resolve("zea/history"),
+                                                paths.historyDir(),
                                                 historyExecutor);
                 inventoryButtons = new InventoryButtons(
-                                                configDir.resolve("zea/buttons.json"),
+                                                paths.buttons(),
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
-                slotLocks = new SlotLocks(new SlotLockStore(configDir.resolve("zea/slotlocks.json")));
+                slotLocks = new SlotLocks(new SlotLockStore(paths.slotLocks()));
+                // The universal HUD manager and the map engine behind its map
+                // elements: the element specs seed their factory size from the
+                // map config, position and scale belong to the manager (the
+                // on-screen pixel state MapConfig deliberately does not carry).
+                mapEngine = new MapEngine(Minecraft.getInstance().getTextureManager(), config.map);
+                hud = new HudSubsystem(paths.hudSettings());
+                hud.register(
+                                new net.zaminmc.zea.hud.HudElementSpec(
+                                                Identifier.fromNamespaceAndPath("zea", "hud/minimap"),
+                                                "Minimap",
+                                                config.map.minimap.size, config.map.minimap.size,
+                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 8, true),
+                                new MapHudRenderer(MapHudRenderer.Kind.MINIMAP, () -> mapEngine));
+                hud.register(
+                                new net.zaminmc.zea.hud.HudElementSpec(
+                                                Identifier.fromNamespaceAndPath("zea", "hud/map"),
+                                                "Map overlay",
+                                                config.map.minimap.size * 2, config.map.minimap.size * 2,
+                                                net.zaminmc.zea.hud.HudAnchor.BOTTOM_RIGHT, 8, 8, false),
+                                new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY, () -> mapEngine));
+                ClientTickEvents.END_CLIENT_TICK.register(client -> mapEngine.tick());
+                // Native discovery: its own toggle file, its own capture, and
+                // the ZEA-REPO consumer — local-first, gated on discovery.
+                discovery = new DiscoverySubsystem(lifecycle,
+                                                new DiscoveryStore(paths.localObservations(),
+                                                                                paths.navigationObservations(),
+                                                                                paths.remoteCache()),
+                                                paths.discoveryState(),
+                                                mapEngine.claims());
+                repoExecutor = newIoExecutor("ZEA-Repo");
+                repoClient = new RepoClient(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor);
+                ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+                                if (lifecycle.onEarthMc() && discovery.enabled()) {
+                                        repoClient.refresh(discovery.store())
+                                                                        .exceptionally(failure -> {
+                                                                                ZeaClient.LOGGER.info(
+                                                                                                "Repository refresh unavailable ({}); local discovery continues",
+                                                                                                failure.toString());
+                                                                                return 0;
+                                                                        });
+                                }
+                });
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
@@ -155,6 +231,8 @@ public final class ZeaClient implements ClientModInitializer {
                 });
                 ShareCommands.register(zea, coordinator);
                 CaptureCommands.register(zea, captureRecorder, lifecycle::onEarthMc);
+                HudCommands.register(zea, () -> hud);
+                DiscoveryCommands.register(zea, () -> discovery);
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(zea));
                 // /zeabuttons — the button editor. Deferred through the
                 // client queue like the settings screen: a client command
@@ -211,6 +289,18 @@ public final class ZeaClient implements ClientModInitializer {
                         drain(historyExecutor);
                         drain(captureExecutor);
                         shareExecutor.shutdown();
+                        if (hud != null) {
+                                hud.shutdown();
+                        }
+                        if (mapEngine != null) {
+                                mapEngine.shutdown();
+                        }
+                        if (discovery != null) {
+                                discovery.shutdown();
+                        }
+                        if (repoExecutor != null) {
+                                repoExecutor.shutdown();
+                        }
                 }
         }
 

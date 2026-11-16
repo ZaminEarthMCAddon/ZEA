@@ -20,6 +20,7 @@ import net.zaminmc.zea.chat.feeds.MultiSendResult;
 import net.zaminmc.zea.chat.feeds.OutgoingMessage;
 import net.zaminmc.zea.chat.feeds.OutgoingRouter;
 import net.zaminmc.zea.chat.feeds.SendTargets;
+import net.zaminmc.zea.chat.feeds.ShopTransactionInput;
 import net.zaminmc.zea.chat.feeds.TradeGate;
 import net.zaminmc.zea.chat.feeds.UnreadTracker;
 import net.zaminmc.zea.chat.feeds.WriteChannel;
@@ -67,6 +68,7 @@ public final class ChatSubsystem {
         private final CaptureRecorder capture;
         private final UnreadTracker unread;
         private final TradeGate tradeGate;
+        private final ShopTransactionInput shopInput = new ShopTransactionInput();
 
         public ChatSubsystem(ClientLifecycle lifecycle, ClassificationPipeline classification, ZeaConfig config,
                         CaptureRecorder capture, Path historyDirectory, Executor historyExecutor) {
@@ -87,7 +89,7 @@ public final class ChatSubsystem {
                 // (the dev.23 live crash; ChatSubsystemWiringTest pins the
                 // compiled order).
                 this.feedFilter = new FeedFilter(this.classifications, this.feedSelection,
-                                config::hideServerBroadcastsInGeneral);
+                                config::hideServerBroadcastsInGeneral, config::hiddenChatCategories);
                 this.dispatcher = new MultiChannelDispatcher(
                                 this::sendCommand,
                                 new DispatchFeedback(),
@@ -137,6 +139,7 @@ public final class ChatSubsystem {
                         sendTargets.clear();
                         unread.clear();
                         tradeGate.clear();
+                        shopInput.clear();
                         feedFilter.setSearchQuery(null);
                         feedFilter.apply(client.gui.hud.getChat());
                 });
@@ -146,6 +149,12 @@ public final class ChatSubsystem {
 
         /** Classified stream entry point; feeds, presentation and notifications subscribe here. */
         private void onCaptured(CapturedMessage captured) {
+                // The shop quantity prompt arms before anything else sees the
+                // message: display filters may hide the line later, but the
+                // next typed message must still go out as the raw shop input.
+                if (ShopTransactionInput.isQuantityPrompt(captured.text())) {
+                        shopInput.arm(System.currentTimeMillis());
+                }
                 ClassifiedMessage classified = classifications.classify(captured);
                 if (classified.payload() instanceof WritingChannelReport report) {
                         channelState.applyReport(report);
@@ -228,6 +237,11 @@ public final class ChatSubsystem {
         /** The trade channel's pacing state; see {@link TradeGate}. */
         public TradeGate tradeGate() {
                 return tradeGate;
+        }
+
+        /** The one-shot pending shop-quantity state; see {@link ShopTransactionInput}. */
+        public ShopTransactionInput shopInput() {
+                return shopInput;
         }
 
         public MultiChannelDispatcher dispatcher() {

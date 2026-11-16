@@ -111,7 +111,7 @@ class FeedFilterTest {
         private final ClassificationCache cache = new ClassificationCache(new ClassificationPipeline(), 64);
         private final FeedSelection selection = new FeedSelection(Feeds.ALL);
         private boolean hideBroadcasts;
-        private final FeedFilter filter = new FeedFilter(cache, selection, () -> hideBroadcasts);
+        private final FeedFilter filter = new FeedFilter(cache, selection, () -> hideBroadcasts, Set::of);
 
         private GuiMessage message(String text) {
                 return new GuiMessage(0, Component.literal(text), new MessageSignature(new byte[256]),
@@ -133,9 +133,9 @@ class FeedFilterTest {
          */
         @Test
         void feedFilterRequiresItsCacheAndSelection() {
-                assertThrows(NullPointerException.class, () -> new FeedFilter(null, selection, () -> false));
-                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, null, () -> false));
-                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, null));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(null, selection, () -> false, Set::of));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, null, () -> false, Set::of));
+                assertThrows(NullPointerException.class, () -> new FeedFilter(cache, selection, null, Set::of));
         }
 
         /**

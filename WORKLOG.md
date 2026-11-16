@@ -3294,3 +3294,121 @@ natural padding; thirteen tabs scroll with eight visible; with a search
 open the strip spans the row up to the box. In-game verification — the
 arrows' hit boxes, the wheel over the strip versus the chat log, and
 the reflow on Ctrl+F — is the live checklist for the next session.
+
+## 2026-11-17 (session 16) — Shop transactions, the HUD manager, discovery, and the UI corrections
+
+### The live report
+
+A release-blocking regression and a large batch of features arrived
+together: shop quantity inputs were being destroyed by ZEA's channel
+routing; the inventory search bar was a thin unstyled strip; the button
+editor's canvas showed no buttons and its preset labels spilled out of
+their boxes; the channel strip's overflow arrows read as a generic
+"next" control; and the report asked for `/zeahud` as a universal HUD
+manager, four new message-filter categories, click-to-visit spawn
+commands, the organized config directory, native discovery, and a
+local-first ZEA-REPO integration.
+
+### The shop routing fix (P0)
+
+The root cause: `ChatScreenMixin.zea$sendToTargets` rewrites every
+plain message typed on a channel tab into `/global <msg>` — and EarthMC
+physical shops collect the transaction quantity as the next plain chat
+message, so typing "16" at a shop prompt sent "/global 16" and the shop
+never read it. The fix is a one-shot `ShopTransactionInput` state in the
+chat subsystem: the explicit prompt ("Enter in chat, how many you wish
+to BUY/SELL") arms it, the next eligible plain message consumes it and
+the mixin deliberately does not intercept — vanilla's own
+`connection.sendChat` sends the raw quantity. Slash commands, blank
+text, and multi-send targets are never consumed; the state expires in
+30 s and clears on disconnect. Arming happens in the capture pipeline
+before any display filter, so a filter can never starve it.
+
+### Search bar, editor preview, label fitting (P1)
+
+The bar was a 12-px borderless `EditBox` with a hint string: no sprite,
+no border, text flush against the left edge (vanilla drops the 4 px
+padding when `bordered(false)`). It is now a real vanilla text field —
+the `widget/text_field` sprites, height 20, no placeholder, a hover
+frame, the gold matching-mode outline drawn around the field — positioned
+by the shared `SearchBarLayout` (centered on the GUI's bounds, one gap
+below), and `ButtonGeometry` reserves that strip for bottom-anchored
+buttons so they never overlap it.
+
+The editor's canvas now previews reality: the survival inventory
+texture with the vanilla player-model helper and the player inventory
+menu's actual stacks; opened from a container, the container's live
+dimensions and its menu's real slots through a new `ContainerScreenAccess`
+duck; buttons resolve through `ButtonGeometry.placements` with the same
+inputs the runtime uses; the search bar preview is the runtime widget
+class at the runtime layout math; the drag round-trips through the
+runtime band mapping. Label fitting moved into `ButtonRenderer.fitLabel`
+(pure, font metrics, scale floor then ellipsis) shared by runtime faces,
+the editor canvas, and the preset row that was leaking "Buttons
+Everywhere"; truncated labels surface the full text in the tooltip.
+
+### Channel strip (P2)
+
+The overflow arrows lost their button boxes: quiet chevron glyphs at the
+strip's right end, shown only while actionable, with the wheel still
+scrolling and the selected tab always revealed. The strip stays the
+channel selector; no second generic control.
+
+### /zeahud (P3)
+
+A new `hud` package: `HudElementSpec`/`HudRenderer`/`HudElementState`/
+`HudLayoutMath`/`HudSubsystem` — one registration call adds an element
+with anchor-based positioning, visibility, scale, persistence in
+`hud.json` (safe-write, unknown elements' entries carried across), and
+one Fabric HUD slot that draws them all. `HudManagerScreen` previews
+every element live over a dimmed game, lists them, supports drag
+repositioning (the drop converts back to anchor + edge offsets and the
+round-trip is pinned by tests), visibility, reset, and a scale slider.
+The map engine (`map/MapEngine`) finally wires the pure map stack to
+real rendering — tiles fetched through the existing budgeted planner,
+uploaded through the cache's claim/disposal discipline, claims and
+players through the tested overlay planners — and two elements, Minimap
+and Map overlay, register through it.
+
+### Message filters and click-to-visit (P4, P5)
+
+Four structure-anchored classifiers (crate "got lucky" announcements,
+Discord recruitment ads, bare-command promo banners, renamed-item
+showcase ads) join the existing pipeline before the channel shapes, each
+with its own toggle under Chat → Message filters and hiding only on the
+General feed through the established `FeedFilter.Installed` retention
+mechanism. `SpawnCommandLinks` rebuilds a message from its styled runs
+(every run's style verbatim, existing interactions never overwritten)
+with `/n spawn`/`/t spawn` click events dispatching the raw command —
+gated by the new `Click-to-visit spawn commands` toggle, off by default.
+
+### Config layout, discovery, repository (P6–P8)
+
+`ZeaPaths` moves the main config to `config/zea/config.json` with a
+one-time backup-and-move migration (pinned by tests), keeps every
+existing store path, and adds `market/` for the discovery stores.
+`/zeadiscovery on|off|status` gates its own capture: shop-sign clicks
+arm a `ShopTransactionCollector` that parses the server's shop block
+(owner, item, direction, stock vs. per-transaction quantity, price,
+enchantments) into `ShopObservation` records keyed by physical identity
+`host|dimension|signPos` — same-owner-same-item shops stay separate by
+construction; navigation observations record executed spawn commands
+with before/arrival coordinates and never leave the machine. The
+ZEA-REPO client fetches the repository's generated manifest, picks up a
+shop dataset when the community adds one, validates and merges through
+`ObservationMerge` (local-newer-wins, timestamp-less never overwrites,
+invalidations hold) and caches what it saw.
+
+### Verification
+
+`./gradlew clean build` green; **1043 tests, 0 failures** (the session
+added ~90: shop bypass, fit policy, layout math, HUD documents, four
+classifier suites, spawn-link preservation rules, the live shop block,
+identity, the merge cases 1–5, collector association, store persistence,
+manifest parsing, and the config migration). In-game verification —
+the shop purchase flow at both channel selections, the search bar and
+editor previews at several GUI scales, `/zeahud` drag and persistence,
+the map elements against live squaremap imagery, the filters against
+real chat, and a full restart round-trip — is the live checklist for
+the next session. The `JDK 25` requirement (fabric-loom 1.19.4) needs
+`-Dorg.gradle.java.home` pointed at a Java 25 runtime on this machine.
