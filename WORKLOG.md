@@ -3617,3 +3617,100 @@ checklist for the next session: the PMs tab before and after a PM
 arrives; a trade send that gets rejected (wait line hidden, message
 queued, status line counting the server's time, panel delete working);
 typing after clicking a tab; `/tr` + Tab; the hotbar wash in the world.
+
+## 2026-11-16 (session 19) — The RPG tooltips verified in the live 26.3 client, and three bugs they showed
+
+The RPG stat batch (dev.36–40, plus the dev.46 calculation corrections)
+was pinned by 1,000+ unit tests but had never been *seen*. This session
+closed that gap: the dev client was booted for real — Xvfb for the
+display, SDL forced onto EGL, the renderer falling back to lavapipe
+Vulkan after the GLX visual probe failed — then driven through world
+creation and inventory hovers with synthetic input, every frame
+inspected from screenshots. Criterion 12 of the task ("do not claim
+visual success without actually checking the rendered output") is now
+dischargeable with receipts.
+
+### The driving harness
+
+The client daemonizes with the exact argfile the loom cache builds, so
+it survives tool-call teardown; input goes through XTEST (pyautogui
+against :99), screenshots through x11grab, and the reads through the
+vision model. The non-obvious part was geometry: at this window size
+the game runs a *fractional* effective GUI scale (the F3 line reads
+"854x480, 1499x… pixel (density)"), so naive "GUI scale 2" arithmetic
+lands clicks one slot off. Slot rectangles, button rows and tooltip
+lines were therefore measured from the pixels themselves — border-run
+detection, saturation clustering, per-row luminance dumps — and every
+hover position cross-checked against the game's own cursor sprite
+before trusting a read. The survival hotbar row, for what it is worth,
+sits at screen y≈478–518 on this window, not the y≈560 the first
+estimates produced; the search bar owns that lower band, which is why
+early "hotbar hovers" silently showed nothing.
+
+### What the rendered tooltips now show, verified line by line
+
+- **Diamond chestplate (Protection IV):** Armor 8, Toughness 2,
+  "Protection IV (most damage): -16%", Durability 528/528 — every
+  number identical to vanilla's own attribute listing, which the stat
+  block replaces. UNCOMMON label in green.
+- **Diamond sword (five maxed enchantments):** "Damage: 10 (7 base +
+  3 Sharpness V)", Attack Speed 1.6, Sweeping Damage Ratio 0.75,
+  Durability 1561/1561 with "effective ~6244" (Unbreaking III's ×4),
+  EPIC label — and this is the item the chroma was watched on.
+- **Mace (Density V, Breach IV, Wind Burst III):** the full smash
+  presentation — "+6 past 1.5 blocks fallen" with the piecewise band
+  breakdown beneath it, Density +2.5/block, Breach -60% armor
+  effectiveness, the Wind Burst flag, 500/500 durability.
+- **Golden apple:** Nutrition 4, Saturation 9.6, Can Always Eat, and
+  the live effect labels "Regeneration II (0:05)" / "Absorption
+  (2:00)"; a plain apple shows nothing but nutrition and saturation —
+  no weapon statistics on food, no empty sections.
+- **Chroma, both states:** with the animation on, the maxed
+  enchantment lines rotate through the eight-second hue wheel —
+  captured orange→green on the chestplate's Protection IV and
+  yellow-green→violet on the sword's five lines seconds apart; with
+  it off, the same lines wear the static gold. The name line keeps
+  vanilla's aqua (name coloring is off by default), which is exactly
+  what made the first chroma measurement measure the wrong line: the
+  frozen "cyan" was the item *name*, not the enchantment.
+
+### Three bugs the screenshots caught, all fixed
+
+**Breach never rendered.** The mace read Breach from the generic
+attribute-modifier path, but 26.3 ships it as the dedicated
+`ARMOR_EFFECTIVENESS` effect component (-0.15 × level); the live
+effect read replaced the lookup, and the line appeared on the next
+launch.
+
+**The vanilla attribute section survived on armor.** The removal
+matched a hardcoded header list last true before 26.3 renamed
+"When on Body:" to "When on Chest:" and added the group headers
+("When worn:", "When equipped:", "When held:", "When saddled:").
+Headers are now matched by their translation key — a translatable
+component under `item.modifiers.*` — which covers every current and
+future slot group and cannot mistake plain-text lore for a header.
+
+**Two stat lines clipped at the screen edge.** Vanilla tooltips clip
+rather than wrap, and the smash attack's inline band breakdown and the
+durability line's inline effective maximum both ran past the window's
+right edge at this width. Both details now render as grey indented
+lines beneath the number they qualify; nothing clips.
+
+### Verification
+
+`./gradlew test` green throughout: **1,062 tests, 0 failures** at
+landing (up from 1,059; +1 Breach live read, +2 translation-key
+header matching and its lore-lookalike counter-test, and the
+presentation tests rewritten against the detail-line layout). The
+runtime pass covered the sword, mace, chestplate, golden apple and
+plain apple tooltips, both chroma states, and the rarity labels —
+in-world, in the real 26.3 client, from the rendered pixels.
+
+### Not done yet (next sessions)
+
+The bow/crossbow/spear/pickaxe tooltips carry dev.46's corrected
+formulas but have not been re-shot since the corrections landed
+(they were verified in the pre-correction client); the shift-held
+missing-upgrade block and the Ctrl-held advanced-info mode need the
+same live pass, and EarthMC's own server lore should be exercised
+against the lore-preservation rules once the addon runs there.
