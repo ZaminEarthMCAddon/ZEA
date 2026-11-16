@@ -3716,3 +3716,48 @@ formulas but have not been re-shot since the corrections landed
 missing-upgrade block and the Ctrl-held advanced-info mode need the
 same live pass, and EarthMC's own server lore should be exercised
 against the lore-preservation rules once the addon runs there.
+
+## 2026-11-16 (session 15) — The button zones and the bottom search bar
+
+The chat half of the dev.36 live requests shipped from the parallel
+session as dev.54 (`d34afb4`); this session's remaining half — the
+search bar and the button zones — lands on top of dev.57, re-based.
+
+- **The container search bar spans the screen's bottom edge.** It used
+  to hug the GUI's lower edge, where it read as part of the inventory;
+  now it sits at `screenHeight - 12`, GUI-wide and left-aligned with
+  the container, with the live re-placement on resize and recipe-book
+  toggles.
+- **Matching mode cannot take a frame down.** The two crash candidates
+  from the live report ("typing crashed", "double-clicking crashed
+  instead of highlighting") are defused: an out-of-range slot index
+  returns an empty haystack instead of indexing past the menu's slot
+  list, and a stack whose tooltip explodes on this client degrades to
+  its hover name — both cached like any other text.
+- **Buttons live in nine capacity-limited zones** (the "not floating
+  in air" spec): 8 on top of the inventory, 8 up each side
+  bottom-aligned to the hotbar's level, 8 under the hotbar row, 9 in
+  the row directly above the search bar, 1 inside the inventory's
+  top-right corner, and 4 just under the 2×2 crafting grid (that row
+  and the corner are inventory-only). `InventoryButton` stores zone +
+  order — the pixel offsets and anchors are gone; `ButtonGeometry`
+  computes every slot from the live screen, the drop magnetically docks
+  to the nearest free slot, occupied slots refuse, and zones that
+  cannot render (foreign container, recipe book, short screen) hide
+  their buttons instead of overlapping.
+- **Schema v4** with a geometric migration: every older era (v1 corner
+  anchors, v2 regions, v3 free offsets) resolves to the exact pixels
+  its formulas produced, and those positions are classified into the
+  zones their geometry lived in, orders re-assigned sequentially per
+  zone so the migration can never collide. Unknown zone names in a v4
+  file are re-filed into the right column with a warning. The share
+  wire format carries zone + order.
+- **The editor's S-snap is retired** — the zones are the snap. Drag
+  previews dock to the target slot, right-click creates in the nearest
+  free slot, and the panel edits the working copy as before.
+
+### Verification
+
+`./gradlew build` and the full suite pass on the re-based tree (the
+zone math, drop target, migrations, presets and share round-trips are
+pinned by the updated button test classes).

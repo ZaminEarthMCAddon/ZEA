@@ -31,43 +31,44 @@ class ButtonPresetsTest {
 				assertTrue(button.enabled());
 				assertTrue(button.icon().startsWith("minecraft:"), "a recognizable icon");
 				assertFalse(button.icon().isBlank());
+				assertNotNull(ButtonGeometry.Zone.byName(button.zone()),
+						preset.id() + " buttons must name a real zone");
 			}
 		}
 	}
 
 	@Test
-	void defaultIsAModestRightEdgeColumn() {
+	void defaultIsAModestRightColumn() {
 		List<InventoryButton> buttons = ButtonPresets.byId("default").buttons();
 
 		assertEquals(4, buttons.size());
-		for (InventoryButton button : buttons) {
-			assertTrue(button.anchorRight(), "the starter column hugs the GUI's right edge");
-			assertEquals(ButtonGeometry.OUTER_PADDING, button.x());
+		for (int i = 0; i < buttons.size(); i++) {
+			InventoryButton button = buttons.get(i);
+			assertEquals("RIGHT", button.zone(), "the starter column lives in the right zone");
+			assertEquals(i, button.order(), "the column fills its slots in order");
 		}
 	}
 
 	@Test
-	void everywhereFillsTheRingAroundTheCanvas() {
+	void everywhereFillsTheFullRingOfZones() {
 		List<InventoryButton> buttons = ButtonPresets.byId("everywhere").buttons();
 
 		assertEquals(32, buttons.size());
-		// The ring's rows and columns never enter the canvas.
-		for (InventoryButton button : buttons) {
-			boolean insideX = !button.anchorRight() && button.x() >= 0
-					&& button.x() + ButtonGeometry.SIZE <= ButtonGeometry.CANVAS_WIDTH;
-			boolean insideY = !button.anchorBottom() && button.y() >= 0
-					&& button.y() + ButtonGeometry.SIZE <= ButtonGeometry.CANVAS_HEIGHT;
-			assertFalse(insideX && insideY, "a ring button sits outside the canvas");
+		// Each of the four ring zones fills its eight slots exactly once.
+		for (ButtonGeometry.Zone zone : List.of(ButtonGeometry.Zone.TOP, ButtonGeometry.Zone.RIGHT,
+				ButtonGeometry.Zone.UNDER_HOTBAR, ButtonGeometry.Zone.LEFT)) {
+			for (int order = 0; order < 8; order++) {
+				final int slot = order;
+				assertTrue(buttons.stream().anyMatch(b -> zone.name().equals(b.zone()) && b.order() == slot),
+						zone + " slot " + order + " must be filled by the everywhere preset");
+			}
 		}
-		// And no two of them overlap.
+		// And no two of them share a zone slot — the zones' own discipline.
 		for (int i = 0; i < buttons.size(); i++) {
 			for (int j = i + 1; j < buttons.size(); j++) {
-				int ax = buttons.get(i).x() + (buttons.get(i).anchorRight() ? ButtonGeometry.CANVAS_WIDTH : 0);
-				int ay = buttons.get(i).y() + (buttons.get(i).anchorBottom() ? ButtonGeometry.CANVAS_HEIGHT : 0);
-				int bx = buttons.get(j).x() + (buttons.get(j).anchorRight() ? ButtonGeometry.CANVAS_WIDTH : 0);
-				int by = buttons.get(j).y() + (buttons.get(j).anchorBottom() ? ButtonGeometry.CANVAS_HEIGHT : 0);
-				assertFalse(Math.abs(ax - bx) < ButtonGeometry.SIZE && Math.abs(ay - by) < ButtonGeometry.SIZE,
-						"ring buttons never overlap");
+				boolean sameZone = buttons.get(i).zone().equals(buttons.get(j).zone());
+				boolean sameOrder = buttons.get(i).order() == buttons.get(j).order();
+				assertFalse(sameZone && sameOrder, "ring buttons never share a slot");
 			}
 		}
 	}

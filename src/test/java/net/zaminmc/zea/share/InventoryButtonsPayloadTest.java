@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InventoryButtonsPayloadTest {
 	private static InventoryButton button(String name, String command) {
 		return new InventoryButton(UUID.randomUUID(), name, command, "minecraft:compass",
-				"", "", 2, 4, true, false, 1, false, true);
+				"", "", "RIGHT", 0, 1, false, true);
 	}
 
 	@Test
@@ -32,9 +32,8 @@ class InventoryButtonsPayloadTest {
 		assertEquals("Home", decoded.buttons().get(0).name());
 		assertEquals("spawn", decoded.buttons().get(0).command());
 		assertEquals("Shop", decoded.buttons().get(1).name());
-		assertEquals(2, decoded.buttons().get(0).x());
-		assertEquals(4, decoded.buttons().get(0).y());
-		assertTrue(decoded.buttons().get(0).anchorRight());
+		assertEquals("RIGHT", decoded.buttons().get(0).zone());
+		assertEquals(0, decoded.buttons().get(0).order());
 		assertEquals(1, decoded.buttons().get(0).style());
 	}
 
@@ -135,9 +134,8 @@ class InventoryButtonsPayloadTest {
 
 		assertEquals(1, buttons.size());
 		InventoryButton button = buttons.get(0);
-		assertEquals(0, button.x());
-		assertEquals(0, button.y());
-		assertFalse(button.anchorRight());
+		assertEquals("RIGHT", button.zone(), "a missing zone falls back to the default zone");
+		assertEquals(0, button.order());
 		assertEquals(0, button.style());
 		assertFalse(button.closeOnExecute());
 		assertTrue(button.enabled());
@@ -170,7 +168,7 @@ class InventoryButtonsPayloadTest {
 	@Test
 	void exportsNeverCarryAForwardSlashCommand() {
 		InventoryButton withSlash = new InventoryButton(UUID.randomUUID(), "Slash", "/spawn",
-				"minecraft:compass", "", "", 0, 0, false, false, 0, false, true);
+				"minecraft:compass", "", "", "RIGHT", 0, 0, false, true);
 
 		List<InventoryButton> exported = InventoryButtonsPayload.of(List.of(withSlash), null).buttons();
 

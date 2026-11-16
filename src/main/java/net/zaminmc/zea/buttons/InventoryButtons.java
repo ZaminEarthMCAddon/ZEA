@@ -13,14 +13,12 @@ import java.util.UUID;
  * which mutates through the methods below; every one of them persists
  * through the safe-write store.
  *
- * <p>Placement is free, the NEU model: a move offers a stored position
- * (offset plus anchors), the move is refused when it would overlap
- * another button — the one discipline free placement keeps, because
- * overlapping buttons are the historical NEU bug this coordinator must
- * never reintroduce — and everything else lands exactly where the
- * player dropped it. The replaced set of a preset load is kept for a
- * one-step restore, so applying a preset is never a silent loss of the
- * player's own buttons.
+ * <p>Placement is zoned (the dev.36 spec): a move offers a zone and an
+ * order within it, and the move is refused when that slot is occupied —
+ * the one discipline the zone model keeps, so two buttons can never
+ * collide and nothing floats outside the nine placement zones. The
+ * replaced set of a preset load is kept for a one-step restore, so
+ * applying a preset is never a silent loss of the player's own buttons.
  *
  * <p>All state lives on the client thread — rendering and input both
  * arrive there. The store file is the only persistence.
@@ -84,12 +82,17 @@ public final class InventoryButtons {
 	}
 
 	/**
-	 * Moves a button to a free position (offset plus anchors), refused
-	 * when it would overlap another button. Returns whether the move
-	 * happened; a refused move leaves the button where it was.
+	 * Moves a button into a zone slot, refused when the slot is occupied
+	 * by another button or the arguments do not name a real slot. Returns
+	 * whether the move happened; a refused move leaves the button where
+	 * it was.
 	 */
-	public boolean move(UUID id, int x, int y, boolean anchorRight, boolean anchorBottom) {
+	public boolean move(UUID id, String zoneName, int order) {
 		if (id == null) {
+			return false;
+		}
+		ButtonGeometry.Zone zone = ButtonGeometry.Zone.byName(zoneName);
+		if (zone == null || order < 0 || order >= zone.capacity) {
 			return false;
 		}
 		InventoryButton moved = null;
@@ -102,20 +105,29 @@ public final class InventoryButtons {
 		if (moved == null) {
 			return false;
 		}
-		if (ButtonGeometry.overlapsAny(buttons, moved, x, y, anchorRight, anchorBottom)) {
+		if (ButtonGeometry.occupied(buttons, moved, zone, order)) {
 			return false;
 		}
-		upsert(moved.withPosition(x, y, anchorRight, anchorBottom));
+		upsert(moved.withZone(zone.name(), order));
 		return true;
 	}
 
-	/** Adds a button created by the editor (right-click in the canvas), then persists. */
+	/** Adds a button to the first free slot of its zone (falls back to the right column). */
 	public void add(InventoryButton created) {
 		if (created == null) {
 			return;
 		}
+		ButtonGeometry.Zone zone = ButtonGeometry.Zone.byName(created.zone());
+		int order = zone == null ? 0 : ButtonGeometry.firstFreeOrder(buttons, zone);
+		InventoryButton placed = created;
+		if (zone != null && order >= 0) {
+			placed = created.withZone(zone.name(), order);
+		} else if (zone == null) {
+			placed = created.withZone(ButtonGeometry.Zone.RIGHT.name(),
+					Math.max(0, ButtonGeometry.firstFreeOrder(buttons, ButtonGeometry.Zone.RIGHT)));
+		}
 		List<InventoryButton> next = new ArrayList<>(buttons);
-		next.add(created);
+		next.add(placed);
 		commit(next);
 	}
 

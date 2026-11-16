@@ -22,10 +22,14 @@ dev.27 entry.
 
 ### User-facing behavior
 
-- Buttons render in five placement regions around the container GUI:
-  a top row (up to 8), a bottom row (up to 8), the row under the search
-  bar (up to 5), and left/right columns (up to 8 each). A button owns a
-  region and an order within it — never pixel offsets.
+- Buttons render in the dev.58 placement zones around the container GUI
+  (the "no floating buttons" spec): up to 8 on top of the inventory; up
+  to 8 up each side, bottom-aligned to the hotbar's level; up to 8
+  directly under the inventory's hotbar row; up to 9 in the row right
+  above the search bar; 1 inside the inventory's top-right corner; and
+  up to 4 just under the 2×2 crafting grid (that row and the corner are
+  the player's own inventory only). A button owns a zone and an order
+  within it — never pixel offsets, never free placement.
 - Hovering shows the button name, its command, and warnings for unknown
   icons, unconfigured buttons, and buttons currently hidden (no room,
   recipe book open, search bar off).
@@ -58,10 +62,14 @@ container bounds, screen size, search-bar visibility, recipe-book
 state — so resizing and recipe-book toggles are correct by
 construction:
 
-- The search bar sits flush under the GUI; under-search buttons under
-  it; the bottom row under those (directly under the GUI when the bar
-  or the under-search row is absent).
-- The left column yields while the recipe book panel is open.
+- The search bar spans the screen's bottom edge (the dev.58 request:
+  it used to hug the GUI's lower edge, reading as part of the
+  inventory); the above-search row hangs right above it, the
+  under-hotbar row right under the GUI. On a short screen the
+  above-search row hides rather than stacking onto the under-hotbar row.
+- The left column yields while the recipe book panel is open. Dragging
+  magnetically docks to the nearest free zone slot; occupied slots
+  refuse.
 - Buttons that cannot fit (capacity exceeded, screen edge) are hidden,
   never overlapped — edit mode still draws them with their positions so
   crowding is visible and fixable.
@@ -69,17 +77,18 @@ construction:
 
 ### Persistence
 
-`zea/buttons.json`, schema version 2, safe-write protocol. Version 1
-(corner anchors + pixel offsets) migrates on load: top corners map to
-the top row, bottom corners to the bottom row, buttons pushed past the
-GUI's right edge to the right column, orders derived from the old
-horizontal offsets. Blank-command buttons are kept — they are the
+`zea/buttons.json`, schema version 4 (zone + order), safe-write
+protocol. Versions 1–3 migrate on load: the old free positions resolve
+to the exact pixels their era's formulas produced, and those are then
+classified into the zones their geometry lived in, with orders
+re-assigned sequentially per zone. Blank-command buttons are kept — they are the
 preset templates' shape — and render nowhere until configured.
 
 ## Inventory search bar
 
-- The bar renders under the container GUI (not on the creative screen,
-  which has its own search). Single click focuses it.
+- The bar renders at the very bottom of the screen, spanning the
+  container's width (not on the creative screen, which has its own
+  search). Single click focuses it.
 - **Calculator**: typing an arithmetic expression shows the result in
   the bar (`39 + 4 = 43`): `+ - * /`, parentheses, decimals, unary
   minus, BigDecimal arithmetic, division by zero and incomplete
@@ -91,6 +100,9 @@ preset templates' shape — and render nowhere until configured.
   alone. Matching is case-insensitive, searches the item's full tooltip
   text (name, lore, enchantments), and supports `|` as OR. Clearing the
   query restores the inventory immediately.
+- Matching mode cannot take a frame down: an out-of-range slot index
+  cannot reach the slot list, and a stack whose tooltip explodes
+  degrades to its hover name.
 - While the bar is focused it owns the keyboard: Esc leaves matching
   mode first, then focus; the inventory key defocuses instead of
   closing; number keys never trigger hotbar swaps mid-typing. Opening a

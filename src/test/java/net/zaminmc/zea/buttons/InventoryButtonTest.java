@@ -12,19 +12,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InventoryButtonTest {
 	private InventoryButton button() {
 		return new InventoryButton(UUID.randomUUID(), "Home", "home", "minecraft:compass", "", "",
-				2, 4, true, false, 3, false, true);
+				"RIGHT", 2, 3, false, true);
 	}
 
 	@Test
 	void defaultsRepairMissingFields() {
 		InventoryButton bare = new InventoryButton(null, null, null, null, null, null,
-				0, 0, false, false, 0, false, true);
+				null, 0, 0, false, true);
 
 		assertNotEquals(null, bare.id());
 		assertEquals(InventoryButton.DEFAULT_NAME, bare.name());
 		assertEquals("", bare.command());
 		assertEquals("", bare.icon());
 		assertTrue(bare.enabled());
+	}
+
+	@Test
+	void blankAndUnknownZonesFallBackToTheDefaultZone() {
+		assertEquals(InventoryButton.DEFAULT_ZONE,
+				new InventoryButton(null, "x", "cmd", "minecraft:stone", "", "", null, 0, 0, false, true).zone());
+		assertEquals(InventoryButton.DEFAULT_ZONE,
+				new InventoryButton(null, "x", "cmd", "minecraft:stone", "", "", "  ", 0, 0, false, true).zone());
+		assertEquals("TOP", button().withZone("TOP", 0).zone(), "a real zone name is kept as authored");
 	}
 
 	@Test
@@ -42,12 +51,14 @@ class InventoryButtonTest {
 	}
 
 	@Test
-	void offsetsAreClampedToTheSanityRange() {
+	void theOrderIsClampedToTheSanityRange() {
 		InventoryButton far = new InventoryButton(null, "x", "cmd", "minecraft:stone", "", "",
-				999_999, -999_999, false, false, 0, false, true);
+				"RIGHT", 999_999, 0, false, true);
+		InventoryButton negative = new InventoryButton(null, "x", "cmd", "minecraft:stone", "", "",
+				"RIGHT", -999_999, 0, false, true);
 
-		assertEquals(ButtonGeometry.MAX_OFFSET, far.x());
-		assertEquals(-ButtonGeometry.MAX_OFFSET, far.y());
+		assertEquals(64, far.order());
+		assertEquals(0, negative.order());
 	}
 
 	@Test
@@ -78,31 +89,34 @@ class InventoryButtonTest {
 		assertNotEquals(original.id(), fresh.id());
 		assertEquals(original.name(), fresh.name());
 		assertEquals(original.command(), fresh.command());
-		assertEquals(original.x(), fresh.x());
-		assertEquals(original.y(), fresh.y());
-		assertEquals(original.anchorRight(), fresh.anchorRight());
-		assertEquals(original.anchorBottom(), fresh.anchorBottom());
+		assertEquals(original.zone(), fresh.zone());
+		assertEquals(original.order(), fresh.order());
 		assertEquals(original.style(), fresh.style());
 	}
 
 	@Test
-	void withPositionMovesAndAnchors() {
-		InventoryButton moved = button().withPosition(-20, -18, false, true);
+	void withZoneMovesTheSlot() {
+		InventoryButton moved = button().withZone("TOP", 3);
 
-		assertEquals(-20, moved.x());
-		assertEquals(-18, moved.y());
-		assertFalse(moved.anchorRight());
-		assertTrue(moved.anchorBottom());
+		assertEquals("TOP", moved.zone());
+		assertEquals(3, moved.order());
+		assertEquals("RIGHT", button().zone(), "the original keeps its zone");
 	}
 
 	@Test
-	void newButtonsStartBesideTheGui() {
-		InventoryButton fresh = InventoryButton.newButton(1);
+	void newButtonsStartInTheirZoneSlot() {
+		InventoryButton fresh = InventoryButton.newButton(1, "LEFT", 2);
 
-		assertEquals(InventoryButton.NEW_BUTTON_X, fresh.x());
-		assertTrue(fresh.anchorRight());
+		assertEquals("LEFT", fresh.zone());
+		assertEquals(2, fresh.order());
 		assertEquals("", fresh.command(), "a fresh button cannot run anything");
 		assertFalse(fresh.isUsable());
+		assertTrue(fresh.enabled());
+	}
+
+	@Test
+	void aNewButtonWithoutAZoneLandsInTheDefaultZone() {
+		assertEquals(InventoryButton.DEFAULT_ZONE, InventoryButton.newButton(1, null, 0).zone());
 	}
 
 	@Test

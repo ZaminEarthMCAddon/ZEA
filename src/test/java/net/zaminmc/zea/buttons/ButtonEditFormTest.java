@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ButtonEditFormTest {
 	private ButtonEditForm form() {
 		return new ButtonEditForm(new InventoryButton(null, "Home", "home", "minecraft:compass", "", "",
-				2, 4, true, false, 1, false, true));
+				"RIGHT", 0, 1, false, true));
 	}
 
 	@Test
@@ -23,9 +23,8 @@ class ButtonEditFormTest {
 		assertEquals("minecraft:ender_pearl", saved.icon());
 		assertEquals("Warps home", saved.tooltip());
 		// Untouched placement survives the save.
-		assertEquals(2, saved.x());
-		assertEquals(4, saved.y());
-		assertTrue(saved.anchorRight());
+		assertEquals("RIGHT", saved.zone());
+		assertEquals(0, saved.order());
 		assertEquals(1, saved.style());
 	}
 

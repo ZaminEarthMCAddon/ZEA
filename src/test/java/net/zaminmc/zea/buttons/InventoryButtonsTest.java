@@ -32,9 +32,9 @@ class InventoryButtonsTest {
 
 	private static final String HOME = """
 			{
-			  "version": 3,
+			  "version": 4,
 			  "buttons": [
-			    { "name": "Home", "command": "town spawn", "icon": "minecraft:compass" }
+			    { "name": "Home", "command": "town spawn", "icon": "minecraft:compass", "zone": "RIGHT", "order": 0 }
 			  ]
 			}
 			""";
@@ -68,10 +68,10 @@ class InventoryButtonsTest {
 	void disabledButtonsDoNotRun() throws IOException {
 		InventoryButtons buttons = loadedWith("""
 				{
-				  "version": 3,
+				  "version": 4,
 				  "buttons": [
 				    { "name": "Off", "command": "town spawn", "icon": "minecraft:compass",
-				      "enabled": false }
+				      "zone": "RIGHT", "order": 0, "enabled": false }
 				  ]
 				}
 				""");
@@ -85,9 +85,9 @@ class InventoryButtonsTest {
 	void unconfiguredButtonsDoNotRun() throws IOException {
 		InventoryButtons buttons = loadedWith("""
 				{
-				  "version": 3,
+				  "version": 4,
 				  "buttons": [
-				    { "name": "Template", "icon": "minecraft:chest" }
+				    { "name": "Template", "icon": "minecraft:chest", "zone": "RIGHT", "order": 0 }
 				  ]
 				}
 				""");
@@ -113,8 +113,8 @@ class InventoryButtonsTest {
 	@Test
 	void upsertInsertsAndReplaces() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		InventoryButton first = InventoryButton.newButton(1).withCommand("one");
-		InventoryButton second = InventoryButton.newButton(2).withCommand("two");
+		InventoryButton first = InventoryButton.newButton(1, "RIGHT", 0).withCommand("one");
+		InventoryButton second = InventoryButton.newButton(2, "RIGHT", 1).withCommand("two");
 
 		buttons.upsert(first);
 		buttons.upsert(second);
@@ -128,8 +128,8 @@ class InventoryButtonsTest {
 	@Test
 	void deleteRemovesOnlyTheTarget() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		InventoryButton first = InventoryButton.newButton(1).withCommand("one");
-		InventoryButton second = InventoryButton.newButton(2).withCommand("two");
+		InventoryButton first = InventoryButton.newButton(1, "RIGHT", 0).withCommand("one");
+		InventoryButton second = InventoryButton.newButton(2, "RIGHT", 1).withCommand("two");
 		buttons.upsert(first);
 		buttons.upsert(second);
 
@@ -140,27 +140,29 @@ class InventoryButtonsTest {
 	}
 
 	@Test
-	void movesLandAndRefuseOverlaps() {
+	void movesLandInFreeZoneSlotsAndRefuseTakenOnes() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		InventoryButton first = InventoryButton.newButton(1).withCommand("one")
-				.withPosition(0, 0, false, false);
-		InventoryButton second = InventoryButton.newButton(2).withCommand("two")
-				.withPosition(100, 0, false, false);
+		InventoryButton first = InventoryButton.newButton(1, "RIGHT", 0).withCommand("one");
+		InventoryButton second = InventoryButton.newButton(2, "LEFT", 0).withCommand("two");
 		buttons.upsert(first);
 		buttons.upsert(second);
 
-		// A free landing succeeds and persists.
-		assertTrue(buttons.move(second.id(), 200, 40, true, false));
+		// A free slot accepts the move and persists it.
+		assertTrue(buttons.move(second.id(), "TOP", 3));
 		InventoryButton moved = buttons.buttons().get(1);
-		assertEquals(200, moved.x());
-		assertTrue(moved.anchorRight());
+		assertEquals("TOP", moved.zone());
+		assertEquals(3, moved.order());
 
-		// Landing on the other button is refused; the button stays put.
-		assertTrue(!buttons.move(second.id(), 2, 0, false, false));
-		assertEquals(200, buttons.buttons().get(1).x());
+		// Landing on the other button's slot is refused; the button stays put.
+		assertFalse(buttons.move(second.id(), "RIGHT", 0));
+		assertEquals("TOP", buttons.buttons().get(1).zone());
+
+		// Unknown zone names and out-of-range orders are refused.
+		assertFalse(buttons.move(second.id(), "NOWHERE", 0));
+		assertFalse(buttons.move(second.id(), "TOP", 99));
 
 		// Unknown ids move nothing.
-		assertTrue(!buttons.move(java.util.UUID.randomUUID(), 0, 0, false, false));
+		assertFalse(buttons.move(java.util.UUID.randomUUID(), "TOP", 0));
 	}
 
 	private static void assertTrue(boolean condition) {
@@ -170,7 +172,7 @@ class InventoryButtonsTest {
 	@Test
 	void presetsApplyAndRestore() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		InventoryButton mine = InventoryButton.newButton(1).withCommand("mine");
+		InventoryButton mine = InventoryButton.newButton(1, "RIGHT", 0).withCommand("mine");
 		buttons.upsert(mine);
 
 		buttons.applyPreset(ButtonPresets.byId(ButtonPresets.EMPTY));
@@ -187,7 +189,7 @@ class InventoryButtonsTest {
 	@Test
 	void aNonPresetMutationDropsTheRestorePoint() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		buttons.upsert(InventoryButton.newButton(1).withCommand("mine"));
+		buttons.upsert(InventoryButton.newButton(1, "RIGHT", 0).withCommand("mine"));
 
 		buttons.applyPreset(ButtonPresets.byId(ButtonPresets.EMPTY));
 		buttons.applyPreset(ButtonPresets.byId(ButtonPresets.DEFAULT));
@@ -201,13 +203,26 @@ class InventoryButtonsTest {
 	@Test
 	void importsReplaceTheWholeSet() {
 		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
-		buttons.upsert(InventoryButton.newButton(1).withCommand("mine"));
+		buttons.upsert(InventoryButton.newButton(1, "RIGHT", 0).withCommand("mine"));
 
 		buttons.applyImport(List.of(
-				InventoryButton.newButton(5).withCommand("theirs"),
-				InventoryButton.newButton(6).withCommand("also theirs")));
+				InventoryButton.newButton(5, "RIGHT", 0).withCommand("theirs"),
+				InventoryButton.newButton(6, "LEFT", 0).withCommand("also theirs")));
 
 		assertEquals(2, buttons.buttons().size());
 		assertEquals("theirs", buttons.buttons().get(0).command());
+	}
+
+	@Test
+	void addFilesIntoTheZonesFirstFreeSlot() {
+		InventoryButtons buttons = new InventoryButtons(tempDir.resolve("b.json"), activator());
+		buttons.upsert(InventoryButton.newButton(1, "RIGHT", 0).withCommand("taken"));
+
+		buttons.add(InventoryButton.newButton(2, "RIGHT", 0).withCommand("fresh"));
+
+		assertEquals(2, buttons.buttons().size());
+		InventoryButton filed = buttons.buttons().get(1);
+		assertEquals("RIGHT", filed.zone());
+		assertEquals(1, filed.order(), "the created button takes the first free order of its zone");
 	}
 }

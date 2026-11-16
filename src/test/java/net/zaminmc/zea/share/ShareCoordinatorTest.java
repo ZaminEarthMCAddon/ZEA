@@ -52,7 +52,7 @@ class ShareCoordinatorTest {
 
 	private static InventoryButton button(String name, String command) {
 		return new InventoryButton(UUID.randomUUID(), name, command, "minecraft:compass",
-				"", "", 2, 4, true, false, 0, false, true);
+				"", "", "RIGHT", 0, 0, false, true);
 	}
 
 	private InventoryButtons buttons() {

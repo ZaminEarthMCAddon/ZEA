@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class ButtonTooltipsTest {
         private static InventoryButton button() {
-                return InventoryButton.newButton(1).withName("Home").withCommand("town spawn")
+                return InventoryButton.newButton(1, "RIGHT", 0).withName("Home").withCommand("town spawn")
                                 .withIcon("minecraft:compass");
         }
 
@@ -47,7 +47,7 @@ class ButtonTooltipsTest {
         @Test
         void closeOnExecuteAndUnconfiguredLinesAppear() {
                 List<Component> unconfigured = ButtonTooltips.lines(
-                                InventoryButton.newButton(1), false, true);
+                                InventoryButton.newButton(1, "RIGHT", 0), false, true);
                 assertEquals("Button 1", unconfigured.get(0).getString());
                 assertInstanceOf(TranslatableContents.class, unconfigured.get(1).getContents());
 

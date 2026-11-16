@@ -12,10 +12,10 @@ import java.util.UUID;
  * a positioned canvas to fill in. No EarthMC commands are invented here.
  *
  * <ul>
- * <li><b>Default</b> — the factory canvas: a modest starter column
- * beside the GUI's right edge.</li>
- * <li><b>Buttons everywhere</b> — the full ring: rows above and below,
- * columns on both sides.</li>
+ * <li><b>Default</b> — the factory canvas: a modest starter column in
+ * the right zone.</li>
+ * <li><b>Buttons everywhere</b> — the full ring: top and under-hotbar
+ * rows, both side columns.</li>
  * <li><b>Empty</b> — no buttons at all.</li>
  * </ul>
  *
@@ -72,67 +72,44 @@ public final class ButtonPresets {
 		return null;
 	}
 
-	/** Which edge of the canvas a template count occupies. */
+	/** Which zone a template count fills. */
 	private enum Anchor {
 		TOP, BOTTOM, LEFT, RIGHT
 	}
 
-	/** One edge's contribution to a template canvas. */
+	/** One zone's contribution to a template canvas. */
 	private record Count(Anchor anchor, int buttons) {
 	}
 
-	/** The outside grid step the template ring uses, matching the editor's snap. */
-	private static final int RING_STEP = ButtonGeometry.OUTER_GRID;
-
 	/**
-	 * Builds a canvas: {@code buttons} fresh entries per listed edge,
-	 * evenly cycling the template icons on the 20-pixel ring grid,
-	 * anchored to the edges they hug, all enabled with blank commands —
-	 * inert until the player fills them in.
+	 * Builds a canvas: fresh entries per listed zone, in zone order,
+	 * evenly cycling the template icons, all enabled with blank
+	 * commands — inert until the player fills them in. Orders are the
+	 * slot indexes inside each zone.
 	 */
 	private static List<InventoryButton> canvas(List<Count> counts) {
 		List<InventoryButton> out = new ArrayList<>();
 		int icon = 0;
 		for (Count count : counts) {
+			ButtonGeometry.Zone zone = switch (count.anchor()) {
+				case TOP -> ButtonGeometry.Zone.TOP;
+				case BOTTOM -> ButtonGeometry.Zone.UNDER_HOTBAR;
+				case LEFT -> ButtonGeometry.Zone.LEFT;
+				case RIGHT -> ButtonGeometry.Zone.RIGHT;
+			};
 			for (int i = 0; i < count.buttons(); i++) {
-				int x = 0;
-				int y = 0;
-				boolean right = false;
-				boolean bottom = false;
-				switch (count.anchor()) {
-					case TOP -> {
-						x = ButtonGeometry.TOP_BOTTOM_START_X + i * RING_STEP;
-						y = -ButtonGeometry.OUTER_PADDING - ButtonGeometry.SIZE;
-					}
-					case BOTTOM -> {
-						x = ButtonGeometry.TOP_BOTTOM_START_X + i * RING_STEP;
-						y = ButtonGeometry.CANVAS_HEIGHT + ButtonGeometry.OUTER_PADDING;
-						bottom = true;
-					}
-					case LEFT -> {
-						x = -ButtonGeometry.OUTER_PADDING - ButtonGeometry.SIZE;
-						y = ButtonGeometry.OUTER_PADDING + i * RING_STEP;
-					}
-					case RIGHT -> {
-						x = ButtonGeometry.OUTER_PADDING;
-						y = ButtonGeometry.OUTER_PADDING + i * RING_STEP;
-						right = true;
-					}
-				}
 				out.add(new InventoryButton(
-						UUID.randomUUID(),
-						"Button " + (out.size() + 1),
-						"",
-						TEMPLATE_ICONS[icon++ % TEMPLATE_ICONS.length],
-						"",
-						"",
-						x,
-						y,
-						right,
-						bottom,
-						0,
-						false,
-						true));
+							UUID.randomUUID(),
+							"Button " + (out.size() + 1),
+							"",
+							TEMPLATE_ICONS[icon++ % TEMPLATE_ICONS.length],
+							"",
+							"",
+							zone.name(),
+							i,
+							0,
+							false,
+							true));
 			}
 		}
 		return out;

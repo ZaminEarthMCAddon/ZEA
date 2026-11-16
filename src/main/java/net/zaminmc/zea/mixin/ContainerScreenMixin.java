@@ -151,14 +151,21 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                 }
         }
 
-        /** Moves the bar to its spot under the GUI; the layout stays live. */
+        /**
+         * Moves the bar to its spot at the very bottom of the screen — the
+         * dev.36 request: the bar used to hug the GUI's lower edge, where
+         * it read as part of the inventory; now it spans the screen's
+         * bottom edge (GUI-wide, left-aligned with the container), the row
+         * the player's eye already searches on any inventory overlay. The
+         * layout stays live: resize and recipe-book toggles re-place it.
+         */
         private void zea$positionSearchBar(AbstractContainerScreen<?> self) {
                 SearchBarWidget bar = zea$searchBar;
                 if (bar == null) {
                         return;
                 }
                 bar.setX(leftPos);
-                bar.setY(topPos + imageHeight + ButtonGeometry.GAP);
+                bar.setY(self.height - SearchBarWidget.HEIGHT);
                 bar.setWidth(imageWidth);
         }
 
@@ -200,7 +207,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
                 InventorySearch search = ZeaClient.search();
                 if (search.matchingActive() && !search.query().isBlank() && !slot.getItem().isEmpty()) {
-                        if (search.slotMatches(self, zea$slotIndex(slot))) {
+                        // The search text resolves through the menu's slot list; a
+                        // slot the list does not know cannot be searched, and a
+                        // stack whose tooltip explodes on this client falls back to
+                        // its hover name (the dev.36 live crash report) — neither
+                        // may take the frame down.
+                        int slotIndex = zea$slotIndex(slot);
+                        if (slotIndex < 0) {
+                                return;
+                        }
+                        if (search.slotMatches(self, slotIndex)) {
                                 ZeaConfig config = ZeaClient.config();
                                 SearchOverlay.HighlightColor color = config == null
                                                 ? SearchOverlay.HighlightColor.GREEN

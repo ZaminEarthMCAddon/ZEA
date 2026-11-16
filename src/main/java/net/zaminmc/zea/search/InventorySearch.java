@@ -118,11 +118,18 @@ public final class InventorySearch {
         /**
          * The normalized search text for a slot's stack, cached by slot
          * index and invalidated when the stack changes. Empty slots yield
-         * an empty string — they never match a non-blank query.
+         * an empty string — they never match a non-blank query. A stack
+         * whose tooltip explodes on this client (custom server data the
+         * client cannot resolve — the dev.36 live crash report) falls back
+         * to its hover name: the search keeps working, the frame keeps
+         * standing.
          */
         public String searchText(AbstractContainerScreen<?> container, int slotIndex) {
-                net.minecraft.world.inventory.Slot slot = container.getMenu().slots.get(slotIndex);
-                ItemStack stack = slot.getItem();
+                java.util.List<? extends net.minecraft.world.inventory.Slot> slots = container.getMenu().slots;
+                if (slotIndex < 0 || slotIndex >= slots.size()) {
+                        return "";
+                }
+                ItemStack stack = slots.get(slotIndex).getItem();
                 if (stack.isEmpty()) {
                         cache.remove(slotIndex);
                         return "";
@@ -131,7 +138,7 @@ public final class InventorySearch {
                 if (cached != null && ItemStack.matches(cached.stack(), stack)) {
                         return cached.text();
                 }
-                String text = SearchText.normalize(tooltipLines(stack));
+                String text = SearchText.normalize(safeTooltipLines(stack));
                 cache.put(slotIndex, new CachedText(stack.copy(), text));
                 return text;
         }
@@ -149,6 +156,21 @@ public final class InventorySearch {
          * enchantment names guaranteed present even when the tooltip
          * display hides them (a matching mode must find "sharpness").
          */
+        /**
+         * The stack's searchable lines: the full tooltip, with the
+         * enchantment names guaranteed present even when the tooltip
+         * display hides them (a matching mode must find "sharpness"). A
+         * tooltip that throws on this client degrades to the hover name —
+         * the search must never crash the frame it renders in.
+         */
+        private static List<String> safeTooltipLines(ItemStack stack) {
+                try {
+                        return tooltipLines(stack);
+                } catch (Exception e) {
+                        return List.of(stack.getHoverName().getString());
+                }
+        }
+
         private static List<String> tooltipLines(ItemStack stack) {
                 Minecraft minecraft = Minecraft.getInstance();
                 List<String> lines = new ArrayList<>();
