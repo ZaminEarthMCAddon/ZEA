@@ -3701,7 +3701,9 @@ lines beneath the number they qualify; nothing clips.
 `./gradlew test` green throughout: **1,062 tests, 0 failures** at
 landing (up from 1,059; +1 Breach live read, +2 translation-key
 header matching and its lore-lookalike counter-test, and the
-presentation tests rewritten against the detail-line layout). The
+presentation tests rewritten against the detail-line layout), and
+**1,153, 0 failures** after rebasing onto the parallel dev.36 QOL
+batch that landed in between. The
 runtime pass covered the sword, mace, chestplate, golden apple and
 plain apple tooltips, both chroma states, and the rarity labels —
 in-world, in the real 26.3 client, from the rendered pixels.
