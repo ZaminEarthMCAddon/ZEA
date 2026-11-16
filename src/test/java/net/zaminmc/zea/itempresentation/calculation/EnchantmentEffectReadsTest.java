@@ -231,6 +231,23 @@ class EnchantmentEffectReadsTest {
         }
 
         /**
+         * Breach's live read: the dedicated {@code armor_effectiveness}
+         * effect component (not the generic attribute path), so
+         * Breach IV reads -0.60.
+         */
+        @Test
+        void breachReadsTheLiveArmorEffectiveness() {
+                Holder<Enchantment> breach = enchantment("Breach", effects -> effects.set(
+                                EnchantmentEffectComponents.ARMOR_EFFECTIVENESS,
+                                List.of(new ConditionalEffect<>(
+                                                new AddValue(LevelBasedValue.perLevel(-0.15f)),
+                                                Optional.empty()))));
+                ItemSnapshot snapshot = snapshot(enchantments(breach, 4), null);
+                assertEquals(-0.6, MaceCalculator.breachArmorEffectiveness(snapshot), 1e-6,
+                                "Breach IV reads -0.15 x level of armor effectiveness");
+        }
+
+        /**
          * Lunge's dash strength walks the live impulse effect inside
          * its {@code all_of}: the vanilla data scales
          * {@code 0.458 x level}, so Lunge III dashes at 1.374.

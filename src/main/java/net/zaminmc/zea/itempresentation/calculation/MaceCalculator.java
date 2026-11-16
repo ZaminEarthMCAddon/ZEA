@@ -28,10 +28,11 @@ import java.util.Optional;
  * live from the {@link
  * EnchantmentEffectComponents#SMASH_DAMAGE_PER_FALLEN_BLOCK} effect
  * (the vanilla data grants {@code 0.5 x level} per block). Breach's
- * armor-piercing is its live {@code armor_effectiveness} attribute
- * reduction ({@code -0.15 x level}); Wind Burst is a knockback, not a
- * damage number, so it stays a flag. The normal-hit melee damage is
- * not duplicated here — it lives in {@link ItemStatistics.MeleeDamage}.
+ * armor-piercing is its live {@code armor_effectiveness} effect (the
+ * dedicated enchantment component, {@code -0.15 x level} in the
+ * vanilla data); Wind Burst is a knockback, not a damage number, so it
+ * stays a flag. The normal-hit melee damage is not duplicated here —
+ * it lives in {@link ItemStatistics.MeleeDamage}.
  */
 public final class MaceCalculator {
         /** The smash curve's first band: 4 damage per block, up to 3 blocks. */
@@ -57,8 +58,7 @@ public final class MaceCalculator {
                         return Optional.empty();
                 }
                 double perFallenBlock = densityPerFallenBlock(snapshot);
-                double breach = EnchantmentEffects.attributeContributionByPath(
-                                snapshot, "armor_effectiveness");
+                double breach = breachArmorEffectiveness(snapshot);
                 boolean windBurst = EnchantmentLevel.byPath(snapshot, "wind_burst") > 0;
                 return Optional.of(new ItemStatistics.SmashDamage(
                                 MaceItem.SMASH_ATTACK_FALL_THRESHOLD,
@@ -70,6 +70,30 @@ public final class MaceCalculator {
                                 perFallenBlock,
                                 breach,
                                 windBurst));
+        }
+
+        /**
+         * Breach's live armor-effectiveness reduction — the dedicated
+         * {@code armor_effectiveness} enchantment effect, not the
+         * generic attribute path. The vanilla data writes
+         * {@code -0.15 x level}. Zero when Breach is absent.
+         */
+        static double breachArmorEffectiveness(ItemSnapshot snapshot) {
+                if (!snapshot.hasEnchantments()) {
+                        return 0.0;
+                }
+                RandomSource random = RandomSource.create(EnchantmentEffects.EFFECT_SEED);
+                double total = 0.0;
+                for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
+                        for (var conditionalEffect : entry.enchantment().value()
+                                        .getEffects(EnchantmentEffectComponents.ARMOR_EFFECTIVENESS)) {
+                                if (conditionalEffect.requirements().isEmpty()) {
+                                        total += conditionalEffect.effect()
+                                                        .process(entry.level(), random, 0.0f);
+                                }
+                        }
+                }
+                return total;
         }
 
         /**
