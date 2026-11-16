@@ -171,6 +171,14 @@ class MixinSurfaceTest {
         }
 
         @Test
+        void editBoxMembersTargetedByEditBoxAccessorAreDeclaredByEditBox() {
+                // The scroll state the search bar's calculator overlay reads
+                // to place its result after the visible text.
+                declaredField(EditBox.class, int.class, "displayPos");
+                declaredField(EditBox.class, int.class, "textX");
+        }
+
+        @Test
         void recipeBookComponentIsDeclaredByAbstractRecipeBookScreen() {
                 declaredField(AbstractRecipeBookScreen.class,
                                 net.minecraft.client.gui.screens.recipebook.RecipeBookComponent.class,

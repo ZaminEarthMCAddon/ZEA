@@ -6,20 +6,38 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.navigation.FocusNavigationEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.FormattedCharSequence;
+import net.zaminmc.zea.mixin.EditBoxAccessor;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The inventory search bar: a borderless, flat-background edit box shown
  * beneath the container GUI. Text editing, cursor and selection are all
  * vanilla {@link EditBox} behavior — this class adds the flat
  * background, the gold outline while inventory-matching mode is active
- * (NEU tinted its bar gold the same way), and the right-aligned
- * calculator result.
+ * (NEU tinted its bar gold the same way), NEC-style syntax highlighting
+ * and the calculator result overlay.
  *
- * <p>The calculator result is an overlay, not the field's value: the
- * expression stays exactly as typed and the {@code = result} rides on
- * top with its own dark backdrop, so it stays readable even under the
- * caret. It is computed at most once per distinct input — the same
- * input replays the cached result every frame.
+ * <p>The result is an overlay, never the field's value: the expression
+ * stays exactly as typed and the {@code = result} rides on top, drawn
+ * <b>immediately after the typed text</b> — {@code 2+2 = 4} reads as
+ * one line, instead of the result floating at the far end of the bar.
+ * The placement follows the visible text (the field scrolls), and when
+ * the expression grows long enough that the result no longer fits
+ * beside it, the result moves into a small floating box under the bar
+ * — NotEnoughCalculator's fallback — with the same slow marquee scroll
+ * NEC uses for long numbers. A bare number or a plain word shows
+ * nothing at all ({@link Calculator} gates that), so typing {@code 2}
+ * no longer echoes {@code = 2}.
+ *
+ * <p>While the calculator is active the field also carries a
+ * {@link EditBox.TextFormatter} that colors the expression by token
+ * class — NEC's palette: numbers, units, functions, operators,
+ * variables — computed from the full value so tokens split by the
+ * caret still color correctly.
  *
  * <p>Focus arrives programmatically (click routing in the container
  * mixin) and Tab/arrows are refused like the chat search bar, so the
@@ -31,15 +49,20 @@ public final class SearchBarWidget extends EditBox {
 
         private static final int BACKGROUND = 0x99000000;
         private static final int RESULT_BACKDROP = 0xB0000000;
+        private static final int FLOATING_BACKDROP = 0xEE000000;
         private static final int MATCHING_BORDER = 0xFFE8B14A;
         private static final int RESULT_EQUALS_COLOR = 0xFFFFFF55;
         private static final int RESULT_VALUE_COLOR = 0xFF55FF55;
+        /** The NEC result marquee period, in milliseconds. */
+        private static final long MARQUEE_PERIOD_MILLIS = 4000;
 
         private final InventorySearch search;
         private final Font font;
         private boolean calculatorEnabled;
         private String cachedInput = "";
         private String cachedResult;
+        private String highlightInput;
+        private int[] highlightColors;
 
         public SearchBarWidget(Font font, int x, int y, int width, InventorySearch search) {
                 super(font, x, y, width, HEIGHT, Component.translatable("zea.search.bar"));
@@ -47,6 +70,7 @@ public final class SearchBarWidget extends EditBox {
                 setHeight(HEIGHT);
                 setMaxLength(Calculator.MAX_INPUT_LENGTH);
                 setHint(Component.translatable("zea.search.hint"));
+                addFormatter(this::zea$highlight);
                 this.search = search;
                 this.font = font;
         }
@@ -76,28 +100,108 @@ public final class SearchBarWidget extends EditBox {
                 }
         }
 
-        /** Draws the cached calculator result, right-aligned inside the bar. */
+        /**
+         * Draws the calculator result next to the typed text —
+         * {@code 2+2 = 4} — or, when the bar has no room left after the
+         * expression, in the floating box beneath it. Nothing is drawn
+         * while the input is not a complete calculation.
+         */
         private void drawResult(GuiGraphicsExtractor extractor) {
                 String input = getValue();
-                if (input.equals(cachedInput)) {
-                        // reuse cachedResult, including a deliberate null
-                } else {
+                if (!input.equals(cachedInput)) {
                         cachedInput = input;
-                        cachedResult = Calculator.compute(input).map(Calculator::format).orElse(null);
+                        cachedResult = Calculator.result(input).orElse(null);
                 }
                 if (cachedResult == null) {
                         return;
                 }
                 String equals = " = ";
                 int totalWidth = font.width(equals) + font.width(cachedResult);
-                if (totalWidth + 8 >= getWidth()) {
-                        return; // no room; the expression owns the bar
+
+                // Where the visible text ends: the field scrolls long input,
+                // so the anchor is the displayed substring, not the value.
+                EditBoxAccessor self = (EditBoxAccessor) (Object) this;
+                String displayed = font.plainSubstrByWidth(
+                                input.substring(self.zea$displayPos()), getInnerWidth());
+                int textEndX = self.zea$textX() + font.width(displayed);
+                if (textEndX + 2 + totalWidth < getX() + getWidth()) {
+                        int textY = getY() + (HEIGHT - font.lineHeight + 1) / 2;
+                        int x = textEndX + 2;
+                        extractor.fill(x - 2, getY(), x + totalWidth + 1, getY() + HEIGHT, RESULT_BACKDROP);
+                        extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
+                        extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
+                        return;
                 }
-                int x = getX() + getWidth() - totalWidth - 3;
-                int y = getY() + (HEIGHT - font.lineHeight + 1) / 2;
-                extractor.fill(x - 2, getY(), getX() + getWidth(), getY() + HEIGHT, RESULT_BACKDROP);
-                extractor.text(font, equals, x, y, RESULT_EQUALS_COLOR, true);
-                extractor.text(font, cachedResult, x + font.width(equals), y, RESULT_VALUE_COLOR, true);
+                zea$drawFloatingResult(extractor, equals, totalWidth);
+        }
+
+        /**
+         * NEC's fallback result box: a tooltip-dark plate under the bar
+         * (above it when the screen ends first), right-aligned with the
+         * bar, scrolling sideways on a slow sine marquee when the number
+         * is wider than the box.
+         */
+        private void zea$drawFloatingResult(GuiGraphicsExtractor extractor, String equals, int totalWidth) {
+                int boxWidth = Math.min(totalWidth + 6, getWidth());
+                int boxHeight = HEIGHT + 2;
+                int boxY = getY() + getHeight() + 1;
+                if (boxY + boxHeight > extractor.guiHeight()) {
+                        boxY = getY() - boxHeight - 1;
+                }
+                int boxX = Math.max(getX(), getX() + getWidth() - boxWidth);
+                int visible = boxWidth - 6;
+                int scroll = 0;
+                if (totalWidth > visible) {
+                        double cycle = (System.currentTimeMillis() % MARQUEE_PERIOD_MILLIS)
+                                        / (double) MARQUEE_PERIOD_MILLIS;
+                        scroll = (int) ((totalWidth - visible) * (Math.sin(cycle * Math.PI * 2) + 1) / 2);
+                }
+                int textY = boxY + (boxHeight - font.lineHeight + 1) / 2;
+                extractor.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, FLOATING_BACKDROP);
+                extractor.enableScissor(boxX, boxY, boxX + boxWidth, boxY + boxHeight);
+                int x = boxX + 3 - scroll;
+                extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
+                extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
+                extractor.disableScissor();
+        }
+
+        /**
+         * The syntax highlighter: colors the displayed substring from a
+         * per-character color map computed over the whole value (so a
+         * token the caret splits in two still colors correctly). Returns
+         * {@code null} — plain rendering — outside calculator mode or for
+         * input that does not tokenize.
+         */
+        private FormattedCharSequence zea$highlight(String text, int offset) {
+                if (!calculatorEnabled || search.mode() != InventorySearch.Mode.CALCULATOR || text.isEmpty()) {
+                        return null;
+                }
+                String value = getValue();
+                if (!value.equals(highlightInput)) {
+                        highlightInput = value;
+                        highlightColors = Calculator.syntaxColors(value);
+                }
+                if (highlightColors == null) {
+                        return null;
+                }
+                List<FormattedCharSequence> runs = new ArrayList<>();
+                int index = 0;
+                while (index < text.length()) {
+                        int color = zea$colorAt(offset + index);
+                        int end = index + 1;
+                        while (end < text.length() && zea$colorAt(offset + end) == color) {
+                                end++;
+                        }
+                        runs.add(FormattedCharSequence.forward(text.substring(index, end), Style.EMPTY.withColor(color)));
+                        index = end;
+                }
+                return FormattedCharSequence.composite(runs);
+        }
+
+        /** The highlight color of a character position in the full value. */
+        private int zea$colorAt(int absolute) {
+                return absolute >= 0 && absolute < highlightColors.length ? highlightColors[absolute]
+                                : Calculator.SyntaxPalette.WORD;
         }
 
         /** Focus moves here only by explicit request; see the class javadoc. */

@@ -11,6 +11,7 @@
                 "MentionHighlightMixin",
                 "ContainerScreenMixin",
                 "CreativeScreenMixin",
+                "EditBoxAccessor",
                 "GuiGraphicsExtractorMixin",
                 "MouseHandlerMixin",
                 "MultiPlayerGameModeMixin",
