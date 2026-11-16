@@ -15,6 +15,12 @@ import java.util.Optional;
  * conditional entries rather than fixed numbers, so the tooltip never
  * lies by presenting a single conditional number as universal.
  *
+ * <p>Wherever an enchantment contributes a numeric bonus, the
+ * contributing enchantment's <em>level</em> rides along in its own
+ * field ({@code bonusLevel}, {@code efficiencyLevel}, …) so the
+ * presentation can render the compact bracket indicator — "Damage:
+ * +12 [5]" — without re-deriving which enchantment was responsible.
+ *
  * <p>Constructed by the calculators and consumed read-only by the
  * presentation model. Empty optionals mean the statistic does not apply
  * to this item (a bow has no melee attack speed worth showing), never
@@ -27,15 +33,14 @@ public record ItemStatistics(
                 Optional<Durability> durability,
                 Optional<ProjectileStats> projectile,
                 Optional<SmashDamage> smashDamage,
-                Optional<SpearStats> spear,
-                Optional<FoodStats> food) {
+                Optional<SpearStats> spear) {
 
         /** An empty statistics set — the item has no RPG-stat-worthy properties. */
         public static ItemStatistics empty() {
                 return new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty());
+                                Optional.empty());
         }
 
         /**
@@ -43,17 +48,18 @@ public record ItemStatistics(
          * damage plus the unconditional damage enchantments (Sharpness,
          * Smite, Bane of Arthropods — whichever is present, they are
          * mutually exclusive). Conditional-on-target effects are listed
-         * separately. {@code bonusLabel} carries the display names of the
-         * enchantments that make up {@code enchantmentBonus}, so the
-         * presentation can state the split ("8 base + 3 Sharpness V")
-         * rather than one opaque total.
+         * separately. {@code bonusLabel} names the enchantment behind
+         * {@code enchantmentBonus} and {@code bonusLevel} carries its
+         * level for the compact bracket indicator.
          */
         public record MeleeDamage(
                         double baseDamage,
                         double enchantmentBonus,
                         String bonusLabel,
+                        int bonusLevel,
                         double attackSpeed,
                         double sweepingRatio,
+                        int sweepingLevel,
                         List<ConditionalBonus> conditional) {
                 /** The total damage on a normal hit, base plus enchantment. */
                 public double total() {
@@ -63,16 +69,18 @@ public record ItemStatistics(
 
         /**
          * The mining speed against a representative block the tool is
-         * correct for. {@code efficiencyBonus} is the Efficiency
-         * enchantment's live {@code mining_efficiency} attribute
-         * contribution ({@code level squared + 1} in the vanilla data) —
-         * Efficiency does not apply to blocks the tool is wrong for, and
-         * that is reflected here by the {@code appliesOnlyWhenCorrect}
-         * flag.
+         * correct for. {@code baseSpeed} is the tool's own speed; {@code
+         * efficiencyBonus} is the Efficiency enchantment's live {@code
+         * mining_efficiency} attribute contribution ({@code level
+         * squared + 1} in the vanilla data) with its level in {@code
+         * efficiencyLevel}. Both numbers describe blocks the tool is
+         * correct for — Efficiency does not apply to blocks the tool is
+         * wrong for, which {@code appliesOnlyWhenCorrect} records.
          */
         public record MiningSpeed(
                         double baseSpeed,
                         double efficiencyBonus,
+                        int efficiencyLevel,
                         boolean appliesOnlyWhenCorrect) {
                 /** Mining speed when the tool is correct for the block. */
                 public double correctForDrops() {
@@ -98,46 +106,50 @@ public record ItemStatistics(
         }
 
         /**
-         * Durability: the current damage value against the maximum.
-         * {@code unbreakingFactor} is the effective durability multiplier
-         * the Unbreaking enchantment yields — the expected number of uses
-         * per point of durability consumed, resolved from the
-         * enchantment's live data branch for this item's kind (armor and
-         * other items refund at different rates).
+         * Durability: the current damage value against the maximum, and
+         * nothing else. Unbreaking is deliberately not folded in — the
+         * tooltip states the real maximum, and Unbreaking presents as
+         * the enchantment it is.
          */
         public record Durability(
                         int current,
-                        int maximum,
-                        double unbreakingFactor) {
-                /** The effective maximum durability with Unbreaking factored in. */
-                public int effectiveMaximum() {
-                        return maximum + (int) Math.round(maximum * (unbreakingFactor - 1.0));
-                }
+                        int maximum) {
         }
 
         /**
-         * Projectile stats for bows and crossbows. Bows present the
-         * fully-charged damage; crossbows present their loaded
-         * projectile's damage. The damage of a velocity-scaled projectile
-         * (an arrow) is {@code ceil(speed x (base + powerBonus))} — the
-         * Power enchantment multiplies through the draw velocity, exactly
-         * as the arrow's hit code computes it, so a Power V bow at full
-         * draw reads 15 and not a flat "6 + 3". A firework rocket damages
-         * through its explosion instead ({@code fireworkDamage}), and no
-         * arrow-style number is presented for it.
+         * Projectile stats for bows, crossbows and tridents. Bows and
+         * crossbows present the fully-charged arrow damage; a trident
+         * presents its thrown damage. An arrow's damage is {@code
+         * ceil(speed x (base + powerBonus))} — the Power enchantment
+         * multiplies through the draw velocity, exactly as the arrow's
+         * hit code computes it, so a Power V bow at full draw reads 15
+         * and not a flat "6 + 3"; {@code powerLevel} carries Power's
+         * level for the bracket indicator. A trident's thrown damage is
+         * <em>not</em> velocity-scaled — it is {@code base + powerBonus}
+         * flat — so {@code velocityScaled} records which formula
+         * applies. A firework rocket damages through its explosion
+         * instead ({@code fireworkDamage}), and no arrow-style number is
+         * presented for it.
          */
         public record ProjectileStats(
                         double speed,
                         double baseDamage,
                         double powerBonus,
+                        int powerLevel,
                         int chargeTicks,
                         int projectileCount,
                         int piercing,
                         boolean firework,
-                        int fireworkStars) {
+                        int fireworkStars,
+                        boolean velocityScaled) {
                 /** Fully-charged arrow damage, base plus Power, scaled by speed. */
                 public double fullyCharged() {
                         return Math.ceil(speed * (baseDamage + powerBonus));
+                }
+
+                /** Flat projectile damage for a non-velocity-scaled throw (the trident). */
+                public double flat() {
+                        return baseDamage + powerBonus;
                 }
 
                 /** A firework rocket's direct-hit damage: 5 plus 2 per star. */
@@ -151,19 +163,21 @@ public record ItemStatistics(
          * the wielder fell before striking. The vanilla curve is piecewise
          * linear — 4 per fallen block up to 3 blocks, 2 per block from 3
          * to 8, 1 per block beyond — and only applies past the fall
-         * threshold; the bands carry those rates so the presentation can
-         * state real numbers at real fall distances instead of one
-         * misleading fixed damage. {@code densityPerFallenBlock} is the
-         * Density enchantment's live per-block rate, added on top of the
-         * curve; {@code breach} is Breach's live armor-effectiveness
-         * reduction per hit; {@code windBurst} flags the Wind Burst
+         * threshold; the bands carry those rates so the damage at any
+         * real fall distance is computable. {@code densityPerFallenBlock}
+         * is the Density enchantment's live per-block rate (level in
+         * {@code densityLevel}); {@code breach} is Breach's live
+         * armor-effectiveness reduction per hit (level in {@code
+         * breachLevel}); {@code windBurst} flags the Wind Burst
          * knockback, which is not a damage number.
          */
         public record SmashDamage(
                         double fallThreshold,
                         List<SmashBand> bands,
                         double densityPerFallenBlock,
+                        int densityLevel,
                         double breach,
+                        int breachLevel,
                         boolean windBurst) {
 
                 /** One piecewise segment: {@code perBlock} per fallen block, up to {@code upTo}. */
@@ -214,14 +228,6 @@ public record ItemStatistics(
                         double chargeAttackMultiplier,
                         int lungeLevel,
                         double lungeImpulse) {
-        }
-
-        /** Food properties: nutrition, saturation, and formatted consume effects. */
-        public record FoodStats(
-                        int nutrition,
-                        float saturation,
-                        boolean canAlwaysEat,
-                        List<String> effects) {
         }
 
         /**

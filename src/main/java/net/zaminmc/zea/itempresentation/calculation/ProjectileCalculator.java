@@ -4,8 +4,8 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.effects.EnchantmentValueEffect;
@@ -62,16 +62,52 @@ public final class ProjectileCalculator {
 
         /**
          * The projectile stats for {@code stack} from {@code snapshot},
-         * or empty when the item is neither a bow nor a crossbow.
+         * or empty when the item is neither a bow, a crossbow nor a
+         * trident.
          */
-        public static Optional<ItemStatistics.ProjectileStats> calculate(Item item, ItemSnapshot snapshot) {
-                if (item instanceof BowItem) {
+        public static Optional<ItemStatistics.ProjectileStats> calculate(ItemStack stack, ItemSnapshot snapshot) {
+                if (stack.getItem() instanceof BowItem) {
                         return Optional.of(bowStats(snapshot));
                 }
-                if (item instanceof CrossbowItem) {
+                if (stack.getItem() instanceof CrossbowItem) {
                         return Optional.of(crossbowStats(snapshot));
                 }
+                if (stack.getItem() instanceof TridentItem) {
+                        return Optional.of(tridentStats(snapshot));
+                }
                 return Optional.empty();
+        }
+
+        /**
+         * Trident thrown stats. A thrown trident deals {@link
+         * TridentItem#BASE_DAMAGE} (8.0) plus the weapon's
+         * <em>unconditional</em> damage enchantments — {@code
+         * ThrownTrident.onHitEntity} runs {@code
+         * EnchantmentHelper.modifyDamage} over the trident's own effect
+         * list, so Sharpness lands on the throw exactly as it lands on
+         * the melee hit, while Impaling stays conditional on the target
+         * being aquatic and is therefore not folded in. The launch
+         * speed is {@link TridentItem#PROJECTILE_SHOOT_POWER} (2.5
+         * blocks/tick, bytecode-verified — {@code releaseUsing} passes
+         * it to {@code spawnProjectileFromRotation} directly), and the
+         * throw releases only after {@link TridentItem#THROW_THRESHOLD_TIME}
+         * ticks of charging. Unlike an arrow, the trident's damage is
+         * not scaled by its velocity, so the stats are marked as such.
+         */
+        static ItemStatistics.ProjectileStats tridentStats(ItemSnapshot snapshot) {
+                double bonus = unconditionalDamageBonus(snapshot);
+                int bonusLevel = unconditionalDamageLevel(snapshot);
+                return new ItemStatistics.ProjectileStats(
+                                TridentItem.PROJECTILE_SHOOT_POWER,
+                                TridentItem.BASE_DAMAGE,
+                                bonus,
+                                bonusLevel,
+                                TridentItem.THROW_THRESHOLD_TIME,
+                                1,
+                                0,
+                                false,
+                                0,
+                                false);
         }
 
         /**
@@ -83,15 +119,18 @@ public final class ProjectileCalculator {
          */
         static ItemStatistics.ProjectileStats bowStats(ItemSnapshot snapshot) {
                 double powerBonus = powerBonus(snapshot);
+                int powerLevel = EnchantmentLevel.byPath(snapshot, "power");
                 return new ItemStatistics.ProjectileStats(
                                 BOW_FULL_CHARGE_SPEED,
                                 ARROW_BASE_DAMAGE,
                                 powerBonus,
+                                powerLevel,
                                 BowItem.MAX_DRAW_DURATION,
                                 1,
                                 0,
                                 false,
-                                0);
+                                0,
+                                true);
         }
 
         /**
@@ -126,7 +165,53 @@ public final class ProjectileCalculator {
                                 EnchantmentEffects.unconditionalValue(snapshot, EnchantmentEffectComponents.PROJECTILE_PIERCING));
                 int chargeTicks = crossbowChargeTicks(snapshot);
                 return new ItemStatistics.ProjectileStats(
-                                speed, ARROW_BASE_DAMAGE, 0.0, chargeTicks, projectileCount, piercing, firework, fireworkStars);
+                                speed, ARROW_BASE_DAMAGE, 0.0, 0, chargeTicks, projectileCount, piercing, firework, fireworkStars, true);
+        }
+
+        /**
+         * The live damage bonus the held enchantments add to a thrown
+         * trident — only effects whose requirements are empty (the
+         * same filter the melee calculator uses), because a thrown
+         * trident has no target for a conditional effect to match.
+         * Zero when nothing contributes.
+         */
+        private static double unconditionalDamageBonus(ItemSnapshot snapshot) {
+                if (!snapshot.hasEnchantments()) {
+                        return 0.0;
+                }
+                RandomSource random = RandomSource.create(EnchantmentEffects.EFFECT_SEED);
+                double bonus = 0.0;
+                for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
+                        for (var conditionalEffect : entry.enchantment().value()
+                                        .getEffects(EnchantmentEffectComponents.DAMAGE)) {
+                                if (conditionalEffect.requirements().isEmpty()) {
+                                        bonus += conditionalEffect.effect()
+                                                        .process(entry.level(), random, 0.0f);
+                                }
+                        }
+                }
+                return bonus;
+        }
+
+        /**
+         * The level of the enchantment behind {@link
+         * #unconditionalDamageBonus} — the bracket indicator for the
+         * thrown-damage line. Zero when nothing contributes.
+         */
+        private static int unconditionalDamageLevel(ItemSnapshot snapshot) {
+                if (!snapshot.hasEnchantments()) {
+                        return 0;
+                }
+                int level = 0;
+                for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
+                        for (var conditionalEffect : entry.enchantment().value()
+                                        .getEffects(EnchantmentEffectComponents.DAMAGE)) {
+                                if (conditionalEffect.requirements().isEmpty()) {
+                                        level = Math.max(level, entry.level());
+                                }
+                        }
+                }
+                return level;
         }
 
         /**

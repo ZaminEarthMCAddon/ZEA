@@ -2,9 +2,11 @@ package net.zaminmc.zea.rarity;
 
 import net.minecraft.network.chat.Component;
 import net.zaminmc.zea.VanillaBootstrap;
+import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
 import org.junit.jupiter.api.Test;
 
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.EnchantmentStyle;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.footerLabel;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.isAttributeSectionHeader;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.styleForLevels;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -98,5 +100,18 @@ class EnchantmentStylingTest {
                                 Component.literal("When on Chest:")));
                 assertFalse(isAttributeSectionHeader(Component.literal("When on Body:")));
                 assertFalse(isAttributeSectionHeader(Component.empty()));
+        }
+
+        /**
+         * The rarity footer is RARITY plus equipment type — uppercase,
+         * from the enums, never a bare rarity word and never lowercase.
+         */
+        @Test
+        void footerLabelJoinsRarityAndEquipmentType() {
+                assertEquals("UNCOMMON SWORD", footerLabel(ItemRarity.UNCOMMON, ItemCategory.SWORD));
+                assertEquals("EPIC PICKAXE", footerLabel(ItemRarity.EPIC, ItemCategory.PICKAXE));
+                assertEquals("LEGENDARY BOW", footerLabel(ItemRarity.LEGENDARY, ItemCategory.BOW));
+                assertEquals("COMMON CHESTPLATE", footerLabel(ItemRarity.COMMON, ItemCategory.CHESTPLATE));
+                assertEquals("UNCOMMON TRIDENT", footerLabel(ItemRarity.UNCOMMON, ItemCategory.TRIDENT));
         }
 }

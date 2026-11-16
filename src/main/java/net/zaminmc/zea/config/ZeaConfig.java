@@ -587,40 +587,33 @@ public final class ZeaConfig extends Config {
                 @ConfigOrder(2)
                 public int tintOpacity = 25;
 
-                @ConfigOption(name = "Rarity-colored names", desc = "Color an item's tooltip name "
-                                + "in its rarity color. Items with a custom name keep that name and "
-                                + "its colors — rarity never overwrites a name you gave the item.")
+                @ConfigOption(name = "Rarity-colored names", desc = "Color a supported item's tooltip name in "
+                                + "its rarity color. The exact name text, its translations and its non-color "
+                                + "formatting survive untouched — only the presented color follows the "
+                                + "rarity, and the item itself is never modified.")
                 @ConfigEditorBoolean
                 @ConfigOrder(3)
-                public boolean nameColoring = false;
+                public boolean nameColoring = true;
 
-                @ConfigOption(name = "Rarity in tooltip", desc = "Show the rarity (COMMON, "
-                                + "UNCOMMON, EPIC, LEGENDARY) at the bottom of supported items' "
-                                + "tooltips, in the rarity color.")
+                @ConfigOption(name = "Rarity in tooltip", desc = "End supported items' tooltips with "
+                                + "the bold rarity and equipment type (COMMON, UNCOMMON, EPIC, "
+                                + "LEGENDARY — SWORD, PICKAXE, CHESTPLATE, ...) in the rarity color, "
+                                + "before Minecraft's own advanced tooltip lines.")
                 @ConfigEditorBoolean
                 @ConfigOrder(4)
                 public boolean loreRarity = true;
 
                 @ConfigOption(name = "RPG-style stats", desc = "Replace the vanilla 'When in "
-                                + "Main Hand' attribute clutter with a clean stat block — Damage, "
-                                + "Attack Speed, Mining Speed, Armor, Durability and the "
-                                + "category-specific numbers (bow draw, mace smash, food "
-                                + "nutrition). Statistics are calculated from the item's actual "
-                                + "attributes, enchantments and components, never invented. "
-                                + "Server-provided lore and enchantments are preserved.")
+                                + "Main Hand' attribute clutter and the per-line enchantment list with "
+                                + "the clean RPG presentation — compact stat lines (Damage: +12 [5], "
+                                + "Defense, Mining Speed, Durability), grouped enchantments and the "
+                                + "category-specific numbers (bow draw, mace smash, trident throw). "
+                                + "Statistics are calculated from the item's actual attributes, "
+                                + "enchantments and components, never invented. Server-provided lore "
+                                + "and Minecraft's advanced F3+H tooltip are preserved untouched.")
                 @ConfigEditorBoolean
                 @ConfigOrder(4)
                 public boolean rpgStats = true;
-
-                @ConfigOption(name = "Advanced info on Ctrl", desc = "Hold Left Ctrl while hovering "
-                                + "an item to append the hidden technical detail — the registry "
-                                + "identifier, the enchantment levels against their registered "
-                                + "maximums, and the component count. Useful for debugging and "
-                                + "for reading custom server-provided items; off by default so "
-                                + "the default tooltip stays clean.")
-                @ConfigEditorBoolean
-                @ConfigOrder(5)
-                public boolean advancedInfo = false;
         }
 
         /** Enchantment display: missing upgrades on Shift and max-level chroma. */
@@ -1056,11 +1049,6 @@ public final class ZeaConfig extends Config {
         /** Whether the RPG-style stat block replaces the vanilla attribute tooltip lines. */
         public boolean rarityRpgStatsEnabled() {
                 return rarityEnabled() && rarity.appearance.rpgStats;
-        }
-
-        /** Whether Left Ctrl reveals the hidden technical tooltip detail. */
-        public boolean rarityAdvancedInfoEnabled() {
-                return rarityEnabled() && rarity.appearance.advancedInfo;
         }
 
         /** Whether holding Shift reveals the missing enchantment upgrades. */

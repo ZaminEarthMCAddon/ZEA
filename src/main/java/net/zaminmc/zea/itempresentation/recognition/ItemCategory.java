@@ -9,16 +9,20 @@ package net.zaminmc.zea.itempresentation.recognition;
  * <p>The category is resolved by {@link ItemClassifier} from Minecraft
  * 26.3's actual item definitions — tags where vanilla ships them
  * ({@code #minecraft:swords}, {@code #minecraft:spears}, the armor tags,
- * …), the item's own class where vanilla still has one
+ * …) and the item's own class where vanilla still has one
  * ({@link net.minecraft.world.item.BowItem}, {@link
- * net.minecraft.world.item.MaceItem}, …), and a component presence test
- * where the item is purely data-driven (food, tools). Never from the
- * item's display name.
+ * net.minecraft.world.item.MaceItem}, …). Never from the item's display
+ * name.
  *
- * <p>{@link #OTHER} is the catch-all for items ZEA has no specific
- * presentation for — blocks, materials, utility items. They keep their
- * vanilla tooltip; the category exists so the rest of the pipeline can
- * short-circuit cleanly instead of carrying a {@code null} around.
+ * <p>The supported set is exactly the spec's equipment allowlist: the
+ * four tool families (pickaxe, axe, shovel, hoe — all material
+ * variants), the six weapon families (sword, spear, mace, bow,
+ * crossbow, trident) and the four armor slots. Everything else —
+ * blocks, materials, food, potions, books, shields, elytra, horse
+ * armor, spawn eggs, utility items — is {@link #OTHER} and keeps its
+ * vanilla tooltip byte-for-byte. The category exists so the rest of the
+ * pipeline can short-circuit cleanly instead of carrying a {@code null}
+ * around.
  */
 public enum ItemCategory {
         /** Melee cutting weapon: {@code #minecraft:swords}. Sweeping applies. */
@@ -41,8 +45,6 @@ public enum ItemCategory {
         SHOVEL,
         /** Crop-and-leaf tool: {@code #minecraft:hoes}. */
         HOE,
-        /** Shearing utility: {@link net.minecraft.world.item.ShearsItem}. */
-        SHEARS,
         /** Head-slot armor: {@code #minecraft:head_armor}. */
         HELMET,
         /** Chest-slot armor: {@code #minecraft:chest_armor}. */
@@ -51,19 +53,13 @@ public enum ItemCategory {
         LEGGINGS,
         /** Feet-slot armor: {@code #minecraft:foot_armor}. */
         BOOTS,
-        /** Held defensive shield: {@link net.minecraft.world.item.ShieldItem}. */
-        SHIELD,
-        /** Chest-slot glider: elytra (no armor points, flies). */
-        ELYTRA,
-        /** Eaten item: carries {@link net.minecraft.world.food.FoodProperties}. */
-        FOOD,
         /** Anything else: keeps its vanilla tooltip. */
         OTHER;
 
-        /** Whether this category is a melee weapon swung by hand. */
+        /** Whether this category is a melee weapon swung or thrust by hand. */
         public boolean isMeleeWeapon() {
                 return switch (this) {
-                        case SWORD, AXE, SPEAR, MACE -> true;
+                        case SWORD, AXE, SPEAR, MACE, TRIDENT -> true;
                         default -> false;
                 };
         }
@@ -79,7 +75,7 @@ public enum ItemCategory {
         /** Whether this category mines blocks when used. */
         public boolean isMiningTool() {
                 return switch (this) {
-                        case PICKAXE, SHOVEL, HOE, AXE, SHEARS -> true;
+                        case PICKAXE, SHOVEL, HOE, AXE -> true;
                         default -> false;
                 };
         }

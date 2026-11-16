@@ -18,11 +18,10 @@ import java.util.Optional;
  * MiningSpeedCalculator} returns empty for a sword — so the engine
  * does not need to know which categories carry which stats. The
  * category is resolved first only to short-circuit {@link
- * ItemCategory#OTHER} (blocks, materials) before any component is
- * read, keeping the hot path — hovering ordinary items — cheap, and to
- * pass the two facts only the category knows: whether Unbreaking's
- * armor data branch applies, and whether the spear-specific
- * calculator should run.
+ * ItemCategory#OTHER} (blocks, materials, food, utility items) before
+ * any component is read, keeping the hot path — hovering ordinary
+ * items — cheap, and to pass the facts only the category knows:
+ * whether the spear-specific calculator should run.
  *
  * <p>The engine is stateless; caching lives at the presentation layer,
  * keyed by the (item, enchantments) pair the snapshot captures. The
@@ -59,15 +58,13 @@ public final class StatisticsEngine {
                 Optional<ItemStatistics.ArmorStats> armor = category.isArmor()
                                 ? ArmorCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.Durability> durability = DurabilityCalculator.calculate(
-                                stack, snapshot, category.isArmor());
+                                stack, snapshot);
                 Optional<ItemStatistics.ProjectileStats> projectile = category.isRangedWeapon()
-                                ? ProjectileCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
+                                ? ProjectileCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.SmashDamage> smash = category == ItemCategory.MACE
                                 ? MaceCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
                 Optional<ItemStatistics.SpearStats> spear = category == ItemCategory.SPEAR
                                 ? SpearCalculator.calculate(stack, snapshot) : Optional.empty();
-                Optional<ItemStatistics.FoodStats> food = category == ItemCategory.FOOD
-                                ? FoodCalculator.calculate(stack, snapshot) : Optional.empty();
-                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear, food);
+                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear);
         }
 }

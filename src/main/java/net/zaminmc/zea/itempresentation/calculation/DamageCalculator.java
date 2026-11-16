@@ -111,13 +111,17 @@ public final class DamageCalculator {
                                 ItemSnapshot.WEAPON_SLOT)
                                 + EnchantmentEffects.attributeContribution(
                                                 snapshot, Attributes.SWEEPING_DAMAGE_RATIO);
+                int sweepingLevel = EnchantmentEffects.attributeLevel(
+                                snapshot, Attributes.SWEEPING_DAMAGE_RATIO);
                 EnchantmentDamage enchantDamage = enchantmentDamage(snapshot);
                 return Optional.of(new ItemStatistics.MeleeDamage(
                                 attackDamage,
                                 enchantDamage.bonus,
                                 enchantDamage.bonusLabel,
+                                enchantDamage.bonusLevel,
                                 attackSpeed,
                                 sweeping,
+                                sweepingLevel,
                                 enchantDamage.conditional));
         }
 
@@ -152,10 +156,11 @@ public final class DamageCalculator {
          */
         private static EnchantmentDamage enchantmentDamage(ItemSnapshot snapshot) {
                 if (!snapshot.hasEnchantments()) {
-                        return new EnchantmentDamage(0.0, "", List.of());
+                        return new EnchantmentDamage(0.0, "", 0, List.of());
                 }
                 RandomSource random = RandomSource.create(EnchantmentEffects.EFFECT_SEED);
                 double bonus = 0.0;
+                int bonusLevel = 0;
                 List<String> bonusLabels = new ArrayList<>();
                 List<ItemStatistics.ConditionalBonus> conditional = new ArrayList<>();
                 for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
@@ -177,6 +182,7 @@ public final class DamageCalculator {
                                 double value = conditionalEffect.effect().process(level, random, 0.0f);
                                 if (conditionalEffect.requirements().isEmpty()) {
                                         bonus += value;
+                                        bonusLevel = Math.max(bonusLevel, level);
                                         bonusLabels.add(fullname);
                                 } else {
                                         conditional.add(new ItemStatistics.ConditionalBonus(
@@ -186,12 +192,13 @@ public final class DamageCalculator {
                                 }
                         }
                 }
-                return new EnchantmentDamage(bonus, String.join(" + ", bonusLabels), List.copyOf(conditional));
+                return new EnchantmentDamage(bonus, String.join(" + ", bonusLabels), bonusLevel, List.copyOf(conditional));
         }
 
         private record EnchantmentDamage(
                         double bonus,
                         String bonusLabel,
+                        int bonusLevel,
                         List<ItemStatistics.ConditionalBonus> conditional) {
         }
 }

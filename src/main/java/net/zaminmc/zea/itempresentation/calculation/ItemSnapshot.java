@@ -4,11 +4,9 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.AttackRange;
 import net.minecraft.world.item.component.ChargedProjectiles;
-import net.minecraft.world.item.component.Consumable;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.component.KineticWeapon;
 import net.minecraft.world.item.component.Tool;
@@ -16,7 +14,6 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * A one-shot capture of the components the calculators read off an
@@ -26,9 +23,9 @@ import java.util.Optional;
  *
  * <p>The snapshot intentionally holds only what the calculations are
  * <em>stateless</em> over — the item's own attribute modifiers, its
- * enchantments, its tool rules, its food, its weapon-type components.
- * Target-dependent values (the actual damage dealt to a specific mob,
- * the mining speed against a specific block, the protection against a
+ * enchantments, its tool rules, its weapon-type components. Target-
+ * dependent values (the actual damage dealt to a specific mob, the
+ * mining speed against a specific block, the protection against a
  * specific damage type) are not captured here: they depend on a target
  * the tooltip does not have, so they live in the calculators behind
  * explicit "against X" parameters and are never cached as universal
@@ -42,8 +39,6 @@ public record ItemSnapshot(
                 ItemAttributeModifiers attributeModifiers,
                 ItemEnchantments enchantments,
                 Tool tool,
-                FoodProperties food,
-                Consumable consumable,
                 AttackRange attackRange,
                 KineticWeapon kineticWeapon,
                 ChargedProjectiles chargedProjectiles,
@@ -65,14 +60,12 @@ public record ItemSnapshot(
                 ItemEnchantments enchantments = stack.getOrDefault(
                                 DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
                 Tool tool = stack.get(DataComponents.TOOL);
-                FoodProperties food = stack.get(DataComponents.FOOD);
-                Consumable consumable = stack.get(DataComponents.CONSUMABLE);
                 AttackRange attackRange = stack.get(DataComponents.ATTACK_RANGE);
                 KineticWeapon kineticWeapon = stack.get(DataComponents.KINETIC_WEAPON);
                 ChargedProjectiles chargedProjectiles = stack.get(DataComponents.CHARGED_PROJECTILES);
                 int maxDamage = stack.getOrDefault(DataComponents.MAX_DAMAGE, 0);
                 int damage = stack.getOrDefault(DataComponents.DAMAGE, 0);
-                return new ItemSnapshot(modifiers, enchantments, tool, food, consumable,
+                return new ItemSnapshot(modifiers, enchantments, tool,
                                 attackRange, kineticWeapon, chargedProjectiles, maxDamage, damage);
         }
 
@@ -94,10 +87,5 @@ public record ItemSnapshot(
 
         /** One held enchantment: the holder and its level on this item. */
         public record EnchantmentEntry(Holder<Enchantment> enchantment, int level) {
-        }
-
-        /** Placeholder for {@code Optional<Tool>} ergonomics — unused so far. */
-        public Optional<Tool> toolOptional() {
-                return Optional.ofNullable(tool);
         }
 }

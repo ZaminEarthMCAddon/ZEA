@@ -9,14 +9,15 @@ import java.util.Optional;
 /**
  * Mining speed for pickaxes, shovels, hoes, axes and shears.
  *
- * <p>The base speed is the {@link Tool} component's
- * {@link Tool#defaultMiningSpeed()} — the speed the tool applies to a
- * block it is correct for but that has no rule-specific override. A real
- * tooltip cannot pick a target block, so the default is the honest
- * representative: it is the number the tool actually contributes against
- * most mineable blocks, and the calculator marks it as correct-for-drops
- * so the presentation does not imply Efficiency applies to blocks the
- * tool is wrong for.
+ * <p>The base speed is the speed the tool applies to the blocks it
+ * is meant for — the {@code correct_for_drops} family rule's speed
+ * ({@code #mineable/pickaxe} at 8.0 on a diamond pickaxe), not the
+ * {@code default_mining_speed} penalty value (1.0) the same component
+ * carries for wrong-tool blocks. A real tooltip cannot pick a target
+ * block, so the family speed is the honest representative, and the
+ * calculator marks the result as correct-for-drops so the
+ * presentation does not imply Efficiency applies to blocks the tool
+ * is wrong for.
  *
  * <p>Efficiency is read live from the enchantment's {@code
  * mining_efficiency} attribute effect — in the 26.3 vanilla data a
@@ -49,12 +50,34 @@ public final class MiningSpeedCalculator {
                 if (tool == null) {
                         return Optional.empty();
                 }
-                double baseSpeed = tool.defaultMiningSpeed();
+                double baseSpeed = correctForDropsSpeed(tool);
                 double efficiencyBonus = EnchantmentEffects.attributeContribution(
+                                snapshot, Attributes.MINING_EFFICIENCY);
+                int efficiencyLevel = EnchantmentEffects.attributeLevel(
                                 snapshot, Attributes.MINING_EFFICIENCY);
                 return Optional.of(new ItemStatistics.MiningSpeed(
                                 baseSpeed,
                                 efficiencyBonus,
+                                efficiencyLevel,
                                 true));
+        }
+
+        /**
+         * The speed the tool applies to the blocks it is meant for:
+         * the 26.3 item data writes the family speed into the tool's
+         * own {@code correct_for_drops} rule ({@code #mineable/pickaxe}
+         * at 8.0 on a diamond pickaxe), while {@code
+         * defaultMiningSpeed} is the penalty speed for blocks the tool
+         * is wrong for (1.0). The first rule that both drops correctly
+         * and carries a speed is the representative; a tool without
+         * one falls back to the default.
+         */
+        static double correctForDropsSpeed(Tool tool) {
+                for (Tool.Rule rule : tool.rules()) {
+                        if (rule.correctForDrops().orElse(false) && rule.speed().isPresent()) {
+                                return rule.speed().get();
+                        }
+                }
+                return tool.defaultMiningSpeed();
         }
 }

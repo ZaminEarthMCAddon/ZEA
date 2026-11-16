@@ -58,7 +58,9 @@ public final class MaceCalculator {
                         return Optional.empty();
                 }
                 double perFallenBlock = densityPerFallenBlock(snapshot);
+                int densityLevel = EnchantmentLevel.byPath(snapshot, "density");
                 double breach = breachArmorEffectiveness(snapshot);
+                int breachLevel = EnchantmentLevel.byPath(snapshot, "breach");
                 boolean windBurst = EnchantmentLevel.byPath(snapshot, "wind_burst") > 0;
                 return Optional.of(new ItemStatistics.SmashDamage(
                                 MaceItem.SMASH_ATTACK_FALL_THRESHOLD,
@@ -68,7 +70,9 @@ public final class MaceCalculator {
                                 new ItemStatistics.SmashDamage.SmashBand(FINAL_BAND_PER_BLOCK,
                                                 Double.POSITIVE_INFINITY)),
                                 perFallenBlock,
+                                densityLevel,
                                 breach,
+                                breachLevel,
                                 windBurst));
         }
 

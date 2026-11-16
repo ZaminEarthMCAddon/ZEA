@@ -23,7 +23,6 @@ import net.minecraft.world.item.enchantment.effects.AllOf;
 import net.minecraft.world.item.enchantment.effects.ApplyEntityImpulse;
 import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.item.enchantment.effects.EnchantmentValueEffect;
-import net.minecraft.world.item.enchantment.effects.RemoveBinomial;
 import net.minecraft.world.phys.Vec3;
 import net.zaminmc.zea.VanillaBootstrap;
 import org.junit.jupiter.api.Test;
@@ -45,6 +44,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EnchantmentEffectReadsTest {
         static {
                 VanillaBootstrap.ensure();
+        }
+
+        /**
+         * The base mining speed reads the tool's own correct-for-drops
+         * family rule — the 26.3 item data writes the family speed
+         * ({@code #mineable/pickaxe} at 8.0 on diamond) into a rule and
+         * leaves {@code default_mining_speed} at the 1.0 wrong-tool
+         * penalty, so the default alone would understate the tool.
+         */
+        @Test
+        void miningSpeedReadsTheCorrectForDropsRule() {
+                Tool familyRuleTool = new Tool(
+                                List.of(Tool.Rule.minesAndDrops(HolderSet.empty(), 8.0f)),
+                                1.0f, 1, true);
+                assertEquals(8.0, MiningSpeedCalculator.correctForDropsSpeed(familyRuleTool), 1e-9,
+                                "the family rule's speed is the representative, not the 1.0 default");
+                Tool rulelessTool = new Tool(List.of(), 8.0f, 1, true);
+                assertEquals(8.0, MiningSpeedCalculator.correctForDropsSpeed(rulelessTool), 1e-9,
+                                "a tool with no family rule falls back to its default speed");
+                Tool penaltyOnly = new Tool(
+                                List.of(Tool.Rule.overrideSpeed(HolderSet.empty(), 2.0f)),
+                                1.0f, 1, true);
+                assertEquals(1.0, MiningSpeedCalculator.correctForDropsSpeed(penaltyOnly), 1e-9,
+                                "an override rule without correct_for_drops is not the family speed");
         }
 
         /**
@@ -128,33 +151,29 @@ class EnchantmentEffectReadsTest {
         }
 
         /**
-         * Unbreaking's live read: the vanilla data ships two
-         * {@code remove_binomial} branches whose chances at the held
-         * level resolve through the same fraction arithmetic the game
-         * uses — 3/4 for tools, 6/20 for armor at level 3.
+         * The trident's thrown stats: flat 8.0 base damage (never
+         * velocity-scaled), the 2.5 blocks/tick launch speed, and the
+         * 10-tick charge threshold — the constants {@code
+         * ThrownTrident.onHitEntity} and {@code TridentItem.releaseUsing}
+         * actually use in the 26.3 bytecode. Only unconditional damage
+         * effects (Sharpness) fold into the thrown damage; Impaling's
+         * aquatic condition keeps it out.
          */
         @Test
-        void unbreakingReadsTheLiveBranchChances() {
-                Holder<Enchantment> unbreaking = enchantment("Unbreaking", effects -> effects.set(
-                                EnchantmentEffectComponents.ITEM_DAMAGE,
-                                List.of(
-                                                new ConditionalEffect<>(new RemoveBinomial(new LevelBasedValue.Fraction(
-                                                                                new LevelBasedValue.Linear(2.0f, 2.0f),
-                                                                                new LevelBasedValue.Linear(10.0f, 5.0f))),
-                                                                Optional.empty()),
-                                                new ConditionalEffect<>(new RemoveBinomial(new LevelBasedValue.Fraction(
-                                                                                new LevelBasedValue.Linear(1.0f, 1.0f),
-                                                                                new LevelBasedValue.Linear(2.0f, 1.0f))),
-                                                                Optional.empty()))));
-                ItemEnchantments enchantments = enchantments(unbreaking, 3);
-                ItemSnapshot toolSnapshot = new ItemSnapshot(
-                                ItemAttributeModifiers.EMPTY, enchantments, null, null, null, null, null, null, 100, 0);
-                assertEquals(4.0, DurabilityCalculator.unbreakingFactor(toolSnapshot, false), 1e-9,
-                                "the tool branch refunds 3/4 at level 3: x4 lifetime");
-                ItemSnapshot armorSnapshot = new ItemSnapshot(
-                                ItemAttributeModifiers.EMPTY, enchantments, null, null, null, null, null, null, 100, 0);
-                assertEquals(1.0 / 0.7, DurabilityCalculator.unbreakingFactor(armorSnapshot, true), 1e-6,
-                                "the armor branch refunds 6/20 at level 3: x1.43 lifetime");
+        void tridentThrownStatsAreFlatAndUnconditional() {
+                Holder<Enchantment> sharpness = enchantment("Sharpness", effects -> effects.set(
+                                EnchantmentEffectComponents.DAMAGE,
+                                List.of(new ConditionalEffect<>(
+                                                new AddValue(LevelBasedValue.perLevel(1.0f, 0.5f)),
+                                                Optional.empty()))));
+                ItemSnapshot snapshot = snapshot(enchantments(sharpness, 5), null);
+                ItemStatistics.ProjectileStats trident = ProjectileCalculator.tridentStats(snapshot);
+                assertEquals(8.0, trident.baseDamage(), 1e-9, "the thrown trident's base damage is 8");
+                assertEquals(3.0, trident.powerBonus(), 1e-9, "unconditional Sharpness V adds 3 to the throw");
+                assertEquals(11.0, trident.flat(), 1e-9, "thrown damage is base plus bonus, flat");
+                assertEquals(2.5, trident.speed(), 1e-9, "the launch speed is 2.5 blocks/tick");
+                assertEquals(10, trident.chargeTicks(), "the throw releases after 10 ticks of charging");
+                assertTrue(!trident.velocityScaled(), "a trident's damage is not velocity-scaled");
         }
 
         /**
@@ -202,7 +221,7 @@ class EnchantmentEffectReadsTest {
                 mutable.set(multishot, 1);
                 mutable.set(piercing, 4);
                 ItemSnapshot snapshot = new ItemSnapshot(ItemAttributeModifiers.EMPTY, mutable.toImmutable(),
-                                null, null, null, null, null, null, 100, 0);
+                                null, null, null, null, 100, 0);
                 ItemStatistics.ProjectileStats projectile = ProjectileCalculator.crossbowStats(snapshot);
                 assertEquals(10, projectile.chargeTicks(),
                                 "Quick Charge III must halve the reload to 10 ticks");
@@ -319,13 +338,13 @@ class EnchantmentEffectReadsTest {
 
         private static ItemSnapshot snapshot(ItemEnchantments enchantments, Tool tool) {
                 return new ItemSnapshot(ItemAttributeModifiers.EMPTY, enchantments, tool,
-                                null, null, null, null, null, 100, 0);
+                                null, null, null, 100, 0);
         }
 
         private static ItemSnapshot snapshot(ItemEnchantments enchantments, Tool tool,
                         ItemAttributeModifiers modifiers) {
                 return new ItemSnapshot(modifiers, enchantments, tool,
-                                null, null, null, null, null, 100, 0);
+                                null, null, null, 100, 0);
         }
 
         /** A sword-shaped modifier set: +7 damage, attack speed 1.6. */

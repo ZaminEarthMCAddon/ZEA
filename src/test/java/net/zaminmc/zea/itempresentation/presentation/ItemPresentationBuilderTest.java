@@ -14,43 +14,51 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The RPG-style stat-line layout, pinned against constructed
+ * The compact RPG stat-line layout, pinned against constructed
  * statistics. The builder is a pure transform from
  * {@link ItemStatistics} to {@link Component} lines, so the whole layout
- * — what sections appear, in what order, with what formatting — is
- * testable without a loaded world.
+ * — what sections appear, in what order, with what compact formatting —
+ * is testable without a loaded world. The formatting rules under test
+ * are the spec's: final values only (never the calculation chain), a
+ * leading + on positive additive bonuses, the contributing
+ * enchantment's level in brackets, percentages for ratios, seconds for
+ * durations, and current/maximum for durability.
  */
 class ItemPresentationBuilderTest {
         static {
                 VanillaBootstrap.ensure();
         }
 
-        /** A sword with Sharpness shows the damage split, attack speed and sweeping. */
+        /**
+         * A sword with Sharpness shows the compact damage line — total,
+         * plus, the enchantment's level in the bracket — and never the
+         * base/enchantment split as prose.
+         */
         @Test
-        void swordShowsDamageSplitAttackSpeedAndSweeping() {
+        void swordShowsCompactDamageWithLevelBracket() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
-                                                8.0, 3.0, "Sharpness V", 1.6, 0.75, List.of())),
+                                                8.0, 3.0, "Sharpness V", 5, 1.6, 0.75, 3, List.of())),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
-                assertEquals(5, lines.size(), "blank + damage + speed + sweeping + blank");
+                assertEquals(5, lines.size(), "blank + damage + speed + sweep + blank");
                 assertEquals("", lines.get(0).getString(), "leading blank separator");
-                assertEquals("Damage: 11 (8 base + 3 Sharpness V)", lines.get(1).getString());
+                assertEquals("Damage: +11 [5]", lines.get(1).getString());
                 assertEquals("Attack Speed: 1.6", lines.get(2).getString());
-                assertEquals("Sweeping Damage Ratio: 0.75", lines.get(3).getString());
+                assertEquals("Sweep Damage: +75% [3]", lines.get(3).getString());
         }
 
-        /** An unenchanted sword shows the plain damage without a split. */
+        /** An unenchanted sword shows the plain damage, no bracket. */
         @Test
         void unenchantedSwordShowsPlainDamage() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
-                                                8.0, 0.0, "", 1.6, 0.0, List.of())),
+                                                8.0, 0.0, "", 0, 1.6, 0.0, 0, List.of())),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
-                assertEquals("Damage: 8", lines.get(1).getString());
+                assertEquals("Damage: +8", lines.get(1).getString());
         }
 
         /** A conditional damage enchantment states its condition on its own line. */
@@ -58,12 +66,29 @@ class ItemPresentationBuilderTest {
         void conditionalDamageStatesItsCondition() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
-                                                8.0, 0.0, "", 1.6, 0.0,
+                                                8.0, 0.0, "", 0, 1.6, 0.0, 0,
                                                 List.of(new ItemStatistics.ConditionalBonus("Smite II (vs undead)", 5.0)))),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Smite II (vs undead): +5", lines.get(3).getString());
+        }
+
+        /** A trident labels the melee line and adds the thrown section. */
+        @Test
+        void tridentShowsMeleeAndThrownSections() {
+                ItemStatistics stats = new ItemStatistics(
+                                Optional.of(new ItemStatistics.MeleeDamage(
+                                                9.0, 0.0, "", 0, 1.1, 0.0, 0, List.of())),
+                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.of(new ItemStatistics.ProjectileStats(
+                                                2.5, 8.0, 0.0, 0, 10, 1, 0, false, 0, false)),
+                                Optional.empty(), Optional.empty());
+                List<Component> lines = ItemPresentationBuilder.build(ItemCategory.TRIDENT, stats);
+                assertEquals("Melee Damage: +9", lineStarting(lines, "Melee Damage:").getString());
+                assertEquals("Thrown Damage: +8", lineStarting(lines, "Thrown Damage:").getString());
+                assertEquals("Throw Velocity: 50 blocks/s", lineStarting(lines, "Throw Velocity:").getString());
+                assertEquals("Throw Time: 0.5s", lineStarting(lines, "Throw Time:").getString());
         }
 
         /** A spear labels the damage line as the jab and adds reach, charge and Lunge. */
@@ -71,11 +96,10 @@ class ItemPresentationBuilderTest {
         void spearShowsJabReachChargeAndLunge() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
-                                                5.0, 0.0, "", 1.05, 0.0, List.of())),
+                                                5.0, 0.0, "", 0, 1.05, 0.0, 0, List.of())),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.SpearStats(2.0f, 4.5f, 1.075, 3, 1.374)),
-                                Optional.empty());
+                                Optional.of(new ItemStatistics.SpearStats(2.0f, 4.5f, 1.075, 3, 1.374)));
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SPEAR, stats);
                 assertTrue(containsLineStarting(lines, "Jab Damage:"),
                                 "a spear's left-click damage is the jab");
@@ -89,57 +113,62 @@ class ItemPresentationBuilderTest {
         void shovelShowsMiningSpeedNotDamage() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(),
-                                Optional.of(new ItemStatistics.MiningSpeed(2.0, 0.0, true)),
+                                Optional.of(new ItemStatistics.MiningSpeed(2.0, 0.0, 0, true)),
                                 Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SHOVEL, stats);
                 assertEquals(3, lines.size(), "blank + mining speed + blank");
-                assertTrue(lines.get(1).getString().startsWith("Mining Speed:"));
-                assertFalse(lines.get(1).getString().contains("correct for drops"),
-                                "no Efficiency means no correct-for-drops qualifier");
+                assertEquals("Mining Speed: 2", lines.get(1).getString());
         }
 
-        /** A pickaxe with Efficiency marks the mining speed as correct-for-drops. */
+        /**
+         * A pickaxe with Efficiency shows the base speed and the
+         * efficiency bonus as separate compact lines, the bonus with
+         * the enchantment's level in the bracket.
+         */
         @Test
-        void pickaxeWithEfficiencyMarksCorrectForDrops() {
+        void pickaxeWithEfficiencyShowsBaseAndBonus() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(),
-                                Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, true)),
+                                Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, 5, true)),
                                 Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
-                assertEquals("Mining Speed (correct for drops): 34", lines.get(1).getString());
+                assertEquals("Mining Speed: 8", lines.get(1).getString());
+                assertEquals("Mining Efficiency: +26 [5]", lines.get(2).getString());
         }
 
-        /** A chestplate shows armor, toughness, knockback resistance and the EPF lines. */
+        /** A chestplate shows defense, toughness, knockback resistance and the EPF lines. */
         @Test
-        void chestplateShowsArmorToughnessKnockbackAndProtection() {
+        void chestplateShowsDefenseToughnessKnockbackAndProtection() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ArmorStats(8.0, 2.0, 0.05, List.of(
                                                 new ItemStatistics.ConditionalBonus("Protection IV (most damage)", 4.0),
                                                 new ItemStatistics.ConditionalBonus("Fire Protection IV (fire damage)", 8.0)))),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CHESTPLATE, stats);
-                assertTrue(containsLineStarting(lines, "Armor:"));
-                assertTrue(containsLineStarting(lines, "Armor Toughness:"));
-                assertEquals("Knockback Resistance: 5%", lineStarting(lines, "Knockback Resistance:").getString());
+                assertEquals("Defense: +8", lineStarting(lines, "Defense:").getString());
+                assertEquals("Armor Toughness: +2", lineStarting(lines, "Armor Toughness:").getString());
+                assertEquals("Knockback Resistance: +5%", lineStarting(lines, "Knockback Resistance:").getString());
                 assertEquals("Protection IV (most damage): -16%", lineStarting(lines, "Protection IV").getString());
                 assertEquals("Fire Protection IV (fire damage): -32%",
                                 lineStarting(lines, "Fire Protection IV").getString());
         }
 
-        /** A bow shows the fully-drawn projectile damage and its draw time, never melee attack speed. */
+        /** A bow shows the fully-drawn projectile damage, velocity and draw time, never melee attack speed. */
         @Test
-        void bowShowsFullyDrawnDamageAndDrawTime() {
+        void bowShowsFullyDrawnDamageVelocityAndDrawTime() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.ProjectileStats(3.0, 2.0, 3.0, 20, 1, 0, false, 0)),
-                                Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.of(new ItemStatistics.ProjectileStats(3.0, 2.0, 3.0, 5, 20, 1, 0, false, 0, true)),
+                                Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.BOW, stats);
-                assertEquals("Projectile Damage (fully drawn): 15",
+                assertEquals("Projectile Damage: +15 [5]",
                                 lineStarting(lines, "Projectile Damage").getString());
-                assertEquals("Draw Time: 20 ticks (1s)", lineStarting(lines, "Draw Time:").getString());
+                assertEquals("Projectile Velocity: 60 blocks/s",
+                                lineStarting(lines, "Projectile Velocity").getString());
+                assertEquals("Draw Time: 1s", lineStarting(lines, "Draw Time:").getString());
                 assertFalse(containsLineStarting(lines, "Attack Speed:"),
                                 "a bow must never show melee attack speed");
         }
@@ -149,11 +178,11 @@ class ItemPresentationBuilderTest {
         void crossbowShowsReloadProjectilesAndPiercing() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.ProjectileStats(3.15, 2.0, 0.0, 10, 3, 4, false, 0)),
-                                Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.of(new ItemStatistics.ProjectileStats(3.15, 2.0, 0.0, 0, 10, 3, 4, false, 0, true)),
+                                Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CROSSBOW, stats);
-                assertEquals("Projectile Damage (arrow): 7", lineStarting(lines, "Projectile Damage").getString());
-                assertEquals("Reload Time: 10 ticks (0.5s)", lineStarting(lines, "Reload Time:").getString());
+                assertEquals("Projectile Damage: +7", lineStarting(lines, "Projectile Damage").getString());
+                assertEquals("Reload Time: 0.5s", lineStarting(lines, "Reload Time:").getString());
                 assertEquals("Projectiles: 3", lineStarting(lines, "Projectiles:").getString());
                 assertEquals("Piercing: 4", lineStarting(lines, "Piercing:").getString());
         }
@@ -163,18 +192,23 @@ class ItemPresentationBuilderTest {
         void fireworkCrossbowShowsTheRocket() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.ProjectileStats(1.6, 2.0, 0.0, 25, 1, 0, true, 3)),
-                                Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.of(new ItemStatistics.ProjectileStats(1.6, 2.0, 0.0, 0, 25, 1, 0, true, 3, true)),
+                                Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CROSSBOW, stats);
                 assertEquals("Projectile: Firework Rocket", lineStarting(lines, "Projectile:").getString());
-                assertEquals("Firework Damage: 11 (3 stars)", lineStarting(lines, "Firework Damage:").getString());
+                assertEquals("Firework Damage: +11 (3 stars)", lineStarting(lines, "Firework Damage:").getString());
         }
 
-        /** A mace shows the smash threshold, the fall-bonus bands and the Density rate. */
+        /**
+         * A mace shows the compact smash section: the fall-gated bonus
+         * at the minimum smash fall, Density's per-block rate, Breach's
+         * armor reduction and the Wind Burst flag — no band breakdown,
+         * no calculation chain.
+         */
         @Test
-        void maceShowsSmashCurveDensityAndBreach() {
+        void maceShowsCompactSmashSection() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.of(new ItemStatistics.MeleeDamage(6.0, 0.0, "", 0.6, 0.0, List.of())),
+                                Optional.of(new ItemStatistics.MeleeDamage(6.0, 0.0, "", 0, 0.6, 0.0, 0, List.of())),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(),
                                 Optional.of(new ItemStatistics.SmashDamage(
@@ -183,50 +217,33 @@ class ItemPresentationBuilderTest {
                                                                 new ItemStatistics.SmashDamage.SmashBand(2.0, 8.0),
                                                                 new ItemStatistics.SmashDamage.SmashBand(1.0,
                                                                                 Double.POSITIVE_INFINITY)),
-                                                2.5, -0.6, true)),
-                                Optional.empty(), Optional.empty());
+                                                2.5, 5, -0.6, 4, true)),
+                                Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.MACE, stats);
-                assertEquals("Smash Attack: +6 past 1.5 blocks fallen",
-                                lineStarting(lines, "Smash Attack:").getString());
-                // The band breakdown rides its own indented detail line —
-                // the combined single line clipped at narrow-window edges.
-                assertEquals("  +4/block to 3, +2/block to 8, +1/block after",
-                                lines.get(lines.indexOf(lineStarting(lines, "Smash Attack:")) + 1).getString());
-                assertEquals("Density Bonus: +2.5/block fallen", lineStarting(lines, "Density Bonus:").getString());
+                assertEquals("Smash Damage: +6 past 1.5 blocks fallen",
+                                lineStarting(lines, "Smash Damage:").getString());
+                assertEquals("Density: +2.5/block fallen", lineStarting(lines, "Density:").getString());
                 assertEquals("Breach: -60% armor effectiveness", lineStarting(lines, "Breach:").getString());
-                assertTrue(containsLineStarting(lines, "Wind Burst:"));
+                assertEquals("Wind Burst: launches on smash hit", lineStarting(lines, "Wind Burst:").getString());
+                assertFalse(containsLineStarting(lines, "+4/block"),
+                                "the piecewise band breakdown is calculation-chain prose, not a stat");
         }
 
-        /** A food item shows nutrition, saturation and formatted effects, never weapon statistics. */
+        /** Durability is current / maximum — never an Unbreaking-inflated effective value. */
         @Test
-        void foodShowsNutritionSaturationAndEffects() {
-                ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.FoodStats(6, 1.2f, true,
-                                                List.of("Regeneration II (0:05)", "Absorption I (2:00) — 100%"))));
-                List<Component> lines = ItemPresentationBuilder.build(ItemCategory.FOOD, stats);
-                assertTrue(containsLineStarting(lines, "Nutrition:"));
-                assertTrue(containsLineStarting(lines, "Saturation:"));
-                assertTrue(containsLineStarting(lines, "Can Always Eat:"));
-                assertEquals("Effect: Regeneration II (0:05)", lineStarting(lines, "Effect: Regeneration").getString());
-                assertFalse(containsLineStarting(lines, "Damage:"),
-                                "food must not show weapon-style damage statistics");
-        }
-
-        /** Durability with Unbreaking shows the effective maximum on its own detail line. */
-        @Test
-        void durabilityWithUnbreakingShowsEffectiveMaximum() {
+        void durabilityIsCurrentOverMaximumOnly() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.of(new ItemStatistics.Durability(1561, 1561, 4.0)),
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                                Optional.of(new ItemStatistics.Durability(1358, 1561)),
+                                Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
-                assertEquals("Durability: 1561 / 1561", lineStarting(lines, "Durability:").getString());
-                // The effective expectation is an indented detail line —
-                // the combined line clipped at narrow-window screen edges.
-                assertEquals("  effective ~6244",
-                                lines.get(lines.indexOf(lineStarting(lines, "Durability:")) + 1).getString());
+                assertEquals("Durability: 1358 / 1561", lineStarting(lines, "Durability:").getString());
+                // No detail line after durability: the effective maximum
+                // is deliberately not presented.
+                int durabilityIndex = lines.indexOf(lineStarting(lines, "Durability:"));
+                assertTrue(durabilityIndex + 1 >= lines.size()
+                                || !lines.get(durabilityIndex + 1).getString().contains("effective"),
+                                "no inflated effective-durability line may follow");
         }
 
         /** An item with no populated statistics shows nothing. */

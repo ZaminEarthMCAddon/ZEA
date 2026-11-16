@@ -65,6 +65,30 @@ final class EnchantmentEffects {
         }
 
         /**
+         * The level of the first held enchantment contributing an
+         * {@code add_value} effect to {@code attribute}, or 0 when none
+         * does — e.g. Sweeping Edge's level behind a {@code
+         * sweeping_damage_ratio} contribution, so the presentation can
+         * render the bracket indicator. Only the level is returned;
+         * the amount itself comes from {@link #attributeContribution}.
+         */
+        static int attributeLevel(ItemSnapshot snapshot, Holder<Attribute> attribute) {
+                if (!snapshot.hasEnchantments()) {
+                        return 0;
+                }
+                for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
+                        for (EnchantmentAttributeEffect effect : entry.enchantment().value()
+                                        .getEffects(EnchantmentEffectComponents.ATTRIBUTES)) {
+                                if (effect.attribute() == attribute
+                                                && effect.operation() == AttributeModifier.Operation.ADD_VALUE) {
+                                        return entry.level();
+                                }
+                        }
+                }
+                return 0;
+        }
+
+        /**
          * The same contribution, matching the attribute by registry-key
          * path — for attributes the game itself registers from datapacks
          * ({@code armor_effectiveness}, Breach's target), which have no
