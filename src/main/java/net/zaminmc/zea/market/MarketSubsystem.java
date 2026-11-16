@@ -50,13 +50,17 @@ public final class MarketSubsystem {
 	private final MarketPersistence persistence;
 	private final MarketConfig config;
 	private final SubmissionQueue submissions;
+	// The town/nation lookup over claim geometry; null when no claim
+	// source is wired, which leaves town and nation simply unavailable.
+	private final MarketListings.TownLookup towns;
 	// Null until the first inspection lands; read on the client thread only.
 	private volatile ShopInspectionTracker.Inspection latestInspection;
 
 	public MarketSubsystem(ClientLifecycle lifecycle, Path file, ExecutorService executor,
-			MarketConfig config) {
+			MarketConfig config, MarketListings.TownLookup towns) {
 		this.lifecycle = lifecycle;
 		this.config = config;
+		this.towns = towns;
 		this.tracker = new ShopInspectionTracker(this::onInspection);
 		this.data = restore(file);
 		this.persistence = new MarketPersistence(new MarketStore(file), executor);
@@ -79,6 +83,14 @@ public final class MarketSubsystem {
 	/** The market index: known shops and their observation history. */
 	public MarketData data() {
 		return data;
+	}
+
+	/**
+	 * The town/nation lookup the browser consults, from the claim store's
+	 * published geometry; {@code null} when no claim source is wired.
+	 */
+	public MarketListings.TownLookup townLookup() {
+		return towns;
 	}
 
 	/** Forces pending market and queue writes to land; used for shutdown. */

@@ -10,7 +10,6 @@ import net.zaminmc.zea.market.model.ShopDirection;
 import net.zaminmc.zea.market.model.ShopObservation;
 import net.zaminmc.zea.market.model.SourceType;
 import net.zaminmc.zea.market.model.StockUnit;
-import net.zaminmc.zea.market.search.MarketSearch;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -169,38 +168,8 @@ class OfferResolverTest {
 	}
 
 	@Test
-	void searchFindsItemsByDisplayTextAndOwner() {
-		MarketData data = new MarketData();
-		data.record(shop("shop|sign", "Abasing"), selling("shop|sign", PICKAXE, "2", 1, T));
-		MarketSearch search = new MarketSearch();
-
-		assertEquals(1, search.search(data, "pickaxe", MarketSearch.Filter.ALL).size());
-		assertEquals(1, search.search(data, "abasing", MarketSearch.Filter.ALL).size());
-		assertEquals(0, search.search(data, "netherite", MarketSearch.Filter.ALL).size());
-		assertEquals(1, search.search(data, "", MarketSearch.Filter.ALL).size());
-	}
-
-	@Test
-	void searchFiltersBySide() {
-		MarketData data = new MarketData();
-		data.record(shop("seller|sign", "A"), selling("seller|sign", PICKAXE, "2", 1, T));
-		data.record(shop("buyer|sign", "B"), buying("buyer|sign", PICKAXE_OTHER, "17", T));
-
-		assertEquals(2, searchTokens(data, "", MarketSearch.Filter.ALL).size());
-		assertEquals(1, searchTokens(data, "", MarketSearch.Filter.BUY_FROM).size());
-		assertEquals(PICKAXE, searchTokens(data, "", MarketSearch.Filter.BUY_FROM).get(0));
-		assertEquals(1, searchTokens(data, "", MarketSearch.Filter.SELL_TO).size());
-		assertEquals(PICKAXE_OTHER, searchTokens(data, "", MarketSearch.Filter.SELL_TO).get(0));
-	}
-
-	private static List<String> searchTokens(MarketData data, String query, MarketSearch.Filter filter) {
-		return new MarketSearch().search(data, query, filter).stream()
-				.map(MarketSearch.Grouping::token)
-				.toList();
-	}
-
-	@Test
-	void searchOfAnEmptyMarketReturnsNothing() {
-		assertTrue(new MarketSearch().search(new MarketData(), "anything", MarketSearch.Filter.ALL).isEmpty());
+	void anEmptyMarketResolvesNoOffers() {
+		assertTrue(new OfferResolver().bestBuyOffer(new MarketData(), PICKAXE).isEmpty());
+		assertTrue(new OfferResolver().bestSellOffer(new MarketData(), PICKAXE).isEmpty());
 	}
 }

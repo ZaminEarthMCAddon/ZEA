@@ -26,6 +26,8 @@ import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
+import net.zaminmc.zea.map.cache.ClaimStore;
+import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.market.ui.MarketScreen;
 import net.zaminmc.zea.misc.TooltipScroller;
@@ -133,8 +135,12 @@ public final class ZeaClient implements ClientModInitializer {
                 search = new InventorySearch();
                 slotLocks = new SlotLocks(new SlotLockStore(configDir.resolve("zea/slotlocks.json")));
                 marketExecutor = newIoExecutor("ZEA-Market");
+                // The claim cache is constructed here because the market's town
+                // resolution reads it; the map subsystem reuses this instance
+                // when its claim fetch pipeline lands.
+                ClaimStore claimStore = new ClaimStore(System::currentTimeMillis);
                 market = new MarketSubsystem(lifecycle, configDir.resolve("zea/market.json"), marketExecutor,
-                                config.market);
+                                config.market, new ClaimTownResolver(claimStore));
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
