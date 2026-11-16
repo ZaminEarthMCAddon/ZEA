@@ -3818,3 +3818,115 @@ advert that lacks a bulk size; the town lookup receives (x, z) and no
 y. Not verified in-game (no live client): rendering itself; the
 geometry is verified by calculation, the interactions by unit tests of
 the pipeline beneath them.
+
+## 2026-11-17 (session 20) — Inventory UI defects, EarthMC Only, and the map surfaces wired
+
+### The report
+
+Five defects against dev.61: the inventory/container search bar
+"extremely thin and visually incorrect" (a reference mock supplied:
+404x44 px on a 602x644 screenshot), buttons visible in the editor but
+missing in the actual inventory, editor button text overflowing its
+boxes, no EarthMC recognition or "EarthMC Only" idle notice, and the
+map overlay and minimap not appearing at all.
+
+### The hunt
+
+- **The search bar** was 12 GUI units tall, GUI-wide, left-aligned,
+  and still carried its placeholder hint. The mock, measured
+  programmatically, is 404x44 physical px at GUI scale 2 with a black
+  1-unit frame around a translucent dark body: **202x22 GUI units,
+  horizontally centered, five units off the bottom edge**.
+- **The buttons'** two render paths disagreed by design: the editor
+  drew every button, while the container view required `isUsable()` —
+  a valid *command*. Every button the editor creates (a fresh button,
+  every preset entry) starts with a blank command, so nothing
+  configured through the normal flow ever reached the real inventory.
+- **The editor's face** drew `button.text()` at natural font size —
+  eight characters is ~48 px across an 18-px button — while the
+  container view always scaled text to fit. Two face renderers for
+  the same button.
+- **EarthMC recognition** existed and was correct (domain-boundary
+  matching, tested), but nothing exposed an "EarthMC Only" switch and
+  nothing logged the idle notice.
+- **The map** had pure pipelines, GPU adapters and input math — all
+  tested — but no surface consumed them: no subsystem, no HUD
+  registration, no world-map screen, no `/zeamap`, no keybind. The
+  last session's own checklist said it: "rendering itself; not
+  verified in-game".
+
+### The fix
+
+- **Search bar** (`SearchBarWidget`, `ContainerScreenMixin`,
+  `ButtonGeometry`): 202x22 with a one-pixel black frame, bottom
+  centered, five units off the edge, width clamped on narrow windows,
+  y never leaving the screen; the placeholder hint is gone — field
+  and lang key. The matching-mode gold outline now rings the frame.
+  `ButtonGeometry`'s bar footprint constants follow (22 + the 5-unit
+  margin) so the ABOVE_SEARCH zone hangs above the real bar. A
+  borderless EditBox places its text at the widget's top edge
+  (`textY = getY()`), so a small `EditBoxMixin` re-centers the text
+  vertically — scoped to `SearchBarWidget` instances; every other
+  EditBox keeps vanilla placement.
+- **Buttons** (`ButtonRenderer`, `ButtonEditorScreen`): the container
+  view now skips only unrendered or *disabled* placements — a button
+  without a command draws, its tooltip says "Not configured yet",
+  and clicking it is refused by the activator exactly as before
+  (pinned by the existing `unconfiguredButtonsDoNotRun` test). One
+  shared `ButtonRenderer.drawFace` draws every button in both the
+  container and the editor: text scaled to fit the 18x18 box, else
+  the icon, else a "?" — the editor preview is pixel-exact at every
+  GUI scale.
+- **EarthMC Only** (`ZeaConfig.Miscellaneous`, `ClientLifecycle`): a
+  new mod-wide switch, off by default. On, and connected to a server
+  whose connect address is not EarthMC, ZEA logs NEU's notice once
+  per connection —
+  `[ZEA] Idle on <address>: the address is not recognised as EarthMC
+  and "EarthMC Only" is on, so no ZEA functionality has been enabled
+  on this server.`
+  — from the join handler, never per tick, re-evaluated on every
+  join and leave. `ServerIdentity.normalizeHost` also handles
+  bracketed `[host]:port` and leaves bare IPv6 literals intact.
+- **The map, wired** (`MapSubsystem` + `MinimapHud` +
+  `WorldMapScreen` + `OverlayDrawer`): the facade owns the caches,
+  the squaremap client, the tile fetcher and one `TileFrameDriver`
+  per surface (each with its own sticky-coverage `TileRenderer`);
+  every frame runs through the driver — disposals, uploads, plan,
+  requests, in its one correct order — and draws through the existing
+  `TileFrameDrawer`, with the new `OverlayDrawer` drawing claims and
+  markers under the same pose and pixel snapping. Scheduled refresh
+  runs on the client tick (markers 60 s; the player feed 1 s while a
+  surface is drawn, 15 s idle — `MapRefreshPolicy`, pure and pinned
+  by tests), futures marshal back through `Minecraft.execute`, and
+  stale-tile ETag revalidation trickles four tiles per tick. The
+  minimap registers through Fabric's `HudElementRegistry` (the 26.3
+  replacement for HudRenderCallback): square or circle (a generated
+  alpha mask — outside opaque, ring stroke, inside clear), claims and
+  players, coordinates and a round-number scale bar under it
+  (`MinimapLayout`, pure). Unsupported dimensions (the Nether, the
+  End) show a disabled panel or hide per the config — never fake
+  data. `/zeamap` and the new M keybind open `WorldMapScreen`: drag
+  pans and scroll zooms through the pure `MapCameraInput`, +/-
+  zoom the center, F follows, W switches Earth and Moon; per-world
+  cameras persist in the subsystem, freshness sits in the corner.
+  The map's own "Only on EarthMC" (default on) still gates it, and
+  the mod-wide EarthMC Only wins over it — the combined rule is
+  `MapSubsystem.featureActive`, pinned by tests. The v4-API claim
+  geometry overrides stay unwired (squaremap markers drive claims
+  this pass); the `ClaimStore` seam for them is untouched.
+
+### Verification
+
+`./gradlew build` green; **1217 tests, 0 failures** (was 1214; the
+detector matrix grew subdomains, trailing-dot-with-port, uppercase
+and port, attacker-suffix and fake-domain rejections; `ServerIdentity`
+gained bracketed-IPv6 cases; map gating, refresh policy, minimap
+layout and a construction/camera smoke for `MapSubsystem` itself; the
+ABOVE_SEARCH zone expectations moved with the bar's new footprint).
+The search bar's dimensions verified against the reference mock
+programmatically (pixel-measured, converted to GUI units). The
+packaged jar carries the new classes, the registered `EditBoxMixin`
+and the lang keys. Not verified in-game (no live client here): the
+bar at each GUI scale, buttons from editor to real inventory across
+container types, the idle notice on a non-EarthMC server, and both
+map surfaces against live EarthMC data — the live checklist.

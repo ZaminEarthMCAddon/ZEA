@@ -645,12 +645,21 @@ public final class ZeaConfig extends Config {
 
         /** Small quality-of-life features that fit nowhere else. */
         public static final class Miscellaneous {
+                @ConfigOption(name = "EarthMC Only", desc = "Stay idle on every server the "
+                                + "address does not recognise as EarthMC (earthmc.net and its "
+                                + "subdomains): the EarthMC-specific features — chat channels, "
+                                + "the map — stay off there and ZEA logs one notice per "
+                                + "connection. Off keeps them available everywhere for testing.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean earthMcOnly = false;
+
                 @ConfigOption(name = "Scrollable tooltips", desc = "When an item tooltip is taller "
                                 + "or wider than the screen, scroll it with the mouse wheel (Shift "
                                 + "scrolls sideways). It stays pinned inside the screen and starts at "
                                 + "the top when you move onto another item.")
                 @ConfigEditorBoolean
-                @ConfigOrder(0)
+                @ConfigOrder(1)
                 public boolean scrollableTooltips = true;
         }
 
@@ -1067,6 +1076,17 @@ public final class ZeaConfig extends Config {
         /** Whether overflowing tooltips scroll with the mouse wheel. */
         public boolean scrollableTooltipsEnabled() {
                 return miscellaneous != null && miscellaneous.scrollableTooltips;
+        }
+
+        /**
+         * Whether ZEA stays idle on servers the address does not recognise
+         * as EarthMC: the EarthMC-specific features (chat channels, the
+         * map) stay off there and one warning is logged per connection.
+         * Off by default — the pre-existing behavior that permits
+         * supported functionality on other servers for testing.
+         */
+        public boolean earthMcOnly() {
+                return miscellaneous != null && miscellaneous.earthMcOnly;
         }
 
         /** Whether chat history persists between sessions; on by default, strictly retention-bound. */

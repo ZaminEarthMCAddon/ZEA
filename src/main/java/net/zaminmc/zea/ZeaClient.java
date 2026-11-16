@@ -6,12 +6,15 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.zaminmc.zea.buttons.ButtonActivator;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.InventoryButtons;
@@ -26,6 +29,8 @@ import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
+import net.zaminmc.zea.map.MapSubsystem;
+import net.zaminmc.zea.map.render.minimap.MinimapHud;
 import net.zaminmc.zea.map.cache.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
@@ -74,6 +79,8 @@ public final class ZeaClient implements ClientModInitializer {
         private static CaptureRecorder captureRecorder;
         private static ExecutorService marketExecutor;
         private static MarketSubsystem market;
+        private static MapSubsystem map;
+        private static MinimapHud minimapHud;
 
         public static ClientLifecycle lifecycle() {
                 return lifecycle;
@@ -102,6 +109,11 @@ public final class ZeaClient implements ClientModInitializer {
         }
 
         /** The physical-shop market subsystem. */
+        /** The map subsystem (world map, minimap, claims and players). */
+        public static MapSubsystem map() {
+                return map;
+        }
+
         public static MarketSubsystem market() {
                 return market;
         }
@@ -161,6 +173,18 @@ public final class ZeaClient implements ClientModInitializer {
                                                                                 RarityEngine.invalidateCaches();
                                                                                 TooltipScroller.reset();
                                                                 });
+                map = new MapSubsystem(config, lifecycle);
+                minimapHud = new MinimapHud(map);
+                HudElementRegistry.addLast(
+                                Identifier.fromNamespaceAndPath("zea", "minimap"), minimapHud);
+                ClientTickEvents.END_CLIENT_TICK.register(client -> {
+                        map.tick(client);
+                        while (ZeaKeys.OPEN_MAP.consumeClick()) {
+                                if (client.gui.screen() == null) {
+                                        map.openWorldMap(client);
+                                }
+                        }
+                });
                 shareExecutor = newShareExecutor();
                 pasteService = new PasteService(URI.create(PasteKey.BASE_URL), shareExecutor);
                 ShareCoordinator coordinator = new ShareCoordinator(
@@ -184,6 +208,12 @@ public final class ZeaClient implements ClientModInitializer {
                                 ClientCommands.literal("zeamarket").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
                                         client.execute(() -> client.gui.setScreen(new MarketScreen()));
+                                        return 1;
+                                })));
+                ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
+                                ClientCommands.literal("zeamap").executes(context -> {
+                                        Minecraft client = context.getSource().getClient();
+                                        client.execute(() -> map.openWorldMap(client));
                                         return 1;
                                 })));
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
@@ -231,6 +261,8 @@ public final class ZeaClient implements ClientModInitializer {
         private static void shutdownBackgroundWork() {
                 try {
                         chat.shutdownHistory();
+                        minimapHud.close();
+                        map.shutdown();
                 } finally {
                         market.flushNow();
                         pasteService.close();

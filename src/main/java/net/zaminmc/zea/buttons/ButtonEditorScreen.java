@@ -227,25 +227,9 @@ public final class ButtonEditorScreen extends Screen {
                 }
         }
 
-        /** The button's icon or text, over its background sprite. */
+        /** The button's face \u2014 the container view's own drawing, so the preview is exact. */
         private void drawButtonFace(GuiGraphicsExtractor context, InventoryButton button, int x, int y) {
-                if (!button.text().isBlank()) {
-                        context.centeredText(font, button.text(), x + ButtonGeometry.SIZE / 2,
-                                        y + 5, 0xFFFFFFFF);
-                        return;
-                }
-                Identifier custom = ButtonIcons.customTextureFor(button.icon());
-                if (custom != null) {
-                        context.blit(RenderPipelines.GUI_TEXTURED, custom, x + 1, y + 1, 0.0f, 0.0f, 16, 16, 16, 16);
-                        return;
-                }
-                ItemStack stack = ButtonIcons.iconFor(button.icon());
-                if (!stack.isEmpty()) {
-                        context.item(stack, x + 1, y + 1);
-                } else {
-                        context.centeredText(font, Component.literal("?"), x + ButtonGeometry.SIZE / 2,
-                                        y + 5, 0xFFFFFFFF);
-                }
+                ButtonRenderer.drawFace(context, font, button, x, y, true);
         }
 
         /**

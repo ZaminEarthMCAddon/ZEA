@@ -21,8 +21,9 @@ import java.util.List;
  */
 public final class PlayerOverlay {
 
-	/** One marker to draw: map-frame pixels, plus identity and heading. */
-	public record Marker(double x, double y, String name, boolean self, float yawDegrees) {
+	/** One marker to draw: map-frame pixels for the dot, world coordinates for labels. */
+	public record Marker(double x, double y, double worldX, double worldZ, String name, boolean self,
+			float yawDegrees) {
 	}
 
 	/** A live local-player override, in the viewed world's coordinates. */
@@ -73,12 +74,13 @@ public final class PlayerOverlay {
 				continue;
 			}
 			out.add(new Marker((x - camera.centerX()) * ppb, (z - camera.centerZ()) * ppb,
-							marker.name(), self, marker.yaw()));
+							x, z, marker.name(), self, marker.yaw()));
 		}
 		if (selfOverride != null) {
 			out.add(new Marker((selfOverride.x() - camera.centerX()) * ppb,
 							(selfOverride.z() - camera.centerZ()) * ppb,
-							selfName, true, selfOverride.yawDegrees()));
+							selfOverride.x(), selfOverride.z(), selfName, true,
+							selfOverride.yawDegrees()));
 		}
 		return out;
 	}

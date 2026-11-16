@@ -19,6 +19,11 @@ class ServerIdentityTest {
 			"aurora.earthmc.net:25577, aurora.earthmc.net",
 			"EARTHMC.NET., earthmc.net",
 			"play.earthmc.net., play.earthmc.net",
+			"earthmc.net.:25565, earthmc.net",
+			"[::1]:25565, ::1",
+			"[::1], ::1",
+			"::1, ::1",
+			"fe80::1, fe80::1",
 	})
 	void normalizesConnectAddresses(String address, String expected) {
 		assertEquals(expected, ServerIdentity.normalizeHost(address));

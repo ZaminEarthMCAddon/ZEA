@@ -62,11 +62,13 @@ public final class ButtonGeometry {
         public static final int UNDER_CRAFTING_Y = 55;
 
         /**
-         * The search bar's height, duplicated from the widget to keep this
-         * class free of Minecraft types (the bar sits at the screen's
-         * bottom edge; the above-search row hangs above it).
+         * The search bar's footprint, duplicated from the widget to keep
+         * this class free of Minecraft types: the bar sits at the screen's
+         * bottom edge with a small margin, and the above-search row hangs
+         * above it.
          */
-        public static final int SEARCH_BAR_HEIGHT = 12;
+        public static final int SEARCH_BAR_HEIGHT = 22;
+        public static final int SEARCH_BAR_BOTTOM_MARGIN = 5;
 
         /**
          * The fixed slots of the survival inventory canvas the editor's
@@ -255,7 +257,7 @@ public final class ButtonGeometry {
                                                 inputs.left() + ROW_START_X + order * STEP,
                                                 inputs.top() + inputs.height() + GAP);
                         case ABOVE_SEARCH: {
-                                int y = inputs.screenHeight() - SEARCH_BAR_HEIGHT - GAP - SIZE;
+                                int y = inputs.screenHeight() - SEARCH_BAR_BOTTOM_MARGIN - SEARCH_BAR_HEIGHT - GAP - SIZE;
                                 if (y < inputs.top() + inputs.height() + GAP + SIZE) {
                                         // The screen is too short for both bottom rows: the
                                         // above-search row hides rather than stacking onto

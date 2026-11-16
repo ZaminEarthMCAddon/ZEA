@@ -14,8 +14,15 @@ class EarthMcDetectorTest {
 			"EARTHMC.NET",
 			"EarthMC.Net",
 			"play.earthmc.net",
+			"go.earthmc.net",
 			"aurora.earthmc.net",
+			"test.earthmc.net",
+			"anything.earthmc.net",
 			"earthmc.net:25565",
+			"earthmc.net.",
+			"earthmc.net.:25565",
+			"EARTHMC.NET:25565",
+			"go.earthmc.net:25565",
 			"  earthmc.net  ",
 	})
 	void acceptsEarthMcAddresses(String address) {
@@ -28,7 +35,10 @@ class EarthMcDetectorTest {
 			"earthmc.network",
 			"earthmc.example.com",
 			"earthmc.net.evil.com",
+			"earthmc.net.attacker.com",
 			"not-earthmc.net",
+			"fake-earthmc.net",
+			"example.com",
 	})
 	void rejectsOtherAddresses(String address) {
 		assertFalse(EarthMcDetector.isEarthMcAddress(address), address);

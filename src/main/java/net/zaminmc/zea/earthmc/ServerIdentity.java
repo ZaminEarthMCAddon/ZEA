@@ -45,9 +45,11 @@ public record ServerIdentity(String host) {
 	 * Normalizes a connect address to its host: trimmed, lowercased,
 	 * trailing FQDN dot and {@code :port} removed. A trailing port is
 	 * stripped by the last colon — server-list entries are
-	 * {@code host[:port]} — so bare IPv6 literals are out of scope here
-	 * (they never reach per-server data, which is EarthMC-gated and
-	 * EarthMC is reached by name).
+	 * {@code host[:port]} — with a bracketed {@code [host]:port}
+	 * handled first so a bare IPv6 literal keeps its own colons; even
+	 * then a bare IPv6 literal never resolves to a name EarthMC is
+	 * reached by, so it stays out of per-server data, which is
+	 * EarthMC-gated.
 	 */
 	public static String normalizeHost(String address) {
 		if (address == null) {
@@ -58,8 +60,20 @@ public record ServerIdentity(String host) {
 			host = host.substring(0, host.length() - 1);
 		}
 		int colon = host.lastIndexOf(':');
-		if (colon != -1) {
+		if (colon != -1 && host.indexOf(']') != -1 && host.indexOf(']') == colon - 1) {
+			// [ipv6]:port — keep the bracketed host, drop the port.
 			host = host.substring(0, colon);
+		} else if (colon != -1 && host.indexOf(':') != colon) {
+			// Multiple colons without a bracketed form: a bare IPv6
+			// literal; leave it intact rather than butchering it.
+		} else if (colon != -1) {
+			host = host.substring(0, colon);
+		}
+		if (host.startsWith("[") && host.endsWith("]")) {
+			host = host.substring(1, host.length() - 1);
+		}
+		if (host.endsWith(".")) {
+			host = host.substring(0, host.length() - 1);
 		}
 		return host;
 	}

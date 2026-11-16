@@ -51,7 +51,14 @@ public final class ZeaKeys {
          * out of registration (the edit-mode keybind once was, which left
          * button editing unreachable).
          */
-        private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS, LOCK_SLOT);
+        /**
+         * Opens the full-screen world map. Bound to M like the reference
+         * mods' map keys; /zeamap does the same.
+         */
+        public static final KeyMapping OPEN_MAP = new KeyMapping(
+                        "zea.key.open_map", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY);
+
+        private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS, LOCK_SLOT, OPEN_MAP);
 
         private ZeaKeys() {
         }

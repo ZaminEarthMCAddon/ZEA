@@ -152,21 +152,26 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess {
         }
 
         /**
-         * Moves the bar to its spot at the very bottom of the screen — the
-         * dev.36 request: the bar used to hug the GUI's lower edge, where
-         * it read as part of the inventory; now it spans the screen's
-         * bottom edge (GUI-wide, left-aligned with the container), the row
-         * the player's eye already searches on any inventory overlay. The
-         * layout stays live: resize and recipe-book toggles re-place it.
+         * Places the bar at the bottom of the screen, horizontally centered
+         * — the reference mock's layout (202x22 GUI units, five off the
+         * bottom edge). The layout stays live: resize and recipe-book
+         * toggles re-place it, and the y never leaves the screen.
          */
         private void zea$positionSearchBar(AbstractContainerScreen<?> self) {
                 SearchBarWidget bar = zea$searchBar;
                 if (bar == null) {
                         return;
                 }
-                bar.setX(leftPos);
-                bar.setY(self.height - SearchBarWidget.HEIGHT);
-                bar.setWidth(imageWidth);
+                // The reference mock's layout: the mock's 404x44 physical
+                // pixels are 202x22 GUI units at its scale 2, horizontally
+                // centered, five units off the bottom edge. Width clamps
+                // down on narrow windows; the y never leaves the screen.
+                int width = Math.min(SearchBarWidget.WIDTH, self.width - 8);
+                int y = Math.clamp(self.height - SearchBarWidget.HEIGHT - SearchBarWidget.BOTTOM_MARGIN, 0,
+                                self.height - SearchBarWidget.HEIGHT);
+                bar.setX((self.width - width) / 2);
+                bar.setY(y);
+                bar.setWidth(width);
         }
 
         /** The layout inputs for this screen right now. */

@@ -65,7 +65,9 @@ class ButtonGeometryTest {
                 ButtonGeometry.SlotRect slot = ButtonGeometry.slotRect(ButtonGeometry.Zone.ABOVE_SEARCH, 0, screen(true));
 
                 assertEquals(8, slot.x());
-                assertEquals(240 - 12 - 2 - 18, slot.y());
+                // The row hangs above the bottom bar: screen minus the bar's
+                // bottom margin (5), its height (22) and the gap.
+                assertEquals(240 - 5 - 22 - 2 - 18, slot.y());
                 assertEquals(9, ButtonGeometry.Zone.ABOVE_SEARCH.capacity);
                 assertNull(ButtonGeometry.slotRect(ButtonGeometry.Zone.ABOVE_SEARCH, 9, screen(true)));
         }
@@ -75,7 +77,7 @@ class ButtonGeometryTest {
                 ButtonGeometry.Inputs shortScreen = new ButtonGeometry.Inputs(
                                 0, 0, 176, 166, 320, 216, true, false);
 
-                // 216 - 12 - 2 - 18 = 184 < 166 + 2 + 18: the rows would collide.
+                // 216 - 5 - 22 - 2 - 18 = 169 < 166 + 2 + 18: the rows would collide.
                 assertNull(ButtonGeometry.slotRect(ButtonGeometry.Zone.ABOVE_SEARCH, 0, shortScreen));
                 assertNotNull(ButtonGeometry.slotRect(ButtonGeometry.Zone.UNDER_HOTBAR, 0, shortScreen),
                                 "the under-hotbar row still renders");

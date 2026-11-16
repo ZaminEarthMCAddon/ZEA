@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.zaminmc.zea.ZeaClient;
+import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.earthmc.EarthMcDetector;
 import net.zaminmc.zea.earthmc.ServerIdentity;
 
@@ -16,6 +17,14 @@ import java.util.Optional;
  *
  * <p>All state here is confined to the client thread (event callbacks and
  * render logic all run there).
+ *
+ * <p>Server recognition runs on every join from the address the player
+ * connected through — the server-list / direct-connect hostname, before
+ * DNS or SRV resolution, so a subdomain-fronted EarthMC gate stays
+ * recognisable and a resolved IP never has to be. When the
+ * {@code EarthMC Only} setting is on and the address is not EarthMC,
+ * ZEA logs NEU's idle notice — once per connection, from the join
+ * handler itself, never per tick — and stays idle on that server.
  */
 public final class ClientLifecycle {
 	private volatile boolean onEarthMc;
@@ -54,6 +63,18 @@ public final class ClientLifecycle {
 		earthMcServer = onEarthMc ? ServerIdentity.of(server.ip).orElse(null) : null;
 		if (onEarthMc) {
 			ZeaClient.LOGGER.info("Connected to EarthMC; EarthMC features enabled");
+			return;
+		}
+		// Single-player and LAN worlds have no address to recognise; the
+		// idle notice is for real servers the player was pointed at.
+		if (server == null || server.ip == null || server.ip.isBlank()) {
+			return;
+		}
+		ZeaConfig config = ZeaClient.config();
+		if (config != null && config.earthMcOnly()) {
+			ZeaClient.LOGGER.warn("[ZEA] Idle on {}: the address is not recognised as EarthMC and "
+							+ "\"EarthMC Only\" is on, so no ZEA functionality has been enabled on this server.",
+							server.ip);
 		}
 	}
 

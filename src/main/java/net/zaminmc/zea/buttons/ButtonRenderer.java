@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 
@@ -37,8 +38,12 @@ public final class ButtonRenderer {
 	/**
 	 * Renders the buttons. Unrendered placements (over the slot band of a
 	 * foreign container, under the recipe book, off-screen) are skipped;
-	 * unusable or disabled buttons never draw in the container view — the
-	 * editor is where their work-in-progress is shown.
+	 * disabled buttons never draw in the container view. A button
+	 * without a command still draws — the editor and the container
+	 * agree on what exists, an unconfigured button just does nothing
+	 * when clicked (the activator refuses it) and its tooltip says
+	 * so. What never draws is a button with no face at all: no icon,
+	 * no text — there is nothing to see.
 	 *
 	 * @param placements the layout's resolved placements, in draw order
 	 */
@@ -52,7 +57,7 @@ public final class ButtonRenderer {
 			int mouseY) {
 		for (ButtonGeometry.Placement placement : placements) {
 			InventoryButton button = placement.button();
-			if (!placement.rendered() || !button.enabled() || !button.isUsable()) {
+			if (!placement.rendered() || !button.enabled()) {
 				continue;
 			}
 			int x = placement.x();
@@ -60,18 +65,7 @@ public final class ButtonRenderer {
 			boolean hovered = ButtonGeometry.contains(x, y, ButtonGeometry.SIZE, ButtonGeometry.SIZE, mouseX, mouseY);
 
 			drawBackground(graphics, x, y, button.style());
-
-			if (!button.text().isBlank()) {
-				drawFittedText(graphics, font, button.text(), x, y, hovered);
-			} else {
-				Identifier custom = ButtonIcons.customTextureFor(button.icon());
-				if (custom != null) {
-					graphics.blit(RenderPipelines.GUI_TEXTURED, custom, x + 1, y + 1,
-							0.0f, 0.0f, 16, 16, 16, 16);
-				} else {
-					graphics.item(ButtonIcons.iconFor(button.icon()), x + 1, y + 1);
-				}
-			}
+			drawFace(graphics, font, button, x, y, hovered);
 			if (hovered) {
 				drawBorder(graphics, x, y, 0xFFFFFFFF);
 				List<Component> lines = ButtonTooltips.lines(button,
@@ -104,6 +98,35 @@ public final class ButtonRenderer {
 		graphics.fill(x, y + h - 1, x + w, y + h, color);
 		graphics.fill(x, y + 1, x + 1, y + h - 1, color);
 		graphics.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
+	}
+
+	/**
+	 * The button's face over its background: display text scaled to fit
+	 * the 18×18 box, else the icon (custom texture or item), else a
+	 * question mark — the same drawing in the container view and in the
+	 * editor, so the editor preview is exactly what renders in the
+	 * inventory.
+	 */
+	public static void drawFace(GuiGraphicsExtractor graphics, Font font, InventoryButton button, int x, int y,
+			boolean bright) {
+		if (!button.text().isBlank()) {
+			drawFittedText(graphics, font, button.text(), x, y, bright);
+			return;
+		}
+		Identifier custom = ButtonIcons.customTextureFor(button.icon());
+		if (custom != null) {
+			graphics.blit(RenderPipelines.GUI_TEXTURED, custom, x + 1, y + 1,
+					0.0f, 0.0f, 16, 16, 16, 16);
+			return;
+		}
+		ItemStack stack = ButtonIcons.iconFor(button.icon());
+		if (!stack.isEmpty()) {
+			graphics.item(stack, x + 1, y + 1);
+			return;
+		}
+		graphics.centeredText(font, "?", x + ButtonGeometry.SIZE / 2,
+				y + (ButtonGeometry.SIZE - font.lineHeight) / 2,
+				bright ? 0xFFFFFFFF : 0xFFC8C8E0);
 	}
 
 	/** Draws text scaled down until it fits the button box, centered. */
