@@ -3807,7 +3807,7 @@ old screen had papered over.
 
 ### Verification
 
-`./gradlew test` green — 1131 tests, 0 failures (+18: listing model
+`./gradlew test` green — 1183 tests, 0 failures across the whole suite (+18 new this session: listing model
 composition, filter sides, search over item/owner/town, sign-only
 labelling, town-lookup plumbing, sort orders including the
 direction-aware price rules and the unjudgeable sink, tie
