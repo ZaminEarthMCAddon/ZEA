@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.chat.capture.MessageCapture;
 import net.zaminmc.zea.chat.model.CapturedMessage;
 import net.zaminmc.zea.earthmc.ServerIdentity;
@@ -20,7 +21,6 @@ import net.zaminmc.zea.market.interaction.ShopSignGeometry;
 import net.zaminmc.zea.market.model.ShopResponse;
 import net.zaminmc.zea.market.store.MarketStore;
 import net.zaminmc.zea.market.sync.SubmissionQueue;
-import net.zaminmc.zea.market.ui.ShopScreens;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -112,15 +112,11 @@ public final class MarketSubsystem {
 				persistence.markDirty(MarketPersistence.snapshot(data));
 				submissions.enqueue(recorded.shop(), recorded.observation());
 			}
-			// The structured shop interface replaces the raw chat wall for
-			// server-verified inspections when the player wants it. A
-			// partial response never opens a falsely complete screen; a
-			// sign-only advert stays in the market data without
-			// interrupting the player.
-			if (config.openShopScreen && inspection.response() != null
-					&& inspection.response().completeness() == ShopResponse.Completeness.COMPLETE
-					&& inspection.response().price() != null) {
-				ShopScreens.open(recorded.shop(), recorded.observation(), inspection.response());
+			// The player has reached and inspected the shop they were
+			// navigating to: the waypoint has done its job and is gone.
+			net.zaminmc.zea.nav.ShopDestinationTracker destinations = ZeaClient.destinationTracker();
+			if (destinations != null) {
+				destinations.clearFor(recorded.shop().shopId());
 			}
 		});
 	}

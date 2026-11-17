@@ -40,14 +40,14 @@ class OfferResolverTest {
 		return new ShopObservation(shopId, ShopDirection.SELLING,
 				new ItemFingerprint(token, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", new BigDecimal(price), PriceScope.PER_BULK, bulk,
-				"78", StockUnit.UNKNOWN, 64, null, true, SourceType.SERVER_RESPONSE, at);
+				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, at);
 	}
 
 	private static ShopObservation buying(String shopId, String token, String price, Instant at) {
 		return new ShopObservation(shopId, ShopDirection.BUYING,
 				new ItemFingerprint(token, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", new BigDecimal(price), PriceScope.PER_ITEM, null,
-				null, StockUnit.SPACE, null, 10, true, SourceType.SERVER_RESPONSE, at);
+				null, StockUnit.SPACE, null, null, null, null, 10, true, List.of(), SourceType.SERVER_RESPONSE, at);
 	}
 
 	@Test
@@ -107,7 +107,7 @@ class OfferResolverTest {
 				new ShopObservation("sign|sign", ShopDirection.SELLING,
 						new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
 						"Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_ITEM, null,
-						null, StockUnit.UNKNOWN, null, null, false, SourceType.SIGN_ONLY, T));
+						null, StockUnit.UNKNOWN, null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T));
 
 		assertTrue(new OfferResolver().offers(data, PICKAXE).isEmpty());
 	}
@@ -133,7 +133,7 @@ class OfferResolverTest {
 				ShopDirection.SELLING,
 				new ItemFingerprint(PICKAXE, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_BULK, null,
-				null, StockUnit.UNKNOWN, null, null, false, SourceType.SERVER_RESPONSE, T));
+				null, StockUnit.UNKNOWN, null, null, null, null, null, false, List.of(), SourceType.SERVER_RESPONSE, T));
 		data.record(shop("clear|sign", "B"), selling("clear|sign", PICKAXE, "9", 1, T));
 
 		assertEquals("clear|sign", new OfferResolver().bestBuyOffer(data, PICKAXE).orElseThrow().shop().shopId());

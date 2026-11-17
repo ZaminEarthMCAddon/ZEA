@@ -32,14 +32,18 @@ import java.util.Optional;
  * Timestamps are epoch milliseconds because Gson has no
  * {@link java.time.Instant} adapter.
  *
- * <p>Schema: {@code {"version": 1, "shops": [...], "observations": [...]}}.
+ * <p>Schema: {@code {"version": 2, "shops": [...], "observations": [...]}}.
  * Shops and observations are separate lists joined by {@code shopId}: a
  * shop is a physical place, an observation a measurement taken at it,
  * and the two never overwrite each other.
  */
 public final class MarketStore {
-	/** Bump when the file shape changes; add the matching migration above. */
-	public static final int CURRENT_VERSION = 1;
+	/**
+	 * Bump when the file shape changes; add the matching migration above.
+	 * v2 is additive over v1: every new field is nullable, so a v1 file
+	 * loads with the new fields absent and needs no data migration.
+	 */
+	public static final int CURRENT_VERSION = 2;
 
 	private final Path file;
 	private final JsonStore json = new JsonStore();
@@ -64,12 +68,20 @@ public final class MarketStore {
 			@Nullable Long createdAt, @Nullable Long lastObservedAt) {
 	}
 
-	/** One observation as it appears in the file; every field is optional. */
+	/**
+	 * One observation as it appears in the file; every field is optional.
+	 * v2 added the remaining percentage, the item-unit and bulk-unit
+	 * limits and the enchantment section verbatim — all nullable, so a
+	 * v1 file loads unchanged with those fields absent.
+	 */
 	public record ObservationWire(@Nullable String shopId, @Nullable String direction,
 			@Nullable String token, @Nullable String fidelity,
 			@Nullable String itemDisplay, @Nullable String price, @Nullable String priceScope,
 			@Nullable Integer bulkSize, @Nullable String stockRaw, @Nullable String stockUnit,
-			@Nullable Integer maxBuyBulks, @Nullable Integer maxSellItems,
+			@Nullable Integer remainingPercent,
+			@Nullable Integer maxBuyBulks, @Nullable Integer maxBuyItems,
+			@Nullable Integer maxSellBulks, @Nullable Integer maxSellItems,
+			@Nullable List<String> enchantments,
 			@Nullable Boolean supportsAll, @Nullable String sourceType, @Nullable Long observedAt) {
 	}
 
@@ -175,8 +187,12 @@ public final class MarketStore {
 				wire.bulkSize(), wire.stockRaw(),
 				enumOrDefault(StockUnit.class, wire.stockUnit(),
 						StockUnit.UNKNOWN),
-				wire.maxBuyBulks(), wire.maxSellItems(),
-				Boolean.TRUE.equals(wire.supportsAll()), sourceType,
+				wire.remainingPercent(),
+				wire.maxBuyBulks(), wire.maxBuyItems(),
+				wire.maxSellBulks(), wire.maxSellItems(),
+				Boolean.TRUE.equals(wire.supportsAll()),
+				wire.enchantments() == null ? List.of() : wire.enchantments(),
+				sourceType,
 				Instant.ofEpochMilli(wire.observedAt())));
 	}
 

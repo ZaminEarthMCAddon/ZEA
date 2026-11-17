@@ -128,8 +128,12 @@ public final class MarketPersistence {
 					observation.bulkSize(),
 					observation.stockRaw(),
 					observation.stockUnit().name(),
+					observation.remainingPercent(),
 					observation.maxBuyBulks(),
+					observation.maxBuyItems(),
+					observation.maxSellBulks(),
 					observation.maxSellItems(),
+					observation.enchantments(),
 					observation.supportsAll(),
 					observation.sourceType().name(),
 					observation.observedAt().toEpochMilli()));

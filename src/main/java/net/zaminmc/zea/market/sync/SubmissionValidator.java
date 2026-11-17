@@ -5,6 +5,7 @@ import net.zaminmc.zea.market.model.ShopObservation;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -61,7 +62,10 @@ public final class SubmissionValidator {
 				observation.stockRaw(),
 				observation.stockUnit() == null ? null : observation.stockUnit().name(),
 				observation.maxBuyBulks(),
+				observation.maxBuyItems(),
+				observation.maxSellBulks(),
 				observation.maxSellItems(),
+				observation.enchantments(),
 				observation.supportsAll(),
 				observation.observedAt().toEpochMilli(),
 				submittedAt.toEpochMilli()));
@@ -81,7 +85,9 @@ public final class SubmissionValidator {
 			String direction, String token, @Nullable String itemDisplay,
 			String price, String priceScope,
 			@Nullable Integer bulkSize, @Nullable String stockRaw, @Nullable String stockUnit,
-			@Nullable Integer maxBuyBulks, @Nullable Integer maxSellItems, boolean supportsAll,
+			@Nullable Integer maxBuyBulks, @Nullable Integer maxBuyItems,
+			@Nullable Integer maxSellBulks, @Nullable Integer maxSellItems,
+			List<String> enchantments, boolean supportsAll,
 			long observedAt, long submittedAt) {
 		public SubmissionRecord {
 			if (shopId == null || serverId == null || world == null || direction == null

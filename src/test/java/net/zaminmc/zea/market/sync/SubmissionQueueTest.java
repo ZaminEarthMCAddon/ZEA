@@ -45,14 +45,14 @@ class SubmissionQueueTest {
 		return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
 				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_BULK, 7,
-				"78", StockUnit.UNKNOWN, 64, null, true, SourceType.SERVER_RESPONSE, T);
+				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, T);
 	}
 
 	private static ShopObservation signOnly() {
 		return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
 				new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
 				"Diamond Pickaxe", null, null, null, "36", StockUnit.UNKNOWN,
-				null, null, false, SourceType.SIGN_ONLY, T);
+				null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T);
 	}
 
 	private static ExecutorService executor() {
@@ -92,7 +92,7 @@ class SubmissionQueueTest {
 		ShopObservation unpriced = new ShopObservation("id", ShopDirection.SELLING,
 				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", null, null, null, null, StockUnit.UNKNOWN,
-				null, null, false, SourceType.SERVER_RESPONSE, T);
+				null, null, null, null, null, false, List.of(), SourceType.SERVER_RESPONSE, T);
 		assertTrue(SubmissionValidator.validate(shop(), unpriced, SUBMITTED).isEmpty());
 	}
 
@@ -130,7 +130,7 @@ class SubmissionQueueTest {
 				ShopDirection.SELLING,
 				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", new BigDecimal("2"), PriceScope.PER_BULK, 7,
-				"78", StockUnit.UNKNOWN, 64, null, true, SourceType.SERVER_RESPONSE,
+				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE,
 				T.plusSeconds(60))));
 
 		assertEquals(2, queue.size());

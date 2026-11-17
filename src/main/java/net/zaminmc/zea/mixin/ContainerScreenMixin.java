@@ -18,6 +18,8 @@ import net.zaminmc.zea.buttons.ButtonGeometry;
 import net.zaminmc.zea.buttons.ButtonRenderer;
 import net.zaminmc.zea.buttons.InventoryButton;
 import net.zaminmc.zea.buttons.InventoryButtons;
+import net.zaminmc.zea.browser.ItemBrowser;
+import net.zaminmc.zea.browser.ItemBrowserState;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.duck.ContainerScreenAccess;
 import net.zaminmc.zea.duck.HoveredSlotAccess;
@@ -105,6 +107,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                 return imageHeight;
         }
 
+        @Override
+        public int zea$leftPos() {
+                return leftPos;
+        }
+
+        @Override
+        public int zea$topPos() {
+                return topPos;
+        }
+
         // ------------------------------------------------------------------
         // Init: the search bar widget
         // ------------------------------------------------------------------
@@ -160,6 +172,17 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                                         topPos,
                                         mouseX,
                                         mouseY);
+                }
+                // The shop-index browser: the item variants the market
+                // observed, drawn beside the GUI. Reads caches only — the
+                // index rebuilds on market revision or search-query change,
+                // never per frame.
+                if (ZeaClient.config() != null && ZeaClient.config().inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)) {
+                        ItemBrowser browser = ZeaClient.browser();
+                        if (browser != null) {
+                                browser.render(graphics, self, mouseX, mouseY);
+                        }
                 }
         }
 
@@ -312,6 +335,14 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         private void zea$suppressSlotTooltipOverButtons(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
                         CallbackInfo ci) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
+                ItemBrowser browser = ZeaClient.browser();
+                if (browser != null && ZeaClient.config() != null
+                                && ZeaClient.config().inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)
+                                && browser.hoversPanel(mouseX, mouseY)) {
+                        ci.cancel();
+                        return;
+                }
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
                 if (!zea$buttonsActive(buttons)) {
                         return;
@@ -375,6 +406,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
         private void zea$handleKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
+                // The detail overlay is the top layer: Esc closes it
+                // before anything else sees the key. It never captures
+                // typing keys — the search bar keeps its ownership.
+                ItemBrowser browser = ZeaClient.browser();
+                if (browser != null && browser.state().view() == ItemBrowserState.View.DETAIL
+                                && event.isEscape()) {
+                        browser.state().closeDetail();
+                        cir.setReturnValue(true);
+                        return;
+                }
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
                 if (zea$buttonsActive(buttons) && ZeaKeys.EDIT_BUTTONS.matches(event)) {
                         Minecraft minecraft = Minecraft.getInstance();
@@ -456,6 +497,18 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         private void zea$onMouseClick(MouseButtonEvent event, boolean doubleClick,
                         CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
+                // The browser is the top layer: a click over it never
+                // reaches a slot. A tile click opens a variant's detail; an
+                // offer click selects it; a selection never issues a
+                // command.
+                ItemBrowser browser = ZeaClient.browser();
+                if (browser != null && ZeaClient.config() != null
+                                && ZeaClient.config().inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)
+                                && browser.click(self, event.x(), event.y())) {
+                        cir.setReturnValue(true);
+                        return;
+                }
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
                 SlotLocks locks = ZeaClient.slotLocks();
                 if (locks != null && locks.pairingActive() && !ZeaKeys.LOCK_SLOT.isDown()) {
@@ -495,6 +548,24 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         }
 
         /**
+         * A wheel scroll over the browser panel scrolls the browser, and
+         * the event never reaches the GUI's own scrollables; anywhere
+         * else the wheel behaves exactly as vanilla.
+         */
+        @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
+        private void zea$onScroll(double mouseX, double mouseY, double scrollX, double scrollY,
+                        CallbackInfoReturnable<Boolean> cir) {
+                AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
+                ItemBrowser browser = ZeaClient.browser();
+                if (browser != null && ZeaClient.config() != null
+                                && ZeaClient.config().inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)
+                                && browser.scroll(mouseX, mouseY, scrollY)) {
+                        cir.setReturnValue(true);
+                }
+        }
+
+        /**
          * Runs a button's command with the carried-item and close-on-execute
          * rules: while an item sits on the cursor the click is consumed but
          * nothing runs (NEU's guard against dropping onto buttons); a
@@ -527,6 +598,16 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
         private void zea$onButtonRelease(MouseButtonEvent event, CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
+                ItemBrowser browser = ZeaClient.browser();
+                if (browser != null && ZeaClient.config() != null
+                                && ZeaClient.config().inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)
+                                && browser.hoversPanel(event.x(), event.y())) {
+                        // The panel is never "outside the GUI": a release
+                        // over it cannot drop a carried item.
+                        cir.setReturnValue(true);
+                        return;
+                }
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
                 if (!zea$buttonsActive(buttons) || isQuickCrafting) {
                         return;

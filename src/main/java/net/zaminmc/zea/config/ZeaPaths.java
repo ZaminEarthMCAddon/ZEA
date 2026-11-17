@@ -22,15 +22,14 @@ import java.time.Instant;
  * └── zea/
  *     ├── config.json              (user preferences — the MoulConfig tree)
  *     ├── hud.json                 (HUD element visibility, anchors, offsets)
- *     ├── discovery.json           (the /zeadiscovery toggle's own state)
  *     ├── buttons.json             (inventory buttons, existing format kept)
  *     ├── slotlocks.json           (slot locks, existing format kept)
  *     ├── history/                 (per-server chat history, existing)
  *     ├── capture/                 (message capture output, existing)
  *     ├── market/
- *     │   ├── local-observations.json    (the player's shop observations)
- *     │   ├── navigation-observations.json (private travel history)
- *     │   └── remote-cache.json    (what ZEA-REPO last supplied)
+ *     │   ├── market.json          (the market index: shops and observations)
+ *     │   ├── market-submissions.json (the ZEA-REPO contribution queue)
+ *     │   └── shared-shops.json    (the last accepted ZEA-REPO dataset)
  *     └── backups/                 (pre-migration copies, kept forever)
  * </pre>
  *
@@ -69,11 +68,6 @@ public final class ZeaPaths {
                 return root.resolve("hud.json");
         }
 
-        /** The discovery toggle's own state. */
-        public Path discoveryState() {
-                return root.resolve("discovery.json");
-        }
-
         /** The inventory-button store (existing format and path). */
         public Path buttons() {
                 return root.resolve("buttons.json");
@@ -94,19 +88,9 @@ public final class ZeaPaths {
                 return root.resolve("capture");
         }
 
-        /** The player's own shop observations (publishable, but only explicitly). */
-        public Path localObservations() {
-                return root.resolve("market/local-observations.json");
-        }
-
-        /** The private navigation history — never published. */
-        public Path navigationObservations() {
-                return root.resolve("market/navigation-observations.json");
-        }
-
-        /** What the repository last supplied and when. */
-        public Path remoteCache() {
-                return root.resolve("market/remote-cache.json");
+        /** The shared shop dataset cache: the last accepted ZEA-REPO snapshot. */
+        public Path sharedDataset() {
+                return root.resolve("market/shared-shops.json");
         }
 
         /** Where pre-migration copies land. */

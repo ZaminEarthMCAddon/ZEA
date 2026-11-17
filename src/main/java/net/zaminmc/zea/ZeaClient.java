@@ -18,6 +18,7 @@ import net.minecraft.resources.Identifier;
 import net.zaminmc.zea.buttons.ButtonActivator;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.InventoryButtons;
+import net.zaminmc.zea.browser.ItemBrowser;
 import net.zaminmc.zea.earthmc.ServerIdentity;
 import net.zaminmc.zea.chat.ChatSubsystem;
 import net.zaminmc.zea.chat.capture.CaptureCommands;
@@ -28,10 +29,6 @@ import net.zaminmc.zea.config.ConfigScreen;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.config.ZeaPaths;
-import net.zaminmc.zea.discovery.DiscoveryCommands;
-import net.zaminmc.zea.discovery.DiscoveryStore;
-import net.zaminmc.zea.discovery.DiscoverySubsystem;
-import net.zaminmc.zea.discovery.RepoClient;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.map.MapSubsystem;
@@ -39,12 +36,17 @@ import net.zaminmc.zea.map.render.minimap.MinimapHud;
 import net.zaminmc.zea.map.cache.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
-import net.zaminmc.zea.market.ui.MarketScreen;
+import net.zaminmc.zea.market.sync.DatasetMerger;
+import net.zaminmc.zea.market.sync.RepoSync;
+import net.zaminmc.zea.market.sync.SharedShops;
 import net.zaminmc.zea.hud.HudCommands;
 import net.zaminmc.zea.hud.HudSubsystem;
 import net.zaminmc.zea.map.MapEngine;
 import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
+import net.zaminmc.zea.nav.ShopDestinationHud;
+import net.zaminmc.zea.nav.ShopDestinationTracker;
+import net.zaminmc.zea.nav.SpawnCommandObserver;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
 import net.zaminmc.zea.search.InventorySearch;
@@ -59,6 +61,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -83,8 +86,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static ZeaConfig config;
         private static HudSubsystem hud;
         private static MapEngine mapEngine;
-        private static DiscoverySubsystem discovery;
-        private static RepoClient repoClient;
+        private static RepoSync repoSync;
         private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
         private static ExecutorService shareExecutor;
@@ -93,6 +95,9 @@ public final class ZeaClient implements ClientModInitializer {
         private static CaptureRecorder captureRecorder;
         private static ExecutorService marketExecutor;
         private static MarketSubsystem market;
+        private static SpawnCommandObserver spawnCommands;
+        private static ShopDestinationTracker destinationTracker;
+        private static ItemBrowser browser;
         private static MapSubsystem map;
         private static MinimapHud minimapHud;
 
@@ -132,6 +137,45 @@ public final class ZeaClient implements ClientModInitializer {
                 return market;
         }
 
+        /** The spawn navigation observer behind /n spawn and /t spawn tracking. */
+        public static SpawnCommandObserver spawnCommands() {
+                return spawnCommands;
+        }
+
+        /** The inventory shop-index browser session. */
+        public static ItemBrowser browser() {
+                return browser;
+        }
+
+        /** The shop destination (temporary waypoint) tracker. */
+        public static ShopDestinationTracker destinationTracker() {
+                return destinationTracker;
+        }
+
+        /**
+         * One outgoing command reached vanilla's send path — the single
+         * point typed commands, clicked links and macro dispatch share.
+         * Spawn navigation commands are recorded with the position before
+         * the send; everything else passes untouched, and nothing is ever
+         * intercepted, canceled or rewritten.
+         */
+        public static void noteCommandIssued(String command) {
+                SpawnCommandObserver observer = spawnCommands;
+                if (observer == null || !lifecycle.onEarthMc()) {
+                        return;
+                }
+                Minecraft client = Minecraft.getInstance();
+                if (client.level == null || client.player == null) {
+                        return;
+                }
+                observer.startFrom(command,
+                                                client.level.dimension().identifier().toString(),
+                                                lifecycle.earthMcServer().map(ServerIdentity::host).orElse("unknown"),
+                                                client.player.getX(), client.player.getZ(),
+                                                Instant.now())
+                                .ifPresent(observer::observe);
+        }
+
         /** The universal HUD element subsystem; see {@code /zeahud}. */
         public static HudSubsystem hud() {
                 return hud;
@@ -140,11 +184,6 @@ public final class ZeaClient implements ClientModInitializer {
         /** The map rendering engine behind the map HUD elements. */
         public static MapEngine mapEngine() {
                 return mapEngine;
-        }
-
-        /** The native discovery subsystem; see {@code /zeadiscovery}. */
-        public static DiscoverySubsystem discovery() {
-                return discovery;
         }
 
         @Override
@@ -177,6 +216,9 @@ public final class ZeaClient implements ClientModInitializer {
                                                 paths.buttons(),
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
+                spawnCommands = new SpawnCommandObserver();
+                destinationTracker = new ShopDestinationTracker();
+                browser = new ItemBrowser();
                 marketExecutor = newIoExecutor("ZEA-Market");
                 // The claim cache is constructed here because the market's town
                 // resolution reads it; the map subsystem reuses this instance
@@ -205,29 +247,43 @@ public final class ZeaClient implements ClientModInitializer {
                                                 config.map.minimap.size * 2, config.map.minimap.size * 2,
                                                 net.zaminmc.zea.hud.HudAnchor.BOTTOM_RIGHT, 8, 8, false),
                                 new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY, () -> mapEngine));
+                hud.register(
+                                new net.zaminmc.zea.hud.HudElementSpec(
+                                                Identifier.fromNamespaceAndPath("zea", "hud/destination"),
+                                                "Shop destination",
+                                                180, 14,
+                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 28, false),
+                                new ShopDestinationHud());
                 ClientTickEvents.END_CLIENT_TICK.register(client -> mapEngine.tick());
-                // Native discovery: its own toggle file, its own capture, and
-                // the ZEA-REPO consumer — local-first, gated on discovery.
-                discovery = new DiscoverySubsystem(lifecycle,
-                                                new DiscoveryStore(paths.localObservations(),
-                                                                                paths.navigationObservations(),
-                                                                                paths.remoteCache()),
-                                                paths.discoveryState(),
-                                                mapEngine.claims());
                 repoExecutor = newIoExecutor("ZEA-Repo");
-                repoClient = new RepoClient(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor);
+                // The shared dataset sync: fetch and parse on the repo
+                // executor, merge on the client thread into the market
+                // index. The last accepted snapshot loads right now, on
+                // the client thread — a restart serves the dataset from
+                // disk before the network answers anything.
+                repoSync = new RepoSync(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor,
+                                paths.sharedDataset(), records -> Minecraft.getInstance().execute(() -> {
+                                        var result = DatasetMerger.merge(market.data(), records);
+                                        if (result.shopsAdded() + result.observationsAppended() > 0) {
+                                                ZeaClient.LOGGER.info(
+                                                                "Shared dataset merged: {} shops added, {} observations appended ({} stale skipped, {} ties kept local)",
+                                                                result.shopsAdded(), result.observationsAppended(),
+                                                                result.staleSkipped(), result.tiesSkipped());
+                                        }
+                                }));
+                DatasetMerger.merge(market.data(), SharedShops.loadCache(paths.sharedDataset()));
                 ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-                                if (lifecycle.onEarthMc() && discovery.enabled()) {
-                                        repoClient.refresh(discovery.store())
-                                                                        .exceptionally(failure -> {
-                                                                                ZeaClient.LOGGER.info(
-                                                                                                "Repository refresh unavailable ({}); local discovery continues",
-                                                                                                failure.toString());
-                                                                                return 0;
-                                                                        });
+                                if (lifecycle.onEarthMc()) {
+                                        repoSync.refresh();
                                 }
                 });
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
+                // Pending spawn navigation belongs to one connection, like
+                // the market's pending inspections.
+                ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> spawnCommands.reset());
+                // The waypoint belongs to one world session, like the
+                // pending state above it.
+                ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> destinationTracker.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
                 // the context; menus and singleplayer share "generic".
@@ -253,6 +309,20 @@ public final class ZeaClient implements ClientModInitializer {
                                 Identifier.fromNamespaceAndPath("zea", "minimap"), minimapHud);
                 ClientTickEvents.END_CLIENT_TICK.register(client -> {
                         map.tick(client);
+                        spawnCommands.tick(
+                                                        client.player == null ? null
+                                                                        : new double[] {client.player.getX(), client.player.getZ()},
+                                                        Instant.now());
+                        // The destination's lifecycle reads the player's world
+                        // and nation; the nation resolution (claim geometry)
+                        // runs once a second, not per tick.
+                        if (destinationTracker.destination() != null) {
+                                destinationTick++;
+                                if (destinationTick >= 20) {
+                                        destinationTick = 0;
+                                        destinationTracker.tick(currentWorld(), playerNation());
+                                }
+                        }
                         while (ZeaKeys.OPEN_MAP.consumeClick()) {
                                 if (client.gui.screen() == null) {
                                         map.openWorldMap(client);
@@ -272,20 +342,11 @@ public final class ZeaClient implements ClientModInitializer {
                 ShareCommands.register(zea, coordinator);
                 CaptureCommands.register(zea, captureRecorder, lifecycle::onEarthMc);
                 HudCommands.register(zea, () -> hud);
-                DiscoveryCommands.register(zea, () -> discovery);
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(zea));
                 // /zeabuttons — the button editor. Deferred through the
                 // client queue like the settings screen: a client command
                 // runs mid-keystroke in the chat screen, whose follow-up
                 // close would otherwise wipe the editor before a frame.
-                // /zeamarket — the market browser. Deferred through the
-                // client queue like the other screens.
-                ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
-                                ClientCommands.literal("zeamarket").executes(context -> {
-                                        Minecraft client = context.getSource().getClient();
-                                        client.execute(() -> client.gui.setScreen(new MarketScreen()));
-                                        return 1;
-                                })));
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
                                 ClientCommands.literal("zeamap").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
@@ -301,6 +362,26 @@ public final class ZeaClient implements ClientModInitializer {
                                 })));
                 ClientLifecycleEvents.CLIENT_STOPPING.register(client -> shutdownBackgroundWork());
                 ZeaKeys.register();
+        }
+
+        private static int destinationTick;
+
+        /** The player's current world, or null outside one. */
+        private static String currentWorld() {
+                Minecraft client = Minecraft.getInstance();
+                return client.level == null ? null : client.level.dimension().identifier().toString();
+        }
+
+        /** The nation the player stands in, from claim geometry; null when unknown. */
+        private static String playerNation() {
+                Minecraft client = Minecraft.getInstance();
+                if (market == null || market.townLookup() == null
+                                || client.player == null || client.level == null) {
+                        return null;
+                }
+                var resolved = market.townLookup().at(client.level.dimension().identifier().toString(),
+                                (int) Math.floor(client.player.getX()), (int) Math.floor(client.player.getZ()));
+                return resolved == null ? null : resolved.nation();
         }
 
         /**
@@ -352,9 +433,6 @@ public final class ZeaClient implements ClientModInitializer {
                         }
                         if (mapEngine != null) {
                                 mapEngine.shutdown();
-                        }
-                        if (discovery != null) {
-                                discovery.shutdown();
                         }
                         if (repoExecutor != null) {
                                 repoExecutor.shutdown();
