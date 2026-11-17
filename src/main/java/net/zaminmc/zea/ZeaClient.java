@@ -31,7 +31,7 @@ import net.zaminmc.zea.config.ZeaPaths;
 import net.zaminmc.zea.discovery.DiscoveryCommands;
 import net.zaminmc.zea.discovery.DiscoveryStore;
 import net.zaminmc.zea.discovery.DiscoverySubsystem;
-import net.zaminmc.zea.discovery.RepoClient;
+
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.map.MapSubsystem;
@@ -39,6 +39,9 @@ import net.zaminmc.zea.map.render.minimap.MinimapHud;
 import net.zaminmc.zea.map.cache.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
+import net.zaminmc.zea.market.sync.DatasetMerger;
+import net.zaminmc.zea.market.sync.RepoSync;
+import net.zaminmc.zea.market.sync.SharedShops;
 import net.zaminmc.zea.market.ui.MarketScreen;
 import net.zaminmc.zea.hud.HudCommands;
 import net.zaminmc.zea.hud.HudSubsystem;
@@ -86,7 +89,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static HudSubsystem hud;
         private static MapEngine mapEngine;
         private static DiscoverySubsystem discovery;
-        private static RepoClient repoClient;
+        private static RepoSync repoSync;
         private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
         private static ExecutorService shareExecutor;
@@ -248,16 +251,25 @@ public final class ZeaClient implements ClientModInitializer {
                                                 paths.discoveryState(),
                                                 mapEngine.claims());
                 repoExecutor = newIoExecutor("ZEA-Repo");
-                repoClient = new RepoClient(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor);
+                // The shared dataset sync: fetch and parse on the repo
+                // executor, merge on the client thread into the market
+                // index. The last accepted snapshot loads right now, on
+                // the client thread — a restart serves the dataset from
+                // disk before the network answers anything.
+                repoSync = new RepoSync(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor,
+                                paths.sharedDataset(), records -> Minecraft.getInstance().execute(() -> {
+                                        var result = DatasetMerger.merge(market.data(), records);
+                                        if (result.shopsAdded() + result.observationsAppended() > 0) {
+                                                ZeaClient.LOGGER.info(
+                                                                "Shared dataset merged: {} shops added, {} observations appended ({} stale skipped, {} ties kept local)",
+                                                                result.shopsAdded(), result.observationsAppended(),
+                                                                result.staleSkipped(), result.tiesSkipped());
+                                        }
+                                }));
+                DatasetMerger.merge(market.data(), SharedShops.loadCache(paths.sharedDataset()));
                 ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-                                if (lifecycle.onEarthMc() && discovery.enabled()) {
-                                        repoClient.refresh(discovery.store())
-                                                                        .exceptionally(failure -> {
-                                                                                ZeaClient.LOGGER.info(
-                                                                                                "Repository refresh unavailable ({}); local discovery continues",
-                                                                                                failure.toString());
-                                                                                return 0;
-                                                                        });
+                                if (lifecycle.onEarthMc()) {
+                                        repoSync.refresh();
                                 }
                 });
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());

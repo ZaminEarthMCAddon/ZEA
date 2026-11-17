@@ -54,9 +54,14 @@ public final class MarketListings {
 			}
 		}
 
-		/** Whether this row's advert was verified by a real shop response. */
+		/**
+		 * Whether this row's advert was verified by a real shop response —
+		 * captured by this client, or shared by another player's through
+		 * the repository dataset. Only sign-text adverts rank below
+		 * verified ones.
+		 */
 		public boolean isServerVerified() {
-			return observation.sourceType() == SourceType.SERVER_RESPONSE;
+			return observation.sourceType() != SourceType.SIGN_ONLY;
 		}
 
 		/** The player-facing direction: buy from, or sell to. */
@@ -123,19 +128,20 @@ public final class MarketListings {
 	}
 
 	/**
-	 * The shop's current advert: its latest server-verified observation,
-	 * or — when the shop was only ever seen from its sign — its latest
-	 * sign-only advert. A stale advert never hides behind a newer advert.
+	 * The shop's current advert: its latest server-verified observation —
+	 * own or shared — or, when the shop was only ever seen from its sign,
+	 * its latest sign-only advert. A stale advert never hides behind a
+	 * newer advert.
 	 */
 	private static @Nullable ShopObservation latestAdvert(MarketData data, String shopId) {
 		List<ShopObservation> history = data.observations(shopId);
 		ShopObservation verified = null;
 		ShopObservation signOnly = null;
 		for (ShopObservation observation : history) {
-			if (observation.sourceType() == SourceType.SERVER_RESPONSE) {
-				verified = observation;
-			} else {
+			if (observation.sourceType() == SourceType.SIGN_ONLY) {
 				signOnly = observation;
+			} else {
+				verified = observation;
 			}
 		}
 		return verified != null ? verified : signOnly;

@@ -109,6 +109,11 @@ public final class ZeaPaths {
                 return root.resolve("market/remote-cache.json");
         }
 
+        /** The shared shop dataset cache: the last accepted ZEA-REPO snapshot. */
+        public Path sharedDataset() {
+                return root.resolve("market/shared-shops.json");
+        }
+
         /** Where pre-migration copies land. */
         public Path backups() {
                 return root.resolve("backups");
