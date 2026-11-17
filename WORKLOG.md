@@ -4444,3 +4444,90 @@ cache then holds stale holders — every enchantment reads foreign
 gray and rarity falls to the material tier until the world is
 re-entered; not a code bug, but a cache-invalidation seam worth
 wiring to the reload event someday.
+
+## 2026-11-17 (session 23) — The stat calculation layer: item, enchantment, wielder
+
+The presentation was right and the numbers were not. The damage line
+baked the player's fist into the item's contribution and showed the
+enchantment's level where its damage belonged; the sweeping line
+carried a stray level bracket; armor showed vanilla points where the
+RPG scale wanted defense and explained Protection twice; Looting said
+nothing; durability echoed its maximum back at full repair. All of it
+repaired in place on the same pipeline — no UI rebuild.
+
+### The root causes
+
+The melee base came from `ItemAttributeModifiers.compute` starting at
+the player's base (1.0), so "the item's damage" was already item plus
+fist and there was no way to show either alone. The wielder had no
+seat at the table at all: no context knew whether the hovered stack
+was the one actually held, what the player's real base is, or which
+attack-damage effects are running. Armor scaled nothing. Looting was
+never asked for. The durability line printed both numbers always.
+
+### The wielder context
+
+A new `WielderContext` reads the player per tooltip: the live
+main-hand stack (held = reference identity — an identical item
+elsewhere is a different instance and stays spare), the attribute
+bases via `getBaseValue` (never assumed 1.0), and the active
+attack-damage effects with their per-level amounts from
+`MobEffect.createModifiers` (Strength +3 per level, Weakness -4,
+bytecode-verified in the 26.3 `MobEffects` static init). The engine
+threads it through; the calculators stay component-free.
+
+### The rules now
+
+Damage splits by source: the item's own contribution is
+`compute(base) - base`; Sharpness is the data-driven damage effect
+(the 26.3 datapack writes `1 + 0.5 per level above first`, which is
+`0.5 × level + 0.5`); the fist joins only when held; the named
+effects join only when held, annotated `(+3 Strength)` in green. The
+annotation set appears once the total has more than one contributor —
+a spare unenchanted sword reads just "+6". Attack speed presents the
+effective value (base plus main-hand modifiers; the live instance when
+held) in yellow. Sweeping reads the live `sweeping_damage_ratio`
+fraction as a plain percentage. Looting reads as Magic Find, one aqua
+point per level, from the hovered stack's own component. Defense is
+the Hypixel scale: armor points times ten plus ten per Protection
+level, the actual level in the blue bracket, never clamped; Toughness
+keeps its vanilla value under its renamed label; the specialized
+protections (Fire Resistance, Explosion Resistance, Ranged Defense,
+Fall Resistance) stay out of defense with the piece's EPF as the
+value. The bow's velocity reads gold at "+60 Blocks/s". Durability
+shows the maximum alone when fully repaired, current / maximum once
+damaged. The stat block sits directly under the item name.
+
+### One client-side trap found live
+
+The integrated client's `ATTACK_DAMAGE` instance does not carry the
+held item's equipment modifier (the attack-speed instance does) —
+reading Strength as `value - base - item` produced a phantom "-6".
+The effect bonus now sums the enumerated effect amounts instead, and
+the instance's value is left alone. Found by an in-game delta of
+"+4 (6) [5] (1) (-6)" against a server-reported attribute value of
+7.0.
+
+### Verification
+
+`./gradlew test` green: **1367 tests, 0 failures** (+30 over the
+merge baseline: the held/spare/Strength matrix, the reference-identity
+seams, the keyed-holder protection reads, the Magic Find level
+mapping, and the presentation pins for every new format rule). Live
+in the 26.3 client, survival mode, items from
+`run/saves/New World/datapacks/zea_test` (the dev run directory is
+`run/`, not the repo root — the previous session's datapack landed in
+the wrong tree and the world never saw it): the held Sharpness V
+EarthMC sword reads "Damage: +13 (6) [5] (1) (+3 Strength)" with
+Strength I active and "+10 (6) (1) (+3 Strength)" without Sharpness
+on the plain sword; the same swords hovered as spares drop the fist
+and the effect ("+9 (6) [5]", "+6"); the Protection V chestplate
+reads "Defense: +130 [5]" with "Toughness: +2" and no protection
+percentage; the bow reads "Velocity: +60 Blocks/s" in gold with a
+green "1s"; durability shows maxima alone at full repair; the golden
+apple keeps its vanilla tooltip; F3+H advanced diagnostics survive
+under the rebuilt block. The creative screen's hotbar row renders
+item tooltips without calling `getTooltipFromContainerItem` — the
+verification runs through the survival inventory, whose slots take
+the container hook; worth wiring the creative path someday if
+hovering hotbars in creative matters.
