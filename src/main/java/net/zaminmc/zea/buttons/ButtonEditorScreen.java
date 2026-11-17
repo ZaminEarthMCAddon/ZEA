@@ -174,7 +174,8 @@ public final class ButtonEditorScreen extends Screen {
 
                 ZeaConfig config = ZeaClient.config();
                 if (config != null && config.inventorySearchEnabled()) {
-                        barPreview = new SearchBarWidget(font, 0, 0, CANVAS_X, ZeaClient.search());
+                        barPreview = new SearchBarWidget(font, 0, 0, SearchBarLayout.BAR_WIDTH,
+                                                SearchBarLayout.height(2), ZeaClient.search());
                         barPreview.calculatorEnabled(config.inventorySearchCalculatorEnabled());
                         // The real bar restores the per-screen query; the preview mirrors it.
                         barPreview.setValue(ZeaClient.search().query());
@@ -242,7 +243,7 @@ public final class ButtonEditorScreen extends Screen {
                 }
 
                 if (barPreview != null) {
-                        SearchBarLayout.apply(barPreview, guiLeft, CANVAS_X, height);
+                        SearchBarLayout.apply(barPreview, width, height, 2);
                         barPreview.extractWidgetRenderState(context, mouseX, mouseY, delta);
                 }
 
@@ -298,7 +299,7 @@ public final class ButtonEditorScreen extends Screen {
          */
         private ButtonGeometry.Inputs canvasInputs() {
                 return new ButtonGeometry.Inputs(guiLeft, guiTop, CANVAS_X, CANVAS_Y,
-                                                                                                        width, height, true, false);
+                                                                                                        width, height, true, false, 2);
         }
 
         private List<ButtonGeometry.Placement> canvasPlacements() {

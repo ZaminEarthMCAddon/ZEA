@@ -10,218 +10,213 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The item browser's layout math, pinned to the values NEU's own
- * formulas produce. The expectations were computed by hand from
- * {@code NEUOverlay} — a third of the screen for the pane's width, the
- * centering paddings splitting the leftovers, and the ceiling-based
- * column and row counts — so a drift in ZEA's math against NEU's model
- * fails here first.
+ * formulas produce — computed by hand from {@code NEUOverlay}: the box
+ * padding ({@code panePadding * 2 / scaleFactor + 5}), the nav strip's
+ * height ({@code max(searchBarHeight / scaleFactor, 16)}), the
+ * centering paddings splitting the leftovers, the ceiling-based column
+ * and row counts, the sort bar's narrowing scale, the nav buttons'
+ * search-bar-derived size and the edge tab's slide. Every expectation
+ * below was traced through NEU's code paths at this source tree, so a
+ * drift in ZEA's math against NEU's model fails here first.
  */
 class BrowserGeometryTest {
-        /** A scale-3 1080p screen: NEU's own example dimensions. */
-        private static final int SCALE3_WIDTH = 640;
-        private static final int SCALE3_HEIGHT = 360;
+	/** A small window at scale 1 — NEU's low-end case. */
+	private static final BrowserGeometry.Metrics SMALL =
+			BrowserGeometry.metrics(480, 320, 1, 3, 3);
+	/** The typical desktop window at scale 2. */
+	private static final BrowserGeometry.Metrics TYPICAL =
+			BrowserGeometry.metrics(1280, 800, 2, 3, 3);
+	/** A large window at scale 3. */
+	private static final BrowserGeometry.Metrics LARGE =
+			BrowserGeometry.metrics(1920, 1080, 3, 3, 3);
 
-        @Test
-        void paneTakesAThirdOfTheScreenAnchoredRight() {
-                assertEquals(213, BrowserGeometry.paneWidth(SCALE3_WIDTH));
-                assertEquals(427, BrowserGeometry.paneLeft(SCALE3_WIDTH));
-                assertEquals(320, BrowserGeometry.paneWidth(960));
-                assertEquals(640, BrowserGeometry.paneLeft(960));
-        }
+	@Test
+	void paneTakesAThirdOfTheScreen() {
+		assertEquals(160, BrowserGeometry.paneWidth(480));
+		assertEquals(426, BrowserGeometry.paneWidth(1280));
+		assertEquals(640, BrowserGeometry.paneWidth(1920));
+	}
 
-        @Test
-        void paneSpansTheScreenFullHeight() {
-                assertEquals(BrowserGeometry.BOX_PADDING, BrowserGeometry.paneTop());
-                assertEquals(SCALE3_HEIGHT - BrowserGeometry.BOX_PADDING,
-                                BrowserGeometry.paneBottom(SCALE3_HEIGHT));
-                assertEquals(SCALE3_HEIGHT - 2 * BrowserGeometry.BOX_PADDING,
-                                BrowserGeometry.paneHeight(SCALE3_HEIGHT));
-        }
+	@Test
+	void paneLeftFollowsTheAnimatedOffset() {
+		// Closed (factor 1) the pane sits off the screen's right edge.
+		assertEquals(1280, BrowserGeometry.paneLeft(1280, 1f));
+		// Open (NEU's 2/3) the pane's left edge rests at two-thirds.
+		assertEquals((int) (1280 * 2f / 3f), BrowserGeometry.paneLeft(1280, BrowserGeometry.OPEN_OFFSET));
+	}
 
-        @Test
-        void narrowScreensKeepAUsableMinimumPane() {
-                int narrow = 90;
-                int paneWidth = BrowserGeometry.paneWidth(narrow);
-                int columns = BrowserGeometry.columns(paneWidth);
-                assertTrue(columns >= BrowserGeometry.MIN_COLUMNS,
-                                "a 90px screen still carries the minimum grid: " + columns);
-                assertEquals(narrow, BrowserGeometry.paneLeft(narrow) + paneWidth);
-        }
+	@Test
+	void boxPaddingFollowsNeusScaleFormula() {
+		// NEU: (int) (panePadding * 2 / scaleFactor + 5), panePadding 10.
+		assertEquals(25, SMALL.boxPadding);
+		assertEquals(15, TYPICAL.boxPadding);
+		assertEquals(11, LARGE.boxPadding);
+	}
 
-        @Test
-        void gridCenteringMatchesNeusItemBoxPadding() {
-                // NEU: ((paneWidth - 2*box) % stride + padding) / 2 — 213 gives 3.
-                assertEquals(3, BrowserGeometry.itemBoxXPadding(213));
-                assertEquals(7, BrowserGeometry.itemBoxXPadding(320));
-                // NEU: ((height - nav - 2*box - item - 2) % stride + padding) / 2 — 360 gives 10.
-                assertEquals(10, BrowserGeometry.itemBoxYPadding(SCALE3_HEIGHT));
-        }
+	@Test
+	void navStripHeightFollowsNeusSearchBarSize() {
+		// NEU: max(searchBarHeight / scaleFactor, ITEM_SIZE), default 40.
+		assertEquals(40, SMALL.searchBarYSize);
+		assertEquals(20, TYPICAL.searchBarYSize);
+		assertEquals(16, LARGE.searchBarYSize);
+	}
 
-        @Test
-        void gridEdgesLandInsideThePane() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                int gridLeft = BrowserGeometry.gridLeft(paneLeft, paneWidth);
-                int gridTop = BrowserGeometry.gridTop(SCALE3_HEIGHT);
-                int gridBottom = BrowserGeometry.gridBottom(SCALE3_HEIGHT);
-                assertEquals(paneLeft + BrowserGeometry.BOX_PADDING + 3, gridLeft);
-                assertEquals(BrowserGeometry.BOX_PADDING + BrowserGeometry.NAV_HEIGHT + 10, gridTop);
-                assertTrue(gridTop < gridBottom, "the grid's top edge sits above its bottom edge");
-                // NEU: yEnd = height - box - item - 2 - itemBoxYPadding.
-                assertEquals(SCALE3_HEIGHT - BrowserGeometry.BOX_PADDING - BrowserGeometry.ITEM_SIZE - 2 - 10,
-                                gridBottom);
-        }
+	@Test
+	void gridCenteringMatchesNeusItemBoxPadding() {
+		// NEU: ((paneWidth - 2*box) % stride + padding) / 2.
+		assertEquals(7, SMALL.itemBoxXPadding);
+		assertEquals(10, TYPICAL.itemBoxXPadding);
+		assertEquals(11, LARGE.itemBoxXPadding);
+		// NEU: ((height - searchBar - 2*box - item - 2) % stride + padding) / 2.
+		assertEquals(8, SMALL.itemBoxYPadding);
+		assertEquals(8, TYPICAL.itemBoxYPadding);
+		assertEquals(4, LARGE.itemBoxYPadding);
+	}
 
-        @Test
-        void gridDensityMatchesNeusCounts() {
-                // Scale-3 1080p: span 181 → 10 columns; rows span 296 → 15 rows.
-                assertEquals(10, BrowserGeometry.columns(BrowserGeometry.paneWidth(SCALE3_WIDTH)));
-                assertEquals(15, BrowserGeometry.rows(SCALE3_HEIGHT));
-                assertEquals(150, BrowserGeometry.slotsPerPage(
-                                BrowserGeometry.paneWidth(SCALE3_WIDTH), SCALE3_HEIGHT));
-                // Scale-2 1080p: 14 columns, 24 rows.
-                assertEquals(14, BrowserGeometry.columns(BrowserGeometry.paneWidth(960)));
-                assertEquals(24, BrowserGeometry.rows(540));
-        }
+	@Test
+	void columnsAndRowsAreNeusCeilingCounts() {
+		// xEnd - xStart over the stride, ceiling.
+		assertEquals(5, SMALL.columns);
+		assertEquals(19, TYPICAL.columns);
+		assertEquals(30, LARGE.columns);
+		assertEquals(10, SMALL.rows);
+		assertEquals(36, TYPICAL.rows);
+		assertEquals(51, LARGE.rows);
+		assertEquals(50, SMALL.slotsPerPage());
+		assertEquals(684, TYPICAL.slotsPerPage());
+	}
 
-        @Test
-        void pageCountFollowsNeusMaxPages() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                assertEquals(1, BrowserGeometry.maxPages(0, paneWidth, SCALE3_HEIGHT));
-                assertEquals(1, BrowserGeometry.maxPages(150, paneWidth, SCALE3_HEIGHT));
-                assertEquals(2, BrowserGeometry.maxPages(151, paneWidth, SCALE3_HEIGHT));
-                assertEquals(2, BrowserGeometry.maxPages(300, paneWidth, SCALE3_HEIGHT));
-                assertEquals(3, BrowserGeometry.maxPages(301, paneWidth, SCALE3_HEIGHT));
-        }
+	@Test
+	void gridEdgesLandWhereNeusIterationStarts() {
+		// xStart = paneLeft + box + ixp; the typical pane open at 2/3.
+		int paneLeft = BrowserGeometry.paneLeft(1280, BrowserGeometry.OPEN_OFFSET);
+		int gridLeft = BrowserGeometry.gridLeft(TYPICAL, paneLeft);
+		assertEquals(paneLeft + 15 + 10, gridLeft);
+		int gridRight = BrowserGeometry.gridRight(TYPICAL, paneLeft);
+		assertEquals(gridLeft + TYPICAL.paneWidth - 2 * 15 - 16 - 10, gridRight);
+		// yStart = box + searchBar + iyp; yEnd = height - box - item - 2 - iyp.
+		assertEquals(15 + 20 + 8, BrowserGeometry.gridTop(TYPICAL));
+		assertEquals(800 - 15 - 16 - 2 - 8, BrowserGeometry.gridBottom(TYPICAL));
+	}
 
-        @Test
-        void pageClampsOntoTheReachableRange() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                assertEquals(0, BrowserGeometry.clampPage(0, 10, paneWidth, SCALE3_HEIGHT));
-                assertEquals(0, BrowserGeometry.clampPage(5, 10, paneWidth, SCALE3_HEIGHT));
-                assertEquals(1, BrowserGeometry.clampPage(4, 201, paneWidth, SCALE3_HEIGHT));
-                assertEquals(2, BrowserGeometry.clampPage(4, 301, paneWidth, SCALE3_HEIGHT));
-                assertEquals(0, BrowserGeometry.clampPage(-1, 301, paneWidth, SCALE3_HEIGHT));
-        }
+	@Test
+	void sortBarScalesDownOnNarrowPanes() {
+		// NEU: min(1, availableX / ((orders + filters) * 20 + 16)) * ITEM_SIZE.
+		assertEquals(11, SMALL.sortIconSize);
+		assertEquals(13, SMALL.sortStride);
+		assertEquals(320 - 25 - (16 + 11) / 2 - 1, SMALL.sortIconTop);
+		// The typical pane fits all six icons at full size.
+		assertEquals(16, TYPICAL.sortIconSize);
+		assertEquals(20, TYPICAL.sortStride);
+		assertEquals(800 - 15 - 16 - 1, TYPICAL.sortIconTop);
+	}
 
-        @Test
-        void tileHitBoxIsTheItemPlusItsGutter() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                int gridLeft = BrowserGeometry.gridLeft(paneLeft, paneWidth);
-                int gridTop = BrowserGeometry.gridTop(SCALE3_HEIGHT);
-                int columns = BrowserGeometry.columns(paneWidth);
-                // The first tile's center hits index 0 on page zero.
-                int centerX = gridLeft + BrowserGeometry.ITEM_SIZE / 2;
-                int centerY = gridTop + BrowserGeometry.ITEM_SIZE / 2;
-                assertEquals(0, BrowserGeometry.indexAt(centerX, centerY, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 0, 150));
-                // The one-pixel gutter around the tile still hits it — NEU's
-                // `mouseX >= x - 1 && mouseX <= x + ITEM_SIZE + 1`.
-                assertEquals(0, BrowserGeometry.indexAt(gridLeft - 1, gridTop - 1, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 0, 150));
-                assertEquals(0, BrowserGeometry.indexAt(gridLeft + BrowserGeometry.ITEM_SIZE + 1,
-                                gridTop + BrowserGeometry.ITEM_SIZE + 1, paneLeft, paneWidth, SCALE3_HEIGHT, 0, 150));
-                // The stride's middle gap hits nothing.
-                int gapX = gridLeft + BrowserGeometry.ITEM_SIZE + 2;
-                assertEquals(-1, BrowserGeometry.indexAt(gapX, centerY, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 0, 150));
-                // The second column's center hits index 1.
-                int secondX = gridLeft + BrowserGeometry.STRIDE + BrowserGeometry.ITEM_SIZE / 2;
-                assertEquals(1, BrowserGeometry.indexAt(secondX, centerY, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 0, 150));
-                // Past the visible result count hits nothing.
-                assertEquals(-1, BrowserGeometry.indexAt(centerX, centerY, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 0, 0));
-                // A tile on page one carries its page offset — one full page of slots.
-                int pageOne = BrowserGeometry.indexAt(centerX, centerY, paneLeft, paneWidth,
-                                SCALE3_HEIGHT, 1, 150 + columns);
-                assertEquals(BrowserGeometry.slotsPerPage(paneWidth, SCALE3_HEIGHT), pageOne);
-        }
+	@Test
+	void maxPagesIsNeusCeilingOverThePageCapacity() {
+		assertEquals(1, BrowserGeometry.maxPages(0, TYPICAL));
+		assertEquals(1, BrowserGeometry.maxPages(684, TYPICAL));
+		assertEquals(2, BrowserGeometry.maxPages(685, TYPICAL));
+		assertEquals(0, BrowserGeometry.clampPage(5, 10, TYPICAL));
+		assertEquals(1, BrowserGeometry.clampPage(1, 685, TYPICAL));
+	}
 
-        @Test
-        void navButtonsSpanThePaneTopWithoutOverlapping() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                List<int[]> buttons = BrowserGeometry.navButtons(paneLeft, paneWidth, SCALE3_HEIGHT);
-                assertEquals(3, buttons.size());
-                int[] prev = buttons.get(0);
-                int[] pill = buttons.get(1);
-                int[] next = buttons.get(2);
-                assertEquals(0, prev[4]);
-                assertEquals(1, pill[4]);
-                assertEquals(2, next[4]);
-                assertTrue(prev[0] + prev[2] <= pill[0], "Prev ends before the pill starts");
-                assertTrue(pill[0] + pill[2] <= next[0], "the pill ends before Next starts");
-                assertEquals(BrowserGeometry.BOX_PADDING, prev[1]);
-                assertEquals(BrowserGeometry.NAV_HEIGHT, prev[3]);
-                assertEquals(BrowserGeometry.NAV_HEIGHT, pill[3]);
-        }
+	@Test
+	void tileHitBoxIsTheItemPlusItsGutter() {
+		int paneLeft = BrowserGeometry.paneLeft(1280, BrowserGeometry.OPEN_OFFSET);
+		int gridLeft = BrowserGeometry.gridLeft(TYPICAL, paneLeft);
+		int gridTop = BrowserGeometry.gridTop(TYPICAL);
+		// The first tile's own box, one pixel inside its gutter.
+		assertEquals(0, BrowserGeometry.indexAt(gridLeft + 1, gridTop + 1, TYPICAL, paneLeft, 0, 100));
+		// The second column's tile.
+		assertEquals(1, BrowserGeometry.indexAt(gridLeft + 21, gridTop + 1, TYPICAL, paneLeft, 0, 100));
+		// The single-pixel gutter between the hit boxes lands
+		// nowhere — NEU's rule: cell 0 spans [left-1, left+17], cell
+		// 1 starts at left+19, so only left+18 falls between.
+		assertEquals(-1, BrowserGeometry.indexAt(gridLeft + 18, gridTop + 1, TYPICAL, paneLeft, 0, 100));
+		assertEquals(1, BrowserGeometry.indexAt(gridLeft + 19, gridTop + 1, TYPICAL, paneLeft, 0, 100));
+		// Past the last column, nothing.
+		assertEquals(-1, BrowserGeometry.indexAt(
+				gridLeft + TYPICAL.columns * 20 + 4, gridTop + 1, TYPICAL, paneLeft, 0, 100));
+	}
 
-        @Test
-        void closeButtonSitsRightOfTheNav() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                List<int[]> buttons = BrowserGeometry.navButtons(paneLeft, paneWidth, SCALE3_HEIGHT);
-                int[] next = buttons.get(2);
-                int[] close = BrowserGeometry.closeButton(paneLeft, paneWidth, SCALE3_HEIGHT);
-                assertTrue(close[0] >= next[0] + next[2], "the close button sits right of Next");
-        }
+	@Test
+	void navButtonsDeriveFromTheSearchBarHeight() {
+		// NEU: buttonXSize = min(maxButtonXSize, searchBarYSize * 3),
+		// ySize = buttonXSize / 3; the font widths come from a fake
+		// so the numbers stay deterministic.
+		int paneLeft = BrowserGeometry.paneLeft(1280, BrowserGeometry.OPEN_OFFSET);
+		List<int[]> buttons = BrowserGeometry.navButtons(TYPICAL, paneLeft, 12,
+				text -> text.length() * 6f);
+		int[] prev = buttons.get(0);
+		int[] pill = buttons.get(1);
+		int[] next = buttons.get(2);
+		assertEquals(60, prev[2]);
+		assertEquals(20, prev[3]);
+		int gridLeft = BrowserGeometry.gridLeft(TYPICAL, paneLeft);
+		int gridRight = BrowserGeometry.gridRight(TYPICAL, paneLeft);
+		assertEquals(gridLeft - 1, prev[0]);
+		assertEquals(15, prev[1]);
+		assertEquals(gridRight + 1 - 60, next[0]);
+		assertEquals(gridLeft - 1 + 60 + 3, pill[0]);
+		assertEquals(gridRight + 1 - 60 - 3, pill[0] + pill[2]);
+	}
 
-        @Test
-        void filterIconsAnchorToTheBarsRightEdge() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                List<int[]> filters = BrowserGeometry.filterIcons(paneLeft, paneWidth, SCALE3_HEIGHT, 3);
-                assertEquals(3, filters.size());
-                int gridLeft = BrowserGeometry.gridLeft(paneLeft, paneWidth);
-                int barRight = gridLeft + BrowserGeometry.columns(paneWidth) * BrowserGeometry.STRIDE
-                                - BrowserGeometry.ITEM_PADDING;
-                int[] rightmost = filters.get(0);
-                assertEquals(barRight, rightmost[0] + rightmost[2],
-                                "the first filter icon's right edge is the bar's right edge");
-                // NEU's category icons flow right to left: each next icon sits one
-                // stride to the left of the one before it.
-                int[] middle = filters.get(1);
-                int[] leftmost = filters.get(2);
-                assertEquals(rightmost[0] - BrowserGeometry.STRIDE, middle[0]);
-                assertEquals(middle[0] - BrowserGeometry.STRIDE, leftmost[0]);
-                // The order icons anchor to the bar's left edge instead.
-                List<int[]> orders = BrowserGeometry.orderIcons(paneLeft, paneWidth, SCALE3_HEIGHT, 3);
-                assertEquals(gridLeft, orders.get(0)[0], "the first order icon's left edge is the bar's left edge");
-        }
+	@Test
+	void sortIconsAnchorLeftAndRight() {
+		List<int[]> orders = BrowserGeometry.orderIcons(TYPICAL, BrowserGeometry.paneLeft(1280,
+				BrowserGeometry.OPEN_OFFSET), 3);
+		List<int[]> filters = BrowserGeometry.filterIcons(TYPICAL, BrowserGeometry.paneLeft(1280,
+				BrowserGeometry.OPEN_OFFSET), 3);
+		int gridLeft = BrowserGeometry.gridLeft(TYPICAL, BrowserGeometry.paneLeft(1280,
+				BrowserGeometry.OPEN_OFFSET));
+		int gridRight = BrowserGeometry.gridRight(TYPICAL, BrowserGeometry.paneLeft(1280,
+				BrowserGeometry.OPEN_OFFSET));
+		assertEquals(gridLeft, orders.get(0)[0]);
+		assertEquals(gridLeft + 20, orders.get(1)[0]);
+		assertEquals(gridLeft + 40, orders.get(2)[0]);
+		assertEquals(gridRight - 16, filters.get(0)[0]);
+		assertEquals(gridRight - 36, filters.get(1)[0]);
+		assertEquals(gridRight - 56, filters.get(2)[0]);
+		assertEquals(TYPICAL.sortIconTop, orders.get(0)[1]);
+	}
 
-        @Test
-        void sortIconsShrinkWhenThePaneIsNarrow() {
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                assertEquals(BrowserGeometry.ITEM_SIZE,
-                                BrowserGeometry.sortIconSize(paneWidth, ItemBrowser.SORT_ICON_COUNT),
-                                "a full-size pane keeps the icons at full size");
-                int tinyPane = 40;
-                assertTrue(BrowserGeometry.sortIconSize(tinyPane, ItemBrowser.SORT_ICON_COUNT)
-                                < BrowserGeometry.ITEM_SIZE, "a tiny pane shrinks the icons");
-        }
+	@Test
+	void edgeTabSlidesWithNeusOffset() {
+		// Closed: the 64 px arrow fully visible at the screen's edge.
+		assertEquals(1216, BrowserGeometry.tabBox(1280, 800, 20)[0]);
+		assertEquals(368, BrowserGeometry.tabBox(1280, 800, 20)[1]);
+		// Open: slid off the screen.
+		assertEquals(1280, BrowserGeometry.tabBox(1280, 800, 0)[0]);
+		// The hover region is only the protruding strip — NEU's rule.
+		assertTrue(BrowserGeometry.tabHover(1280, 20, 1270, 400, 800));
+		assertFalse(BrowserGeometry.tabHover(1280, 20, 1250, 400, 800));
+		assertFalse(BrowserGeometry.tabHover(1280, 20, 1270, 300, 800));
+	}
 
-        @Test
-        void reopenTabSitsAtTheScreensRightEdgeVerticallyCentered() {
-                int[] tab = BrowserGeometry.tabBox(SCALE3_WIDTH, SCALE3_HEIGHT);
-                assertEquals(SCALE3_WIDTH - BrowserGeometry.TAB_WIDTH, tab[0]);
-                assertEquals(SCALE3_HEIGHT / 2 - BrowserGeometry.TAB_HEIGHT / 2, tab[1]);
-                assertEquals(BrowserGeometry.TAB_WIDTH, tab[2]);
-                assertEquals(BrowserGeometry.TAB_HEIGHT, tab[3]);
-        }
+	@Test
+	void infoPaneAnchorsAtOneThirdWithNeusCloseButton() {
+		float open = BrowserGeometry.INFO_OPEN_OFFSET;
+		assertEquals((int) (1280 * open), BrowserGeometry.infoPaneRight(TYPICAL, open));
+		assertEquals(0, BrowserGeometry.infoPaneLeft(TYPICAL, open));
+		int[] close = BrowserGeometry.infoCloseButton(TYPICAL, open);
+		assertEquals(426 - 15 - 8, close[0]);
+		assertEquals(15 - 8, close[1]);
+		assertEquals(16, close[2]);
+	}
 
-        @Test
-        void pointContainmentCoversTheRectangles() {
-                assertTrue(BrowserGeometry.contains(10, 10, 5, 5, 10, 10));
-                assertTrue(BrowserGeometry.contains(10, 10, 5, 5, 14, 14));
-                assertFalse(BrowserGeometry.contains(10, 10, 5, 5, 15, 10));
-                assertFalse(BrowserGeometry.contains(10, 10, 5, 5, 10, 15));
-                int paneWidth = BrowserGeometry.paneWidth(SCALE3_WIDTH);
-                int paneLeft = BrowserGeometry.paneLeft(SCALE3_WIDTH);
-                assertTrue(BrowserGeometry.inPane(paneLeft, paneWidth, SCALE3_HEIGHT,
-                                paneLeft + paneWidth / 2, BrowserGeometry.paneTop() + 20));
-                assertFalse(BrowserGeometry.inPane(paneLeft, paneWidth, SCALE3_HEIGHT, paneLeft - 1, 50));
-                assertFalse(BrowserGeometry.inPane(paneLeft, paneWidth, SCALE3_HEIGHT, 10, 50));
-        }
+	@Test
+	void paneRegionGateFollowsTheAnimatedEdge() {
+		// NEU: clicks right of the moving edge are the pane's.
+		assertTrue(BrowserGeometry.inPane(BrowserGeometry.OPEN_OFFSET, TYPICAL, 900, 400));
+		assertFalse(BrowserGeometry.inPane(BrowserGeometry.OPEN_OFFSET, TYPICAL, 850, 400));
+	}
+
+	@Test
+	void narrowScreensKeepAUsableMinimumPane() {
+		int narrow = BrowserGeometry.paneWidth(90);
+		BrowserGeometry.Metrics m = BrowserGeometry.metrics(90, 240, 2, 3, 3);
+		assertTrue(m.columns >= BrowserGeometry.MIN_COLUMNS,
+				"a 90px screen still carries the minimum grid: " + m.columns);
+		assertEquals(90, BrowserGeometry.paneLeft(90, 1f) - narrow + narrow);
+	}
 }

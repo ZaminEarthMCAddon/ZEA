@@ -17,6 +17,9 @@ public interface EditBoxAccessor {
 	@Accessor("displayPos")
 	int zea$displayPos();
 
+	@Accessor("highlightPos")
+	int zea$highlightPos();
+
 	@Accessor("textX")
 	int zea$textX();
 }

@@ -15,70 +15,41 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The inventory search bar: a real Minecraft text field shown beneath the
- * container GUI. It is a plain vanilla {@link EditBox} with its native
- * bordered look — the {@code widget/text_field} sprites, which draw the
- * background, the border on all four sides and swap to the highlighted
- * variant while the field is focused — so the field reads as part of the
- * GUI instead of a floating translucent strip. Vanilla also owns the text
- * layout: bordered fields indent the text four pixels from the left edge
- * and center it vertically by the font metrics ({@code (height - 8) / 2}),
- * which keeps the text, selection and cursor inside the field at every
- * GUI scale.
+ * The inventory search bar, drawn as NEU's search bar: the
+ * nine-slice {@code search_bar} texture (a 20×20 plate with a 4-pixel
+ * border, tiled as NEU tiles it — corners fixed, edges and center
+ * stretched), the white value five pixels in from the left and centered
+ * on the bar's height, the blinking white cursor, the light-gray
+ * selection with the black text drawn over it, and the gold variant of
+ * the texture while matching mode is active. Flanking square plates —
+ * NEU's {@code quickcommand_background} with the settings gear and the
+ * search-mode magnifier — are drawn by
+ * {@link #extractWidgetRenderState} too and hit-tested through
+ * {@link SearchBarLayout}; the settings plate opens ZEA's config, the
+ * mode plate toggles matching mode exactly like NEU's search-mode
+ * button.
  *
- * <p>The bar keeps two state visuals of its own, drawn over the sprite:
- * the gold outline while inventory-matching mode is active (NEU tinted
- * its bar gold the same way), and a quiet white frame while the mouse is
- * over an unfocused field — the hovered state the vanilla sprites do not
- * carry. There is deliberately no placeholder text: an empty field is a
- * clean empty field, and the search button and double-click affordance
- * teach the interaction.
- *
- * <p>The calculator result is an overlay, never the field's value: the
- * expression stays exactly as typed and the {@code = result} rides on
- * top, drawn <b>immediately after the typed text</b> — {@code 2+2 = 4}
- * reads as one line, instead of the result floating at the far end of
- * the bar. The placement follows the visible text (the field scrolls),
- * and when the expression grows long enough that the result no longer
- * fits beside it, the result moves into a small floating box under the
- * bar — NotEnoughCalculator's fallback — with the same slow marquee
- * scroll NEC uses for long numbers. A bare number or a plain word shows
- * nothing at all ({@link Calculator} gates that), so typing {@code 2}
- * no longer echoes {@code = 2}.
- *
- * <p>While the calculator is active the field also carries a
- * {@link EditBox.TextFormatter} that colors the expression by token
- * class — NEC's palette: numbers, units, functions, operators,
- * variables — computed from the full value so tokens split by the
- * caret still color correctly.
- *
- * <p>Position and size are decided by the shared layout math
- * ({@link SearchBarLayout}) used identically by the runtime container
- * mixin and the button editor's preview — the editor previews this exact
- * widget, not a lookalike. The bar is horizontally centered on the
- * container GUI's own bounds (never the framebuffer) and sits near the
- * screen's bottom edge.
+ * <p>Underneath the NEU skin it is still a real {@link EditBox}: the
+ * keyboard machinery — caret movement, selection, clipboard, the held
+ * key repeat, the focus rules the inventory depends on — stays vanilla's,
+ * and the calculator coloring rides the same formatter it always did.
+ * Only the drawing is NEU's. The calculator result overlay keeps its
+ * placement after the visible text (the field scrolls long input and
+ * vanilla exposes neither {@code displayPos} nor the drawn {@code textX},
+ * hence the accessor), with NEC's floating box as the fallback when the
+ * bar runs out of room.
  *
  * <p>Focus arrives programmatically (click routing in the container
  * mixin) and Tab/arrows are refused like the chat search bar, so the
  * field never joins the screen's focus navigation.
  */
 public final class SearchBarWidget extends EditBox {
-	/** Height of the bar — vanilla's standard field height, which the field sprites are drawn for. */
-	public static final int HEIGHT = 20;
-
-	/**
-	 * Horizontal inset between the bar and the container GUI's side
-	 * edges: the bar is centered on the GUI's bounds, not the
-	 * framebuffer, and reads as attached to it.
-	 */
-	public static final int MARGIN = 8;
-
-	/** Gap between the bar and the bottom edge of the screen. */
-	public static final int BOTTOM_MARGIN = 5;
-
-	private static final int MATCHING_BORDER = 0xFFE8B14A;
-	private static final int HOVER_BORDER = 0x64FFFFFF;
+	/** The nine-slice texture's edge width, in texture pixels — NEU's 4-of-20 slices. */
+	private static final float SLICE = 4f / 20f;
+	private static final int TEXT_COLOR = 0xFFFFFFFF;
+	private static final int CURSOR_COLOR = 0xFFFFFFFF;
+	private static final int SELECTION_COLOR = 0xFFC8C8C8;
+	private static final int SELECTED_TEXT_COLOR = 0xFF000000;
 	private static final int RESULT_BACKDROP = 0xB0000000;
 	private static final int FLOATING_BACKDROP = 0xEE000000;
 	private static final int RESULT_EQUALS_COLOR = 0xFFFFFF55;
@@ -94,8 +65,8 @@ public final class SearchBarWidget extends EditBox {
 	private String highlightInput;
 	private int[] highlightColors;
 
-	public SearchBarWidget(Font font, int x, int y, int width, InventorySearch search) {
-		super(font, x, y, width, HEIGHT, Component.translatable("zea.search.bar"));
+	public SearchBarWidget(Font font, int x, int y, int width, int height, InventorySearch search) {
+		super(font, x, y, width, height, Component.translatable("zea.search.bar"));
 		setMaxLength(Calculator.MAX_INPUT_LENGTH);
 		addFormatter(this::zea$highlight);
 		this.search = search;
@@ -110,33 +81,135 @@ public final class SearchBarWidget extends EditBox {
 	@Override
 	public void extractWidgetRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY,
 			float partialTick) {
-		super.extractWidgetRenderState(extractor, mouseX, mouseY, partialTick);
 		if (!visible) {
 			return;
 		}
-		// State visuals go over the vanilla sprite, never under it:
-		// the sprite would cover anything drawn first.
-		if (search.mode() == InventorySearch.Mode.MATCHING) {
-			// One-pixel frame just outside the field's own border,
-			// so all four sides stay visible against both the
-			// sprite and the GUI behind it.
-			drawFrame(extractor, getX() - 1, getY() - 1, getWidth() + 2, getHeight() + 2,
-							MATCHING_BORDER);
-		} else if (!isFocused()
-						&& ButtonGeometry.contains(getX(), getY(), getWidth(), getHeight(), mouseX, mouseY)) {
-			drawFrame(extractor, getX(), getY(), getWidth(), getHeight(), HOVER_BORDER);
-		}
+		drawFlankingButtons(extractor);
+		drawBarBackground(extractor);
+		drawValue(extractor);
 		if (calculatorEnabled && search.mode() == InventorySearch.Mode.CALCULATOR) {
 			drawResult(extractor);
 		}
 	}
 
-	/** A one-pixel frame around a rectangle — the bar's own state outline. */
-	private static void drawFrame(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int color) {
-		extractor.fill(x, y, x + w, y + 1, color);
-		extractor.fill(x, y + h - 1, x + w, y + h, color);
-		extractor.fill(x, y + 1, x + 1, y + h - 1, color);
-		extractor.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
+	/** The settings and search-mode plates flanking the bar — NEU's group. */
+	private void drawFlankingButtons(GuiGraphicsExtractor extractor) {
+		int scaleFactor = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
+		int[] settings = SearchBarLayout.settingsButton(getScreenWidth(), getScreenHeight(), scaleFactor);
+		int[] mode = SearchBarLayout.modeButton(getScreenWidth(), getScreenHeight(), scaleFactor);
+		drawPlate(extractor, settings);
+		drawPlate(extractor, mode);
+		int inset = SearchBarLayout.buttonPadding(scaleFactor);
+		extractor.blit(net.zaminmc.zea.browser.NeuTextures.SETTINGS,
+				settings[0] + inset, settings[1] + inset,
+				settings[0] + inset + settings[2] - 2 * inset,
+				settings[1] + inset + settings[3] - 2 * inset, 0f, 1f, 0f, 1f);
+		extractor.blit(net.zaminmc.zea.browser.NeuTextures.SEARCH_MODE_BUTTON,
+				mode[0] + inset, mode[1] + inset,
+				mode[0] + inset + mode[2] - 2 * inset,
+				mode[1] + inset + mode[3] - 2 * inset, 0f, 1f, 0f, 1f);
+	}
+
+	/** One square button plate — NEU's quickcommand_background. */
+	private static void drawPlate(GuiGraphicsExtractor extractor, int[] rect) {
+		extractor.blit(net.zaminmc.zea.browser.NeuTextures.QUICKCOMMAND_BACKGROUND,
+				rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3], 0f, 1f, 0f, 1f);
+	}
+
+	/**
+	 * The bar's background: NEU's nine-slice, three by three — the
+	 * 4-pixel corners fixed, the edges and center stretched — the gold
+	 * texture while matching mode is active.
+	 */
+	private void drawBarBackground(GuiGraphicsExtractor extractor) {
+		var texture = search.mode() == InventorySearch.Mode.MATCHING
+				? net.zaminmc.zea.browser.NeuTextures.SEARCH_BAR_GOLD
+				: net.zaminmc.zea.browser.NeuTextures.SEARCH_BAR;
+		int x = getX();
+		int y = getY();
+		int w = getWidth();
+		int h = getHeight();
+		for (int yIndex = 0; yIndex <= 2; yIndex++) {
+			for (int xIndex = 0; xIndex <= 2; xIndex++) {
+				float uMin = 0;
+				float uMax = SLICE;
+				int partX = x;
+				int partW = 4;
+				if (xIndex == 1) {
+					partX = x + 4;
+					uMin = SLICE;
+					uMax = 1 - SLICE;
+					partW = w - 8;
+				} else if (xIndex == 2) {
+					partX = x + w - 4;
+					uMin = 1 - SLICE;
+					uMax = 1f;
+				}
+				float vMin = 0;
+				float vMax = SLICE;
+				int partY = y;
+				int partH = 4;
+				if (yIndex == 1) {
+					partY = y + 4;
+					vMin = SLICE;
+					vMax = 1 - SLICE;
+					partH = h - 8;
+				} else if (yIndex == 2) {
+					partY = y + h - 4;
+					vMin = 1 - SLICE;
+					vMax = 1f;
+				}
+				extractor.blit(texture, partX, partY, partX + partW, partY + partH,
+						uMin, uMax, vMin, vMax);
+			}
+		}
+	}
+
+	/** The value, the selection and the blinking cursor — NEU's draw order. */
+	private void drawValue(GuiGraphicsExtractor extractor) {
+		int x = getX() + SearchBarLayout.TEXT_INSET;
+		int y = getY() + (getHeight() - font.lineHeight) / 2 + 1;
+		String value = getValue();
+		int displayPos = zea$displayPos();
+		String displayed = zea$visibleText();
+		FormattedCharSequence styled = zea$highlight(displayed, displayPos);
+		extractor.text(font, styled != null ? styled
+				: FormattedCharSequence.forward(displayed, Style.EMPTY.withColor(TEXT_COLOR)),
+				x, y, TEXT_COLOR, false);
+
+		// The selection: the light-gray plate and the black text over it.
+		String selectedText = getHighlighted();
+		if (!selectedText.isEmpty()) {
+			int selectionWidth = font.width(selectedText);
+			int leftIndex = Math.min(getCursorPosition(), ((EditBoxAccessor) (Object) this).zea$highlightPos());
+			int selX = x + font.width(value.substring(Math.min(displayPos, leftIndex),
+					Math.max(displayPos, leftIndex)));
+			extractor.fill(selX, y - 1, selX + selectionWidth, y + 9, SELECTION_COLOR);
+			extractor.text(font, selectedText, selX, y, SELECTED_TEXT_COLOR, false);
+		}
+
+		// The cursor: a one-pixel white bar, blinking on the half-second.
+		if (isFocused() && System.currentTimeMillis() % 1000 > 500) {
+			int cursorPos = getCursorPosition();
+			if (cursorPos >= displayPos && cursorPos <= displayPos + displayed.length()) {
+				int cursorX = x + font.width(value.substring(displayPos, cursorPos));
+				extractor.fill(cursorX, y - 1, cursorX + 1, y + 9, CURSOR_COLOR);
+			}
+		}
+	}
+
+	/** Where the visible substring starts — the EditBox scroll position. */
+	private int zea$displayPos() {
+		EditBoxAccessor self = (EditBoxAccessor) (Object) this;
+		int pos = self.zea$displayPos();
+		return Math.max(0, Math.min(pos, getValue().length()));
+	}
+
+	/** The displayed substring, clipped to the bar's inner width. */
+	private String zea$visibleText() {
+		String value = getValue();
+		int innerWidth = getWidth() - 2 * SearchBarLayout.TEXT_INSET;
+		return font.plainSubstrByWidth(value.substring(zea$displayPos()), innerWidth);
 	}
 
 	/**
@@ -159,14 +232,12 @@ public final class SearchBarWidget extends EditBox {
 
 		// Where the visible text ends: the field scrolls long input,
 		// so the anchor is the displayed substring, not the value.
-		EditBoxAccessor self = (EditBoxAccessor) (Object) this;
-		String displayed = font.plainSubstrByWidth(
-						input.substring(self.zea$displayPos()), getInnerWidth());
-		int textEndX = self.zea$textX() + font.width(displayed);
+		String displayed = zea$visibleText();
+		int textEndX = getX() + SearchBarLayout.TEXT_INSET + font.width(displayed);
 		if (textEndX + 2 + totalWidth < getX() + getWidth()) {
-			int textY = getY() + (HEIGHT - font.lineHeight + 1) / 2;
+			int textY = getY() + (getHeight() - font.lineHeight + 1) / 2;
 			int x = textEndX + 2;
-			extractor.fill(x - 2, getY(), x + totalWidth + 1, getY() + HEIGHT, RESULT_BACKDROP);
+			extractor.fill(x - 2, getY(), x + totalWidth + 1, getY() + getHeight(), RESULT_BACKDROP);
 			extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
 			extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
 			return;
@@ -182,7 +253,7 @@ public final class SearchBarWidget extends EditBox {
 	 */
 	private void zea$drawFloatingResult(GuiGraphicsExtractor extractor, String equals, int totalWidth) {
 		int boxWidth = Math.min(totalWidth + 6, getWidth());
-		int boxHeight = HEIGHT + 2;
+		int boxHeight = getHeight() + 2;
 		int boxY = getY() + getHeight() + 1;
 		if (boxY + boxHeight > extractor.guiHeight()) {
 			boxY = getY() - boxHeight - 1;
@@ -202,6 +273,14 @@ public final class SearchBarWidget extends EditBox {
 		extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
 		extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
 		extractor.disableScissor();
+	}
+
+	private int getScreenWidth() {
+		return net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+	}
+
+	private int getScreenHeight() {
+		return net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
 	}
 
 	/**

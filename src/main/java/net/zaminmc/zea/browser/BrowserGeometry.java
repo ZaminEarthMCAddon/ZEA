@@ -7,317 +7,379 @@ import java.util.List;
  * that answers where the pane sits and where its cells land, so
  * rendering and hit-testing can never drift apart.
  *
- * <p>The layout is NEU's item-pane math, reproduced from
- * {@code NEUOverlay.iterateItemSlots} / {@code getSlotsXSize} /
- * {@code getSlotsYSize} / {@code renderNavElement} and adapted to the
- * modern API's scaled coordinate space: the pane anchors to the screen's
- * right edge and spans the screen's full height, the grid centers inside
- * the pane by splitting the leftover width in half, and a sort bar
- * occupies the pane's bottom strip. At a scale-3 1080p screen this is
- * NEU's nine-column, full-height grid; at other scales and resolutions
- * the same formulas keep the same density.
+ * <p>Every formula here is NEU's own, taken from
+ * {@code NEUOverlay.java} — not approximated from screenshots: the box
+ * padding ({@code getBoxPadding}: {@code panePadding * 2 / scaleFactor + 5}
+ * with the default {@code panePadding} of 10), the search-bar band the
+ * nav strip occupies ({@code getSearchBarYSize}: {@code max(40 / scaleFactor, 16)}),
+ * the grid's centering paddings ({@code getItemBoxXPadding} /
+ * {@code getItemBoxYPadding}, the leftover split in half), the ceiling
+ * column and row counts ({@code getSlotsXSize} / {@code getSlotsYSize}),
+ * the nav buttons' size from the search bar's height
+ * ({@code renderNavElement}: {@code min(maxButtonXSize, searchBarYSize * 3)}),
+ * the sort bar's scaling ({@code sortOrderScaleFactor}) and the edge
+ * tab's 64 px texture. What NEU computes against its 1.8.9
+ * {@code ScaledResolution} is computed here against 26.3's scaled
+ * coordinate space; the numbers are the numbers NEU's formulas produce.
  *
- * <p>The pane's width is a third of the screen — NEU's default
- * {@code width / 3 * paneWidthMult(1.0)}; the grid's stride is 20 px
- * (a 16 px item plus 4 px padding, NEU's {@code ITEM_SIZE} +
- * {@code ITEM_PADDING}); the tile hit box is the item plus a one-pixel
- * gutter, NEU's {@code mouseX >= x - 1 && mouseX <= x + ITEM_SIZE + 1}.
+ * <p>The pane's left edge is the caller's input — it animates (the slide
+ * between the closed and the open position), so every pane-anchored box
+ * is a function of that edge, exactly as NEU's
+ * {@code getItemPaneOffsetFactor()} feeds every draw and every hit test.
  */
 public final class BrowserGeometry {
-        /** A tile's 16 px item icon — NEU's {@code ITEM_SIZE}. */
-        public static final int ITEM_SIZE = 16;
+	/** A tile's 16 px item icon — NEU's {@code ITEM_SIZE}. */
+	public static final int ITEM_SIZE = 16;
 
-        /** The gap between tiles — NEU's {@code ITEM_PADDING}. */
-        public static final int ITEM_PADDING = 4;
+	/** The gap between tiles — NEU's {@code ITEM_PADDING}. */
+	public static final int ITEM_PADDING = 4;
 
-        /** The stride of one grid column or row: item plus padding. */
-        public static final int STRIDE = ITEM_SIZE + ITEM_PADDING;
+	/** The stride of one grid column or row: item plus padding. */
+	public static final int STRIDE = ITEM_SIZE + ITEM_PADDING;
 
-        /** The pane's inset from the screen's edges — NEU's box padding. */
-        public static final int BOX_PADDING = 5;
+	/** NEU's open offset: the pane's left edge rests at two-thirds of the screen. */
+	public static final float OPEN_OFFSET = 2f / 3f;
 
-        /**
-         * The pane's background bleeds this far past the content box, NEU's
-         * {@code drawRect(left + box - 5, box - 5, ...)}.
-         */
-        public static final int BACKGROUND_BLEED = 5;
+	/** NEU's info-pane offset: the left pane's right edge rests at one-third. */
+	public static final float INFO_OPEN_OFFSET = 1f / 3f;
 
-        /** The top strip the nav element occupies (NEU reserves the search bar's height). */
-        public static final int NAV_HEIGHT = 16;
+	/** The edge tab's texture size — NEU's 64 px {@code item_pane_tab_arrow}. */
+	public static final int TAB_TEXTURE_SIZE = 64;
 
-        /** The bottom strip the sort bar occupies: the icon plus its two-pixel frame. */
-        public static final int SORT_BAR_HEIGHT = ITEM_SIZE + 2;
+	/** The closed tab's rest offset — NEU's {@code LerpingInteger(20, 50)} start. */
+	public static final int TAB_CLOSED_OFFSET = 20;
 
-        /** The fewest columns a pane keeps; a screen this narrow still gets a usable grid. */
-        public static final int MIN_COLUMNS = 3;
+	/** NEU's default {@code itemlist.panePadding} (the config default). */
+	public static final int PANE_PADDING = 10;
 
-        /** The most columns a wide screen may show — a sanity bound NEU never reaches. */
-        public static final int MAX_COLUMNS = 30;
+	/** NEU's default {@code toolbar.searchBarHeight}, raw pixels. */
+	public static final int SEARCH_BAR_RAW_HEIGHT = 40;
 
-        /** The nav element's button width: thrice its height, like NEU's 480×160 arrows. */
-        public static final int NAV_BUTTON_WIDTH = NAV_HEIGHT * 3;
+	/** The fewest columns a pane keeps; a screen this narrow still gets a usable grid. */
+	public static final int MIN_COLUMNS = 3;
 
-        /** The reopen tab's size, NEU's edge tab shrunken to a discreet strip. */
-        public static final int TAB_WIDTH = 6;
-        public static final int TAB_HEIGHT = 32;
+	/** The most columns a wide screen may show — a sanity bound NEU never reaches. */
+	public static final int MAX_COLUMNS = 30;
 
-        private BrowserGeometry() {
-        }
+	private BrowserGeometry() {
+	}
 
-        // ------------------------------------------------------------------
-        // Pane
-        // ------------------------------------------------------------------
+	/**
+	 * The scale-dependent constants, resolved once per frame from the
+	 * screen rectangle and the GUI scale factor — NEU reads the same
+	 * values off its {@code ScaledResolution} and the config defaults.
+	 */
+	public static final class Metrics {
+		public final int screenWidth;
+		public final int screenHeight;
+		/** NEU's {@code getBoxPadding()}. */
+		public final int boxPadding;
+		/** NEU's {@code getSearchBarYSize()}: the nav strip's height. */
+		public final int searchBarYSize;
+		/** The pane's width: a third of the screen ({@code paneWidthMult} 1.0). */
+		public final int paneWidth;
+		/** NEU's {@code getItemBoxXPadding()}. */
+		public final int itemBoxXPadding;
+		/** NEU's {@code getItemBoxYPadding()}. */
+		public final int itemBoxYPadding;
+		/** NEU's {@code getSlotsXSize()}. */
+		public final int columns;
+		/** NEU's {@code getSlotsYSize()}. */
+		public final int rows;
+		/** The sort bar's scaled icon size — NEU's {@code sortOrderScaleFactor}. */
+		public final int sortIconSize;
+		public final int sortStride;
+		public final int sortIconTop;
 
-        /** The pane's width: a third of the screen, never beyond it. */
-        public static int paneWidth(int screenWidth) {
-                int third = screenWidth / 3;
-                int minPane = minPaneWidth();
-                return Math.min(Math.max(third, minPane), Math.max(minPane, screenWidth));
-        }
+		Metrics(int screenWidth, int screenHeight, int boxPadding, int searchBarYSize,
+				int paneWidth, int itemBoxXPadding, int itemBoxYPadding,
+				int columns, int rows, int sortIconSize, int sortStride, int sortIconTop) {
+			this.screenWidth = screenWidth;
+			this.screenHeight = screenHeight;
+			this.boxPadding = boxPadding;
+			this.searchBarYSize = searchBarYSize;
+			this.paneWidth = paneWidth;
+			this.itemBoxXPadding = itemBoxXPadding;
+			this.itemBoxYPadding = itemBoxYPadding;
+			this.columns = columns;
+			this.rows = rows;
+			this.sortIconSize = sortIconSize;
+			this.sortStride = sortStride;
+			this.sortIconTop = sortIconTop;
+		}
 
-        /** The narrowest pane that still fits the minimum grid. */
-        public static int minPaneWidth() {
-                int width = minimumGridWidth();
-                return 2 * BOX_PADDING + 2 * itemBoxXPadding(width) + width;
-        }
+		public int slotsPerPage() {
+			return columns * rows;
+		}
+	}
 
-        /** The minimum grid's width for the minimum column count. */
-        private static int minimumGridWidth() {
-                return (MIN_COLUMNS - 1) * STRIDE + ITEM_SIZE;
-        }
+	/** The metrics for a screen at a GUI scale factor. */
+	public static Metrics metrics(int screenWidth, int screenHeight, int scaleFactor,
+			int orderIconCount, int filterIconCount) {
+		int boxPadding = (int) (PANE_PADDING * 2f / Math.max(1, scaleFactor) + 5);
+		int searchBarYSize = Math.max(SEARCH_BAR_RAW_HEIGHT / Math.max(1, scaleFactor), ITEM_SIZE);
+		int paneWidth = paneWidth(screenWidth);
+		int itemBoxXPadding = ((paneWidth - 2 * boxPadding) % STRIDE + ITEM_PADDING) / 2;
+		int itemBoxYPadding = ((screenHeight - searchBarYSize - 2 * boxPadding - ITEM_SIZE - 2)
+				% STRIDE + ITEM_PADDING) / 2;
+		int gridLeft = boxPadding + itemBoxXPadding;
+		int xEnd = gridLeft + paneWidth - 2 * boxPadding - ITEM_SIZE - itemBoxXPadding;
+		int columns = Math.max(MIN_COLUMNS,
+				Math.min(MAX_COLUMNS, (int) Math.ceil((xEnd - gridLeft) / (float) STRIDE)));
+		int yStart = boxPadding + searchBarYSize + itemBoxYPadding;
+		int yEnd = screenHeight - boxPadding - ITEM_SIZE - 2 - itemBoxYPadding;
+		int rows = Math.max(1, (int) Math.ceil((yEnd - yStart) / (float) STRIDE));
 
-        /** The pane's left edge: anchored to the screen's right — NEU's open offset 2/3. */
-        public static int paneLeft(int screenWidth) {
-                return Math.max(0, screenWidth - paneWidth(screenWidth));
-        }
+		// NEU's sort bar: scale the icons down when the pane is too narrow
+		// for all of them at full stride — sortIconsMinX =
+		// (orders + filters) * (ITEM_SIZE + ITEM_PADDING) + ITEM_SIZE, the
+		// available span the pane's grid actually has.
+		int availableX = paneWidth - 2 * boxPadding - 2 * itemBoxXPadding;
+		int minSpan = (orderIconCount + filterIconCount) * STRIDE + ITEM_SIZE;
+		int sortIconSize = Math.max(4,
+				(int) (ITEM_SIZE * Math.min(1, availableX / (float) minSpan)));
+		int sortStride = (int) (STRIDE * sortIconSize / (float) ITEM_SIZE);
+		int sortIconTop = screenHeight - boxPadding - (ITEM_SIZE + sortIconSize) / 2 - 1;
 
-        /** The pane's content top — the box padding. */
-        public static int paneTop() {
-                return BOX_PADDING;
-        }
+		return new Metrics(screenWidth, screenHeight, boxPadding, searchBarYSize, paneWidth,
+				itemBoxXPadding, itemBoxYPadding, columns, rows, sortIconSize, sortStride,
+				sortIconTop);
+	}
 
-        /** The pane's content bottom — the screen's height minus the box padding. */
-        public static int paneBottom(int screenHeight) {
-                return Math.max(paneTop() + NAV_HEIGHT + SORT_BAR_HEIGHT, screenHeight - BOX_PADDING);
-        }
+	/** The pane's width: a third of the screen, never degenerate. */
+	public static int paneWidth(int screenWidth) {
+		int third = screenWidth / 3;
+		int minPane = 2 * minimumPadding() + 2 * MIN_ITEM_BOX_PADDING + (MIN_COLUMNS - 1) * STRIDE
+				+ ITEM_SIZE;
+		return Math.min(Math.max(third, minPane), Math.max(minPane, screenWidth));
+	}
 
-        /** The pane's content height. */
-        public static int paneHeight(int screenHeight) {
-                return paneBottom(screenHeight) - paneTop();
-        }
+	/** The padding floor for the minimum-pane computation. */
+	private static int minimumPadding() {
+		return 5;
+	}
 
-        // ------------------------------------------------------------------
-        // Grid
-        // ------------------------------------------------------------------
+	/** The item-box padding floor for the minimum-pane computation. */
+	private static final int MIN_ITEM_BOX_PADDING = 0;
 
-        /**
-         * The grid's horizontal centering — NEU's item-box X padding, which
-         * splits the pane's leftover width in half so the grid centers in
-         * the pane instead of hugging its left edge.
-         */
-        public static int itemBoxXPadding(int paneWidth) {
-                return ((paneWidth - 2 * BOX_PADDING) % STRIDE + ITEM_PADDING) / 2;
-        }
+	/**
+	 * The pane's left edge for an open-offset factor — NEU's
+	 * {@code (int) (width * getItemPaneOffsetFactor())}. The animation
+	 * supplies the factor; the fully-open pane rests at {@link #OPEN_OFFSET}.
+	 */
+	public static int paneLeft(int screenWidth, float offsetFactor) {
+		return (int) (screenWidth * offsetFactor);
+	}
 
-        /**
-         * The grid's vertical centering — NEU's item-box Y padding, the same
-         * split for the height left under the nav strip and above the sort bar.
-         */
-        public static int itemBoxYPadding(int screenHeight) {
-                return ((screenHeight - NAV_HEIGHT - 2 * BOX_PADDING - ITEM_SIZE - 2) % STRIDE + ITEM_PADDING) / 2;
-        }
+	// ------------------------------------------------------------------
+	// Pane-anchored boxes (functions of the animated pane left edge)
+	// ------------------------------------------------------------------
 
-        /** The grid's left edge: the pane's left, its box padding and its centering split. */
-        public static int gridLeft(int paneLeft, int paneWidth) {
-                return paneLeft + BOX_PADDING + itemBoxXPadding(paneWidth);
-        }
+	/** The grid's left edge — NEU's {@code xStart}. */
+	public static int gridLeft(Metrics m, int paneLeft) {
+		return paneLeft + m.boxPadding + m.itemBoxXPadding;
+	}
 
-        /** The grid's top edge: under the nav strip, past the vertical centering split. */
-        public static int gridTop(int screenHeight) {
-                return BOX_PADDING + NAV_HEIGHT + itemBoxYPadding(screenHeight);
-        }
+	/** The grid's right bound — NEU's {@code xEnd}. */
+	public static int gridRight(Metrics m, int paneLeft) {
+		return gridLeft(m, paneLeft) + m.paneWidth - 2 * m.boxPadding - ITEM_SIZE
+				- m.itemBoxXPadding;
+	}
 
-        /** The grid's bottom edge — NEU's {@code yEnd}: above the sort bar, past the split. */
-        public static int gridBottom(int screenHeight) {
-                return screenHeight - BOX_PADDING - ITEM_SIZE - 2 - itemBoxYPadding(screenHeight);
-        }
+	/** The grid's top edge — NEU's {@code yStart}, under the nav strip. */
+	public static int gridTop(Metrics m) {
+		return m.boxPadding + m.searchBarYSize + m.itemBoxYPadding;
+	}
 
-        /**
-         * The grid's columns — NEU's {@code getSlotsXSize}, the ceiling of
-         * the span between the first and the last tile.
-         */
-        public static int columns(int paneWidth) {
-                int span = paneWidth - 2 * BOX_PADDING - ITEM_SIZE - 2 * itemBoxXPadding(paneWidth);
-                int columns = (int) Math.ceil(span / (float) STRIDE);
-                return Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, columns));
-        }
+	/** The grid's bottom bound — NEU's {@code yEnd}, above the sort bar. */
+	public static int gridBottom(Metrics m) {
+		return m.screenHeight - m.boxPadding - ITEM_SIZE - 2 - m.itemBoxYPadding;
+	}
 
-        /** The grid's rows — NEU's {@code getSlotsYSize}. */
-        public static int rows(int screenHeight) {
-                int span = gridBottom(screenHeight) - gridTop(screenHeight);
-                int rows = (int) Math.ceil(span / (float) STRIDE);
-                return Math.max(1, rows);
-        }
+	/** The left of a grid tile in the given column. */
+	public static int cellLeft(int gridLeft, int column) {
+		return gridLeft + column * STRIDE;
+	}
 
-        /** The grid's tiles per page: the columns times the rows. */
-        public static int slotsPerPage(int paneWidth, int screenHeight) {
-                return columns(paneWidth) * rows(screenHeight);
-        }
+	/** The top of a grid tile in the given row. */
+	public static int cellTop(int gridTop, int row) {
+		return gridTop + row * STRIDE;
+	}
 
-        /** The left of a grid tile in the given column. */
-        public static int cellLeft(int gridLeft, int column) {
-                return gridLeft + column * STRIDE;
-        }
+	/** The page count for a result count — NEU's {@code getMaxPages}. */
+	public static int maxPages(int resultCount, Metrics m) {
+		int slots = m.slotsPerPage();
+		if (resultCount <= 0 || slots <= 0) {
+			return 1;
+		}
+		return (resultCount + slots - 1) / slots;
+	}
 
-        /** The top of a grid tile in the given row. */
-        public static int cellTop(int gridTop, int row) {
-                return gridTop + row * STRIDE;
-        }
+	/** The page clamped onto the reachable range, NEU's render-time clamp. */
+	public static int clampPage(int page, int resultCount, Metrics m) {
+		return Math.max(0, Math.min(page, maxPages(resultCount, m) - 1));
+	}
 
-        // ------------------------------------------------------------------
-        // Pages
-        // ------------------------------------------------------------------
+	/**
+	 * The grid index a point sits on, or -1. The hit box is NEU's: the
+	 * item's 16 px plus a one-pixel gutter on every side, so a click in
+	 * the stride's middle gap hits nothing.
+	 */
+	public static int indexAt(int px, int py, Metrics m, int paneLeft, int page, int visibleCount) {
+		int gridLeft = gridLeft(m, paneLeft);
+		int gridTop = gridTop(m);
+		if (px < gridLeft - 1 || py < gridTop - 1) {
+			return -1;
+		}
+		int column = (px - gridLeft + 1) / STRIDE;
+		int row = (py - gridTop + 1) / STRIDE;
+		if (column >= m.columns || row >= m.rows) {
+			return -1;
+		}
+		int x = cellLeft(gridLeft, column);
+		int y = cellTop(gridTop, row);
+		if (px > x + ITEM_SIZE + 1 || py > y + ITEM_SIZE + 1) {
+			return -1;
+		}
+		int index = page * m.slotsPerPage() + row * m.columns + column;
+		return index >= 0 && index < visibleCount ? index : -1;
+	}
 
-        /** The page count for a result count — NEU's {@code getMaxPages}. */
-        public static int maxPages(int resultCount, int paneWidth, int screenHeight) {
-                int slots = slotsPerPage(paneWidth, screenHeight);
-                if (resultCount <= 0 || slots <= 0) {
-                        return 1;
-                }
-                return (resultCount + slots - 1) / slots;
-        }
+	// ------------------------------------------------------------------
+	// Nav element — NEU's renderNavElement math
+	// ------------------------------------------------------------------
 
-        /** The page clamped onto the reachable range, NEU's render-time clamp. */
-        public static int clampPage(int page, int resultCount, int paneWidth, int screenHeight) {
-                return Math.max(0, Math.min(page, maxPages(resultCount, paneWidth, screenHeight) - 1));
-        }
+	/**
+	 * The nav element's boxes — NEU's {@code renderNavElement}:
+	 * {@code {x, y, w, h, kind}} with kind 0 Prev, 1 the page pill,
+	 * 2 Next. The button size derives from the search bar's height,
+	 * capped so both buttons and the pill fit between the grid edges.
+	 */
+	public static List<int[]> navButtons(Metrics m, int paneLeft, int maxPages, FontMetrics fontMetrics) {
+		int left = gridLeft(m, paneLeft);
+		int right = gridRight(m, paneLeft);
+		String reserve = "Page: " + maxPages + "/" + maxPages;
+		float maxStrLen = fontMetrics.boldWidth(reserve);
+		float maxButtonXSize = (right - left + 2 - maxStrLen * 0.5f - 10) / 2f;
+		int buttonXSize = (int) Math.min(maxButtonXSize, m.searchBarYSize * 480 / 160f);
+		int ySize = (int) (buttonXSize / 480f * 160);
+		int yOffset = (int) ((m.searchBarYSize - ySize) / 2f);
+		int top = m.boxPadding + yOffset;
+		int navLeft = left - 1;
+		int navRight = right + 1;
+		return List.of(
+				new int[] {navLeft, top, buttonXSize, ySize, 0},
+				new int[] {navLeft + buttonXSize + 3, top,
+						Math.max(8, navRight - buttonXSize - 3 - (navLeft + buttonXSize + 3)),
+						ySize, 1},
+				new int[] {navRight - buttonXSize, top, buttonXSize, ySize, 2});
+	}
 
-        /**
-         * The grid index a point sits on, or -1. The hit box is NEU's: the
-         * item's 16 px plus a one-pixel gutter on every side, so a click in
-         * the stride's middle gap hits nothing.
-         */
-        public static int indexAt(int px, int py, int paneLeft, int paneWidth, int screenHeight,
-                        int page, int visibleCount) {
-                int gridLeft = gridLeft(paneLeft, paneWidth);
-                int gridTop = gridTop(screenHeight);
-                if (px < gridLeft - 1 || py < gridTop - 1) {
-                        return -1;
-                }
-                int columns = columns(paneWidth);
-                int column = (px - gridLeft + 1) / STRIDE;
-                int row = (py - gridTop + 1) / STRIDE;
-                if (column >= columns || row >= rows(screenHeight)) {
-                        return -1;
-                }
-                int x = cellLeft(gridLeft, column);
-                int y = cellTop(gridTop, row);
-                if (px > x + ITEM_SIZE + 1 || py > y + ITEM_SIZE + 1) {
-                        return -1;
-                }
-                int index = page * slotsPerPage(paneWidth, screenHeight) + row * columns + column;
-                return index >= 0 && index < visibleCount ? index : -1;
-        }
+	/** The bold-text widths the nav math needs — implemented by the caller. */
+	public interface FontMetrics {
+		float boldWidth(String text);
+	}
 
-        // ------------------------------------------------------------------
-        // Nav element
-        // ------------------------------------------------------------------
+	// ------------------------------------------------------------------
+	// Sort bar
+	// ------------------------------------------------------------------
 
-        /**
-         * The nav element's three boxes — NEU's {@code renderNavElement}:
-         * {@code {x, y, w, h, kind}} with kind 0 Prev, 1 the page pill,
-         * 2 Next, laid across the pane's top strip.
-         */
-        public static List<int[]> navButtons(int paneLeft, int paneWidth, int screenHeight) {
-                int left = gridLeft(paneLeft, paneWidth);
-                int top = BOX_PADDING;
-                int width = columns(paneWidth) * STRIDE - ITEM_PADDING;
-                int pillWidth = width - 2 * NAV_BUTTON_WIDTH - 6;
-                return List.of(
-                                new int[] {left, top, NAV_BUTTON_WIDTH, NAV_HEIGHT, 0},
-                                new int[] {left + NAV_BUTTON_WIDTH + 3, top, Math.max(20, pillWidth), NAV_HEIGHT, 1},
-                                new int[] {left + width - NAV_BUTTON_WIDTH, top, NAV_BUTTON_WIDTH, NAV_HEIGHT, 2});
-        }
+	/** The sort bar's strip top — NEU's {@code height - boxPadding - ITEM_SIZE - 2}. */
+	public static int sortBarTop(Metrics m) {
+		return m.screenHeight - m.boxPadding - ITEM_SIZE - 2;
+	}
 
-        /** The close button's box, right of the nav's Next button. */
-        public static int[] closeButton(int paneLeft, int paneWidth, int screenHeight) {
-                int left = gridLeft(paneLeft, paneWidth) + columns(paneWidth) * STRIDE - ITEM_PADDING + 1;
-                return new int[] {left, BOX_PADDING + 2, ITEM_SIZE, ITEM_SIZE - 4};
-        }
+	/**
+	 * The sort bar's order icons, anchored from the bar's left —
+	 * {@code {x, y, size, kind}} per icon.
+	 */
+	public static List<int[]> orderIcons(Metrics m, int paneLeft, int iconCount) {
+		int left = gridLeft(m, paneLeft);
+		int top = m.sortIconTop;
+		var icons = new int[iconCount][];
+		for (int i = 0; i < iconCount; i++) {
+			icons[i] = new int[] {left + i * m.sortStride, top, m.sortIconSize, i};
+		}
+		return List.of(icons);
+	}
 
-        // ------------------------------------------------------------------
-        // Sort bar
-        // ------------------------------------------------------------------
+	/**
+	 * The sort bar's filter icons, anchored from the bar's right —
+	 * NEU's {@code sortIconX = rightSide - scaledITEM_SIZE - i * scaledItemPaddedSize}.
+	 */
+	public static List<int[]> filterIcons(Metrics m, int paneLeft, int iconCount) {
+		int right = gridRight(m, paneLeft);
+		int top = m.sortIconTop;
+		var icons = new int[iconCount][];
+		for (int i = 0; i < iconCount; i++) {
+			icons[i] = new int[] {right - m.sortIconSize - i * m.sortStride, top, m.sortIconSize, i};
+		}
+		return List.of(icons);
+	}
 
-        /**
-         * NEU scales the bar's icons down when the pane is too narrow for
-         * all of them at full size; this is that scale in pixels.
-         */
-        public static int sortIconSize(int paneWidth, int iconCount) {
-                int left = BOX_PADDING;
-                int width = columns(paneWidth) * STRIDE - ITEM_PADDING;
-                int minSpan = iconCount * STRIDE + ITEM_SIZE;
-                return Math.max(4, (int) (ITEM_SIZE * Math.min(1, width / (float) minSpan)));
-        }
+	// ------------------------------------------------------------------
+	// Edge tab
+	// ------------------------------------------------------------------
 
-        /** The sort bar's top edge — the strip the icons sit in. */
-        public static int sortBarTop(int screenHeight, int iconSize) {
-                return screenHeight - BOX_PADDING - (ITEM_SIZE + iconSize) / 2 - 1;
-        }
+	/**
+	 * The edge tab's texture box — NEU's 64 px arrow at
+	 * {@code width - tabOffset * 64 / 20}, vertically centered. The
+	 * offset animates 20 (closed, the tab visible at the edge) to 0
+	 * (open, the tab slid off the screen).
+	 */
+	public static int[] tabBox(int screenWidth, int screenHeight, int tabOffset) {
+		return new int[] {(int) (screenWidth - tabOffset * TAB_TEXTURE_SIZE / 20f),
+				screenHeight / 2 - TAB_TEXTURE_SIZE / 2,
+				TAB_TEXTURE_SIZE, TAB_TEXTURE_SIZE};
+	}
 
-        /**
-         * The sort bar's order icons, anchored from the bar's left —
-         * {@code {x, y, size, kind}} per icon.
-         */
-        public static List<int[]> orderIcons(int paneLeft, int paneWidth, int screenHeight, int iconCount) {
-                int left = gridLeft(paneLeft, paneWidth);
-                int size = sortIconSize(paneWidth, iconCount);
-                int stride = (int) (STRIDE * size / (float) ITEM_SIZE);
-                int top = sortBarTop(screenHeight, size);
-                var icons = new int[iconCount][];
-                for (int i = 0; i < iconCount; i++) {
-                        icons[i] = new int[] {left + i * stride, top, size, i};
-                }
-                return List.of(icons);
-        }
+	/** The tab's hover region — NEU's {@code mouseX > width - tabOffset}. */
+	public static boolean tabHover(int screenWidth, int tabOffset, int px, int py, int screenHeight) {
+		return px > screenWidth - tabOffset && py > screenHeight / 2 - TAB_TEXTURE_SIZE / 2
+				&& py < screenHeight / 2 + TAB_TEXTURE_SIZE / 2;
+	}
 
-        /**
-         * The sort bar's filter icons, anchored from the bar's right —
-         * NEU's {@code sortIconX = rightSide - size - i * stride}.
-         */
-        public static List<int[]> filterIcons(int paneLeft, int paneWidth, int screenHeight, int iconCount) {
-                int size = sortIconSize(paneWidth, iconCount);
-                int stride = (int) (STRIDE * size / (float) ITEM_SIZE);
-                int top = sortBarTop(screenHeight, size);
-                int right = gridLeft(paneLeft, paneWidth) + columns(paneWidth) * STRIDE - ITEM_PADDING;
-                var icons = new int[iconCount][];
-                for (int i = 0; i < iconCount; i++) {
-                        icons[i] = new int[] {right - size - i * stride, top, size, i};
-                }
-                return List.of(icons);
-        }
+	// ------------------------------------------------------------------
+	// Info pane (the detail view, NEU's left pane)
+	// ------------------------------------------------------------------
 
-        // ------------------------------------------------------------------
-        // Reopen tab
-        // ------------------------------------------------------------------
+	/**
+	 * The info pane's left edge — NEU's
+	 * {@code rightSide = width * getInfoPaneOffsetFactor(); leftSide = rightSide - paneWidth}.
+	 */
+	public static int infoPaneLeft(Metrics m, float infoOffsetFactor) {
+		return (int) (m.screenWidth * infoOffsetFactor) - m.paneWidth;
+	}
 
-        /** The reopen tab's box at the screen's right edge, vertically centered. */
-        public static int[] tabBox(int screenWidth, int screenHeight) {
-                return new int[] {Math.max(0, screenWidth - TAB_WIDTH),
-                                Math.max(0, screenHeight / 2 - TAB_HEIGHT / 2), TAB_WIDTH, TAB_HEIGHT};
-        }
+	/** The info pane's right edge. */
+	public static int infoPaneRight(Metrics m, float infoOffsetFactor) {
+		return (int) (m.screenWidth * infoOffsetFactor);
+	}
 
-        // ------------------------------------------------------------------
-        // Points and rectangles
-        // ------------------------------------------------------------------
+	/**
+	 * The info pane's close button — NEU's 16 px {@code close} texture
+	 * at the pane's top-right corner.
+	 */
+	public static int[] infoCloseButton(Metrics m, float infoOffsetFactor) {
+		return new int[] {infoPaneRight(m, infoOffsetFactor) - m.boxPadding - 8,
+				m.boxPadding - 8, 16, 16};
+	}
 
-        /** Whether a point sits inside a rectangle. */
-        public static boolean contains(int x, int y, int w, int h, int px, int py) {
-                return px >= x && px < x + w && py >= y && py < y + h;
-        }
+	// ------------------------------------------------------------------
+	// Points and rectangles
+	// ------------------------------------------------------------------
 
-        /** Whether a point sits inside the pane's content rectangle. */
-        public static boolean inPane(int paneLeft, int paneWidth, int screenHeight, int px, int py) {
-                return contains(paneLeft, paneTop(), paneWidth, paneHeight(screenHeight), px, py);
-        }
+	/** Whether a point sits inside a rectangle. */
+	public static boolean contains(int x, int y, int w, int h, int px, int py) {
+		return px >= x && px < x + w && py >= y && py < y + h;
+	}
+
+	/**
+	 * Whether a point sits inside the pane's full rectangle — NEU's
+	 * {@code mouseX > width * getItemPaneOffsetFactor()} gate that
+	 * consumes every click over the pane.
+	 */
+	public static boolean inPane(float offsetFactor, Metrics m, int px, int py) {
+		return px > (int) (m.screenWidth * offsetFactor);
+	}
 }
