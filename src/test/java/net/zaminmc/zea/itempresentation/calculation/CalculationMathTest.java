@@ -120,6 +120,22 @@ class CalculationMathTest {
         }
 
         /**
+         * Mining Fortune's expected-yield formula: the multiplier
+         * {@code 1 / (L + 2) + (L + 1) / 2} gives 1.33x, 1.75x and
+         * 2.20x for the three standard levels, displayed as +33 %,
+         * +75 % and +120 % — the calculated yield, never the raw
+         * enchantment level.
+         */
+        @Test
+        void miningFortuneReadsTheVanillaExpectedYieldFormula() {
+                assertEquals(33.3333333, MiningFortuneCalculator.percentBonus(1), 1e-4);
+                assertEquals(75.0, MiningFortuneCalculator.percentBonus(2), 1e-9);
+                assertEquals(120.0, MiningFortuneCalculator.percentBonus(3), 1e-9);
+                assertEquals(0.0, MiningFortuneCalculator.percentBonus(0), 1e-9,
+                                "no fortune, no percentage");
+        }
+
+        /**
          * An empty statistics set carries no populated optional — the
          * short-circuit for items ZEA has no presentation for.
          */
@@ -128,6 +144,7 @@ class CalculationMathTest {
                 ItemStatistics empty = ItemStatistics.empty();
                 assertTrue(empty.meleeDamage().isEmpty());
                 assertTrue(empty.miningSpeed().isEmpty());
+                assertTrue(empty.miningFortune().isEmpty());
                 assertTrue(empty.armor().isEmpty());
                 assertTrue(empty.durability().isEmpty());
                 assertTrue(empty.projectile().isEmpty());

@@ -42,7 +42,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 3.0, "Sharpness V", 5, 1.0, 0.0, "", 1.6, 0.75, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals(4, lines.size(), "damage + speed + sweep + trailing blank");
@@ -75,7 +75,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 3.0, "Sharpness V", 5, 0.0, 0.0, "", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Damage: +9 (6) [5]", lines.get(0).getString());
@@ -87,7 +87,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 0.0, "", 0, 0.0, 0.0, "", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Damage: +6", lines.get(0).getString(),
@@ -102,7 +102,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 0.0, "", 0, 1.0, 0.0, "", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Damage: +7 (6) (1)", lines.get(0).getString());
@@ -114,7 +114,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 3.0, "Sharpness V", 5, 1.0, 3.0, "Strength", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Damage: +13 (6) [5] (1) (+3 Strength)", lines.get(0).getString());
@@ -129,7 +129,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 1.5, "Sharpness II", 2, 1.0, 0.0, "", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Damage: +8.5 (6) [2] (1)", lines.get(0).getString());
@@ -142,7 +142,7 @@ class ItemPresentationBuilderTest {
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 0.0, "", 0, 0.0, 0.0, "", 1.6, 0.0,
                                                 List.of(new ItemStatistics.ConditionalBonus("Smite II (vs undead)", 5.0)))),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
                 assertEquals("Smite II (vs undead): +5", lines.get(2).getString());
@@ -154,7 +154,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 8.0, 0.0, "", 0, 0.0, 0.0, "", 1.1, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ProjectileStats(
                                                 2.5, 8.0, 0.0, 0, 10, 1, 0, false, 0, false)),
                                 Optional.empty(), Optional.empty(), Optional.empty());
@@ -171,7 +171,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 5.0, 0.0, "", 0, 0.0, 0.0, "", 1.05, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.SpearStats(2.0f, 4.5f, 1.075, 3, 1.374)),
                                 Optional.empty());
@@ -188,7 +188,7 @@ class ItemPresentationBuilderTest {
         void shovelShowsMiningSpeedNotDamage() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(),
-                                Optional.of(new ItemStatistics.MiningSpeed(2.0, 0.0, 0, true)),
+                                Optional.of(new ItemStatistics.MiningSpeed(2.0, 0.0, 0, true)), Optional.empty(),
                                 Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SHOVEL, stats);
@@ -197,22 +197,71 @@ class ItemPresentationBuilderTest {
         }
 
         /**
-         * A pickaxe with Efficiency shows the base speed and the
-         * efficiency bonus as separate compact lines, the bonus with
-         * the enchantment's level in the blue bracket.
+         * A pickaxe with Efficiency V shows ONE Mining Speed row — the
+         * tool's base speed with Efficiency folded in (8 + 26 = 34) —
+         * and no separate Mining Efficiency statistic, and no raw
+         * enchantment-level bracket on the stat row: Efficiency is an
+         * enchantment, and the enchantment section is where its level
+         * belongs.
          */
         @Test
-        void pickaxeWithEfficiencyShowsBaseAndBonus() {
+        void pickaxeWithEfficiencyShowsOneCombinedSpeedRow() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.empty(),
-                                Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, 5, true)),
+                                Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, 5, true)), Optional.empty(),
                                 Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
-                assertEquals("Mining Speed: 8", lines.get(0).getString());
-                assertEquals("Mining Efficiency: +26 [5]", lines.get(1).getString());
-                assertEquals(0x5555FF, lines.get(1).getSiblings().get(1).getStyle().getColor().getValue(),
-                                "the enchantment bracket is blue");
+                assertEquals(2, lines.size(), "one speed row + trailing blank");
+                assertEquals("Mining Speed: 34", lines.get(0).getString());
+                assertFalse(containsLineStarting(lines, "Mining Efficiency"),
+                                "there is no Mining Efficiency statistic");
+                assertFalse(lines.get(0).getString().contains("[5]"),
+                                "no unexplained enchantment-level bracket on the stat row");
+        }
+
+        /**
+         * Mining Fortune reads as a percentage of the expected yield —
+         * the vanilla formula's +33 %, +75 % and +120 % for the three
+         * standard levels — never the raw enchantment level, and it
+         * never replaces or merges into the Mining Speed row.
+         */
+        @Test
+        void miningFortuneReadsAsAPercentageBesideTheSpeedRow() {
+                for (int level = 1; level <= 3; level++) {
+                        ItemStatistics stats = new ItemStatistics(
+                                        Optional.empty(),
+                                        Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, 5, true)),
+                                        Optional.of(new ItemStatistics.MiningFortune(
+                                                        net.zaminmc.zea.itempresentation.calculation.MiningFortuneCalculator
+                                                                        .percentBonus(level), level)),
+                                        Optional.empty(), Optional.empty(),
+                                        Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                        List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
+                        String expected = switch (level) {
+                                case 1 -> "+33%";
+                                case 2 -> "+75%";
+                                default -> "+120%";
+                        };
+                        assertEquals("Mining Speed: 34", lines.get(0).getString(),
+                                        "the speed row stays one row at fortune level " + level);
+                        assertEquals("Mining Fortune: " + expected, lines.get(1).getString(),
+                                        "the fortune row reads the formula at level " + level);
+                        assertFalse(lines.get(1).getString().contains(String.valueOf(level) + "%"),
+                                        "the raw level never substitutes for the yield at level " + level);
+                }
+        }
+
+        /** A pickaxe without Fortune shows no Mining Fortune row at all. */
+        @Test
+        void noFortuneRowWithoutTheEnchantment() {
+                ItemStatistics stats = new ItemStatistics(
+                                Optional.empty(),
+                                Optional.of(new ItemStatistics.MiningSpeed(8.0, 26.0, 5, true)), Optional.empty(),
+                                Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                List<Component> lines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, stats);
+                assertFalse(containsLineStarting(lines, "Mining Fortune"));
         }
 
         /**
@@ -226,7 +275,7 @@ class ItemPresentationBuilderTest {
         @Test
         void chestplateShowsRpgDefenseRenamedToughnessAndSpecializedProtections() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ArmorStats(130.0, 2.0, 0.05, 5, List.of(
                                                 new ItemStatistics.ConditionalBonus("Fire Resistance", 8.0)))),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
@@ -249,7 +298,7 @@ class ItemPresentationBuilderTest {
         @Test
         void chestplateWithoutProtectionShowsBareDefense() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ArmorStats(80.0, 2.0, 0.0, 0, List.of())),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CHESTPLATE, stats);
@@ -266,7 +315,7 @@ class ItemPresentationBuilderTest {
         @Test
         void bowShowsFullyDrawnDamageGoldVelocityAndDrawTime() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ProjectileStats(3.0, 2.0, 3.0, 5, 20, 1, 0, false, 0, true)),
                                 Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.BOW, stats);
@@ -290,7 +339,7 @@ class ItemPresentationBuilderTest {
         @Test
         void crossbowShowsReloadProjectilesAndPiercing() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ProjectileStats(3.15, 2.0, 0.0, 0, 10, 3, 4, false, 0, true)),
                                 Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CROSSBOW, stats);
@@ -304,7 +353,7 @@ class ItemPresentationBuilderTest {
         @Test
         void fireworkCrossbowShowsTheRocket() {
                 ItemStatistics stats = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.ProjectileStats(1.6, 2.0, 0.0, 0, 25, 1, 0, true, 3, true)),
                                 Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.CROSSBOW, stats);
@@ -322,7 +371,7 @@ class ItemPresentationBuilderTest {
         void maceShowsCompactSmashSection() {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(6.0, 0.0, "", 0, 0.0, 0.0, "", 0.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(),
                                 Optional.of(new ItemStatistics.SmashDamage(
                                                 1.5,
@@ -351,7 +400,7 @@ class ItemPresentationBuilderTest {
                 ItemStatistics stats = new ItemStatistics(
                                 Optional.of(new ItemStatistics.MeleeDamage(
                                                 6.0, 3.0, "Sharpness V", 5, 1.0, 0.0, "", 1.6, 0.0, List.of())),
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(3));
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.SWORD, stats);
@@ -370,14 +419,14 @@ class ItemPresentationBuilderTest {
         @Test
         void durabilityShowsMaxAloneWhenFull() {
                 ItemStatistics full = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.Durability(1561, 1561)),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> fullLines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, full);
                 assertEquals("Durability: 1561", lineStarting(fullLines, "Durability:").getString(),
                                 "a full item does not echo the maximum twice");
                 ItemStatistics damaged = new ItemStatistics(
-                                Optional.empty(), Optional.empty(), Optional.empty(),
+                                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.of(new ItemStatistics.Durability(1358, 1561)),
                                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
                 List<Component> damagedLines = ItemPresentationBuilder.build(ItemCategory.PICKAXE, damaged);

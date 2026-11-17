@@ -29,6 +29,7 @@ import java.util.Optional;
 public record ItemStatistics(
                 Optional<MeleeDamage> meleeDamage,
                 Optional<MiningSpeed> miningSpeed,
+                Optional<MiningFortune> miningFortune,
                 Optional<ArmorStats> armor,
                 Optional<Durability> durability,
                 Optional<ProjectileStats> projectile,
@@ -41,7 +42,7 @@ public record ItemStatistics(
                 return new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty(), Optional.empty());
+                                Optional.empty(), Optional.empty(), Optional.empty());
         }
 
         /**
@@ -86,13 +87,19 @@ public record ItemStatistics(
 
         /**
          * The mining speed against a representative block the tool is
-         * correct for. {@code baseSpeed} is the tool's own speed; {@code
-         * efficiencyBonus} is the Efficiency enchantment's live {@code
-         * mining_efficiency} attribute contribution ({@code level
-         * squared + 1} in the vanilla data) with its level in {@code
-         * efficiencyLevel}. Both numbers describe blocks the tool is
-         * correct for — Efficiency does not apply to blocks the tool is
-         * wrong for, which {@code appliesOnlyWhenCorrect} records.
+         * correct for, with Efficiency's contribution already folded in:
+         * {@code correctForDrops()} is the one displayed statistic — a
+         * diamond pickaxe with Efficiency V reads 34, one row, with no
+         * separate Efficiency line beside it. {@code baseSpeed} is the
+         * tool's own speed and {@code efficiencyBonus} the Efficiency
+         * enchantment's live {@code mining_efficiency} attribute
+         * contribution ({@code level squared + 1} in the vanilla data),
+         * kept split so a hover breakdown can explain the total; the
+         * enchantment's level rides in {@code efficiencyLevel} for the
+         * same purpose and never reaches the stat rows itself. Both
+         * numbers describe blocks the tool is correct for — Efficiency
+         * does not apply to blocks the tool is wrong for, which {@code
+         * appliesOnlyWhenCorrect} records.
          */
         public record MiningSpeed(
                         double baseSpeed,
@@ -103,6 +110,25 @@ public record ItemStatistics(
                 public double correctForDrops() {
                         return baseSpeed + efficiencyBonus;
                 }
+        }
+
+        /**
+         * Mining Fortune: the expected drop multiplier a Fortune level
+         * yields over normal drops, as a percentage — the vanilla
+         * formula {@code 1 / (level + 2) + (level + 1) / 2} gives 1.33,
+         * 1.75 and 2.20 for levels one to three, displayed as +33 %,
+         * +75 % and +120 %. The percentage is the expected yield over
+         * Fortune-unaffected drops for blocks the standard calculation
+         * covers; it is never a guaranteed extra item count. Empty
+         * when the item carries no Fortune — or when Silk Touch blocks
+         * it: the two are mutually exclusive in normal vanilla
+         * enchanting, and the blocked case surfaces through the
+         * special-enchantment indicators as not applicable rather than
+         * through a number here.
+         */
+        public record MiningFortune(
+                        double percentBonus,
+                        int fortuneLevel) {
         }
 
         /**

@@ -47,7 +47,9 @@ public final class EnchantmentExplanations {
                         "increases arrow damage.",
                         "arrows will burn mobs.",
                         "increases arrow knockback strength.",
-                        "bows shoot basic arrows without consuming them.");
+                        "bows shoot basic arrows without consuming them.",
+                        "allows fragile blocks such as glass to be collected.",
+                        "increases mining speed.");
 
         private EnchantmentExplanations() {
         }
