@@ -40,7 +40,7 @@ class MarketListingsTest {
 		return new ShopObservation(shopId, ShopDirection.SELLING,
 				new ItemFingerprint(token, ItemFingerprint.Fidelity.EXACT),
 				display, new BigDecimal(price), PriceScope.PER_BULK, bulk,
-				"78", StockUnit.UNKNOWN, 64, null, true, SourceType.SERVER_RESPONSE, at);
+				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, at);
 	}
 
 	private static ShopObservation buying(String shopId, String token, String display,
@@ -48,7 +48,7 @@ class MarketListingsTest {
 		return new ShopObservation(shopId, ShopDirection.BUYING,
 				new ItemFingerprint(token, ItemFingerprint.Fidelity.EXACT),
 				display, new BigDecimal(price), PriceScope.PER_ITEM, null,
-				"38", StockUnit.SPACE, null, 10, true, SourceType.SERVER_RESPONSE, at);
+				"38", StockUnit.SPACE, null, null, null, null, 10, true, List.of(), SourceType.SERVER_RESPONSE, at);
 	}
 
 	private static void record(MarketData data, PhysicalShop shop, ShopObservation observation) {
@@ -142,7 +142,7 @@ class MarketListingsTest {
 				new ShopObservation("sign|sign", ShopDirection.SELLING,
 						new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
 						"Diamond Pickaxe", null, null, null, "36", StockUnit.UNKNOWN,
-						null, null, false, SourceType.SIGN_ONLY, T));
+						null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T));
 
 		List<MarketListings.Listing> rows = MarketListings.query(data, "",
 				MarketListings.Filter.ALL, MarketSort.ITEM_NAME, null);

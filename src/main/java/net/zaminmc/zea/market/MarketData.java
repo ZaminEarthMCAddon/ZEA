@@ -152,9 +152,13 @@ public final class MarketData {
 				&& nullableEquals(a.bulkSize(), b.bulkSize())
 				&& nullableEquals(a.stockRaw(), b.stockRaw())
 				&& a.stockUnit() == b.stockUnit()
+				&& nullableEquals(a.remainingPercent(), b.remainingPercent())
 				&& nullableEquals(a.maxBuyBulks(), b.maxBuyBulks())
+				&& nullableEquals(a.maxBuyItems(), b.maxBuyItems())
+				&& nullableEquals(a.maxSellBulks(), b.maxSellBulks())
 				&& nullableEquals(a.maxSellItems(), b.maxSellItems())
 				&& a.supportsAll() == b.supportsAll()
+				&& a.enchantments().equals(b.enchantments())
 				&& a.sourceType() == b.sourceType();
 	}
 

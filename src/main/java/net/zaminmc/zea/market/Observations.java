@@ -11,6 +11,7 @@ import net.zaminmc.zea.market.parse.ShopSignParser;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -56,8 +57,10 @@ public final class Observations {
 				: ItemFingerprints.fromDisplay(response.itemDisplay());
 		ShopObservation observation = new ShopObservation(shopId, response.direction(), fingerprint,
 				response.itemDisplay(), response.price(), response.priceScope(), response.bulkSize(),
-				response.stockRaw(), response.stockUnit(), response.maxBuyBulks(), response.maxSellItems(),
-				response.supportsAll(), SourceType.SERVER_RESPONSE, response.receivedAt());
+				response.stockRaw(), response.stockUnit(), response.remainingPercent(),
+				response.maxBuyBulks(), response.maxBuyItems(), response.maxSellBulks(), response.maxSellItems(),
+				response.supportsAll(), response.enchantments(),
+				SourceType.SERVER_RESPONSE, response.receivedAt());
 		return new Recorded(shop, observation);
 	}
 
@@ -69,7 +72,8 @@ public final class Observations {
 		ShopObservation observation = new ShopObservation(shopId, advert.direction(),
 				ItemFingerprints.fromDisplay(advert.itemDisplay()), advert.itemDisplay(),
 				null, null, null, advert.quantity(), StockUnit.UNKNOWN,
-				null, null, false, SourceType.SIGN_ONLY, at);
+				null, null, null, null, null, false, List.of(),
+				SourceType.SIGN_ONLY, at);
 		return new Recorded(shop, observation);
 	}
 

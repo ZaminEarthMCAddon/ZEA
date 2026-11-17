@@ -216,4 +216,45 @@ class ShopInspectionTrackerTest {
 		assertFalse(ShopSignParser.isShopSign(List.of("&aSomeone", "Welcome!")));
 		assertTrue(ShopSignParser.parse(List.of("[Free] Take something")).isEmpty());
 	}
+
+	@Test
+	void boxedResponseLinesArrivingSeparatelyStayOneRun() {
+		// The boxed style wraps every line in decoration; the rules and
+		// pipes are response lines and must not close the run between the
+		// fields they frame.
+		List<ShopInspectionTracker.Inspection> out = new ArrayList<>();
+		ShopInspectionTracker tracker = new ShopInspectionTracker(out::add);
+
+		tracker.noteSignUse("minecraft:overworld", "earthmc.net",
+				new BlockPos(10, 64, -20), null, SHOP_SIGN_TEXT, T);
+		List<String> lines = FIXTURE_A_LINES.stream().flatMap(List::stream).toList();
+		for (int i = 0; i < lines.size(); i++) {
+			Instant at = T.plusMillis(10L * (i + 1));
+			tracker.onMessage(message(lines.get(i), at), at);
+		}
+		tracker.tick(T.plusSeconds(5));
+
+		assertEquals(1, out.size());
+		ShopInspectionTracker.Inspection inspection = out.get(0);
+		assertTrue(inspection.isServerVerified());
+		ShopResponse response = inspection.response();
+		assertEquals("Pelle_Nomme", response.owner());
+		assertEquals("Observer", response.itemDisplay());
+		assertEquals(8, response.bulkSize());
+		assertEquals(28, response.maxBuyBulks());
+	}
+
+	/** Fixture A, one line per message, decoration included. */
+	private static final List<List<String>> FIXTURE_A_LINES = List.of(
+			List.of("+---------------------------------------------------+"),
+			List.of("| Shop Information:"),
+			List.of("| Owner: Pelle_Nomme"),
+			List.of("| Item: Observer   [Item Preview]"),
+			List.of("| Stock: 28"),
+			List.of("| Price per 8x Observer - 1G"),
+			List.of("| This shop is SELLING items."),
+			List.of("+---------------------------------------------------+"),
+			List.of("Enter in chat, how many bulks you wish to BUY."),
+			List.of("There are 8 items in each bulk and you can buy 28 bulks."),
+			List.of("Enter all in chat to buy all."));
 }

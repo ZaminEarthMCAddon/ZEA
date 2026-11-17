@@ -96,7 +96,8 @@ public final class ShopScreen extends Screen {
 	/** A minimal response view for sign-only inspections: facts only. */
 	private static ShopResponse responseless(ShopObservation observation) {
 		return new ShopResponse(null, observation.direction(), null, observation.itemDisplay(),
-				null, null, null, observation.stockRaw(), observation.stockUnit(), null, null, false,
+				null, null, null, observation.stockRaw(), observation.stockUnit(), null,
+				null, null, null, null, false, observation.enchantments(),
 				ShopResponse.Completeness.PARTIAL, List.of(), observation.observedAt());
 	}
 

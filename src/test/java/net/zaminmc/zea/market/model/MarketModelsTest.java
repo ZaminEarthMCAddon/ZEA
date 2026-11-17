@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -114,6 +115,6 @@ class MarketModelsTest {
 											Integer maxBuyBulks, Integer maxSellItems) {
 		return new ShopObservation("id", ShopDirection.SELLING, ItemFingerprint.unknown(),
 				"Diamond Pickaxe", price, PriceScope.PER_BULK, bulkSize, "78", StockUnit.UNKNOWN,
-				maxBuyBulks, maxSellItems, false, SourceType.SERVER_RESPONSE, T);
+				null, maxBuyBulks, null, null, maxSellItems, false, List.of(), SourceType.SERVER_RESPONSE, T);
 	}
 }

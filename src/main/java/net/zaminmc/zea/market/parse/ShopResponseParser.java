@@ -24,17 +24,24 @@ import java.util.regex.Pattern;
  * Parses the EarthMC shop response block into a {@link ShopResponse}.
  *
  * <p>The response arrives as several lines — one message with embedded
- * newlines, or consecutive separate messages. Lines are anchored on the
- * exact observed shapes ({@code Owner: }, {@code Stock: },
- * {@code Price per 7x ... - 1G}, {@code This shop is SELLING items.},
- * …); anything else is ignored. A run without the direction anchor, or
- * without an owner and item identity, is declined rather than guessed.
+ * newlines, or consecutive separate messages — and in two observed
+ * styles: a boxed block (lines wrapped in {@code | ... |} between
+ * {@code +---+} rules) and a plain block (bare lines, an
+ * {@code Enchantments:} label section). Lines are therefore normalized
+ * first (decoration stripped), then anchored on the exact observed
+ * shapes ({@code Owner: }, {@code Stock: }, {@code Price per 7x ... - 1G},
+ * {@code This shop is SELLING items.}, {@code 100% remaining.},
+ * {@code You can buy 4.}, {@code Enchantments:}, …); anything else is
+ * ignored. A run without the direction anchor, or without an owner and
+ * item identity, is declined rather than guessed.
  *
  * <p>Structure first: the {@code [Item Preview]} hover on the item line
  * carries the actual item template, which is what identities are built
  * from. The displayed item text is kept only as a fallback and as a
- * cross-check. Nothing is ever defaulted — a missing field stays
- * {@code null} and the response degrades to {@code PARTIAL}.
+ * cross-check, and the server's enchantment section is kept verbatim as
+ * cross-check evidence — never as the item identity. Nothing is ever
+ * defaulted — a missing field stays {@code null} and the response
+ * degrades to {@code PARTIAL}.
  */
 public final class ShopResponseParser {
 	private static final String HEADER = "Shop Information:";
@@ -47,22 +54,58 @@ public final class ShopResponseParser {
 	private static final String PRICE_SEPARATOR = " - ";
 	private static final String SELLING_ANCHOR = "This shop is SELLING items.";
 	private static final String BUYING_ANCHOR = "This shop is BUYING items.";
+	private static final String ENCHANTMENT_LABEL = "Enchantments:";
 	private static final String SELL_LIMIT_PREFIX = "You can sell ";
 	private static final String ALL_PREFIX = "Enter all in chat";
 
-	/** {@code There are 7 items in each bulk and you can buy 64 bulks.} */
+	/** {@code There are 7 items in each bulk and you can buy 64 bulks.} — both observed wordings. */
 	private static final Pattern BULK_INFO = Pattern.compile(
-			"^There are (\\d+) items in each bulk and you can buy (\\d+) bulks\\.$");
+			"^There are (\\d+) items (?:in each bulk|per bulk) and you can (buy|sell) (\\d+) bulks\\.$");
+
+	/** {@code You can buy 4.} — an item limit, reported by per-item SELLING shops. */
+	private static final Pattern BUY_LIMIT = Pattern.compile("^You can buy (\\d+)\\.$");
+
+	/** {@code 100% remaining.} — the shelf-fill state the response may report. */
+	private static final Pattern REMAINING = Pattern.compile("^(\\d{1,3})% remaining\\.$");
 
 	/** The bulk size inside a per-bulk price: {@code Price per 7x Block of Diamond - 1G}. */
 	private static final Pattern PRICE_BULK_ITEM = Pattern.compile("^(\\d+)x\\s+(.*)$");
 
 	/**
+	 * One enchantment line inside the server's enchantment section:
+	 * {@code Fortune III}, {@code Punch II}. Levels run I–X; anything
+	 * else is not an enchantment line and closes the section.
+	 */
+	private static final Pattern ENCHANTMENT_LINE = Pattern.compile(
+			"^([A-Za-z][A-Za-z' ]*?)\\s+(I{1,3}|IV|V|VI{1,3}|IX|X)$");
+
+	/** A pure box rule: {@code +--------+}. */
+	private static final Pattern BOX_RULE = Pattern.compile("^\\+[-+]*\\+$");
+
+	/**
 	 * Whether this text is a line of a shop response. The interaction
 	 * collector buffers only lines this accepts, so unrelated chat never
-	 * enters a shop record.
+	 * enters a shop record. Box decoration ({@code | }, {@code +---+})
+	 * is accepted because it wraps observed response lines; it adds no
+	 * fields of its own.
 	 */
 	public static boolean isShopLine(String text) {
+		String line = normalize(text);
+		return line != null && isShopLineNormalized(line);
+	}
+
+	private static boolean isShopLineNormalized(String line) {
+		if (line.startsWith("+") || line.startsWith(ENCHANTMENT_LABEL)) {
+			return true;
+		}
+		if (isEnchantmentLine(line)) {
+			return true;
+		}
+		return textAnchor(line);
+	}
+
+	/** The observed field and instruction shapes, decoration already stripped. */
+	private static boolean textAnchor(String text) {
 		return text.equals(HEADER)
 				|| text.startsWith(OWNER_PREFIX)
 				|| text.startsWith(ITEM_PREFIX)
@@ -74,7 +117,40 @@ public final class ShopResponseParser {
 				|| text.startsWith(SELL_LIMIT_PREFIX)
 				|| text.startsWith(ALL_PREFIX)
 				|| BULK_INFO.matcher(text).matches()
+				|| BUY_LIMIT.matcher(text).matches()
+				|| REMAINING.matcher(text).matches()
 				|| text.startsWith("Enter in chat, how ");
+	}
+
+	/**
+	 * Strips the box decoration from a response line. A pure box rule
+	 * ({@code +---+}) is returned as-is: it frames the response, so it
+	 * counts as a response line (the run stays open across it) but adds
+	 * no field of its own. {@code null} only for blank lines.
+	 */
+	public static @Nullable String normalize(String raw) {
+		String line = raw.trim();
+		if (line.isEmpty()) {
+			return null;
+		}
+		while (line.startsWith("|")) {
+			line = line.substring(1).trim();
+		}
+		while (line.endsWith("|")) {
+			line = line.substring(0, line.length() - 1).trim();
+		}
+		return line.isEmpty() ? null : line;
+	}
+
+	/** Whether the line opens the server's enchantment section. */
+	private static boolean isEnchantmentHeader(String line) {
+		return line.startsWith("+")
+				? line.contains("Enchantments")
+				: line.equals(ENCHANTMENT_LABEL);
+	}
+
+	private static boolean isEnchantmentLine(String line) {
+		return ENCHANTMENT_LINE.matcher(line).matches();
 	}
 
 	/**
@@ -85,12 +161,13 @@ public final class ShopResponseParser {
 	 */
 	public static @Nullable List<String> shopLines(CapturedMessage message) {
 		List<String> lines = null;
-		for (String line : message.text().split("\\n")) {
-			if (isShopLine(line.trim())) {
+		for (String raw : message.text().split("\\n")) {
+			String line = normalize(raw);
+			if (line != null && isShopLineNormalized(line)) {
 				if (lines == null) {
 					lines = new ArrayList<>();
 				}
-				lines.add(line.trim());
+				lines.add(line);
 			}
 		}
 		return lines;
@@ -109,18 +186,41 @@ public final class ShopResponseParser {
 		Integer bulkSize = null;
 		String stockRaw = null;
 		StockUnit stockUnit = StockUnit.UNKNOWN;
+		Integer remainingPercent = null;
 		Integer maxBuyBulks = null;
+		Integer maxBuyItems = null;
+		Integer maxSellBulks = null;
 		Integer maxSellItems = null;
 		boolean supportsAll = false;
 		ShopDirection direction = null;
+		boolean inEnchantments = false;
+		List<String> enchantments = new ArrayList<>();
 		List<String> rawLines = new ArrayList<>();
 
 		for (CapturedMessage message : messages) {
 			ItemStackTemplate messagePreview = findPreview(message.original());
-			for (String line : message.text().split("\\n")) {
-				String text = line.trim();
-				if (text.isEmpty()) {
+			for (String raw : message.text().split("\\n")) {
+				String text = normalize(raw);
+				if (text == null) {
 					continue;
+				}
+				// A pure box rule frames the response and carries nothing.
+				if (BOX_RULE.matcher(text).matches()) {
+					continue;
+				}
+				// The enchantment section runs from its header until a
+				// shop field resumes or an unrelated line interrupts it;
+				// its lines are cross-check evidence, never identity.
+				if (inEnchantments) {
+					if (isEnchantmentLine(text)) {
+						enchantments.add(text);
+						rawLines.add(text);
+						continue;
+					}
+					if (isEnchantmentHeader(text)) {
+						continue;
+					}
+					inEnchantments = false;
 				}
 				if (text.equals(HEADER)) {
 					rawLines.add(text);
@@ -169,12 +269,35 @@ public final class ShopResponseParser {
 				} else if (text.startsWith(ALL_PREFIX)) {
 					supportsAll = true;
 					rawLines.add(text);
+				} else if (isEnchantmentHeader(text)) {
+					inEnchantments = true;
+					rawLines.add(text);
 				} else {
 					Matcher bulk = BULK_INFO.matcher(text);
 					if (bulk.matches()) {
 						bulkSize = Integer.valueOf(bulk.group(1));
-						maxBuyBulks = Integer.valueOf(bulk.group(2));
+						Integer bulks = Integer.valueOf(bulk.group(3));
+						if (bulk.group(2).equals("buy")) {
+							maxBuyBulks = bulks;
+						} else {
+							maxSellBulks = bulks;
+						}
 						rawLines.add(text);
+						continue;
+					}
+					Matcher buyLimit = BUY_LIMIT.matcher(text);
+					if (buyLimit.matches()) {
+						maxBuyItems = Integer.valueOf(buyLimit.group(1));
+						rawLines.add(text);
+						continue;
+					}
+					Matcher remaining = REMAINING.matcher(text);
+					if (remaining.matches()) {
+						int percent = Integer.parseInt(remaining.group(1));
+						if (percent <= 100) {
+							remainingPercent = percent;
+							rawLines.add(text);
+						}
 					}
 				}
 			}
@@ -186,12 +309,13 @@ public final class ShopResponseParser {
 
 		boolean complete = owner != null && itemDisplay != null
 				&& price != null && priceScope != null
-				&& (direction == ShopDirection.BUYING || bulkSize != null);
+				&& (priceScope == PriceScope.PER_ITEM || bulkSize != null);
 		ItemFingerprint fingerprint = preview != null
 				? ItemFingerprints.ofTemplate(preview)
 				: ItemFingerprints.fromDisplay(itemDisplay);
 		return Optional.of(new ShopResponse(owner, direction, preview, itemDisplay, price, priceScope,
-				bulkSize, stockRaw, stockUnit, maxBuyBulks, maxSellItems, supportsAll,
+				bulkSize, stockRaw, stockUnit, remainingPercent, maxBuyBulks, maxBuyItems,
+				maxSellBulks, maxSellItems, supportsAll, enchantments,
 				complete ? ShopResponse.Completeness.COMPLETE : ShopResponse.Completeness.PARTIAL,
 				rawLines, receivedAt));
 	}

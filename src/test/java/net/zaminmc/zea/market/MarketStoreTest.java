@@ -46,7 +46,7 @@ class MarketStoreTest {
 				ShopDirection.SELLING,
 				new ItemFingerprint("minecraft:diamond_pickaxe|{}", ItemFingerprint.Fidelity.EXACT),
 				"Diamond Pickaxe", price, PriceScope.PER_BULK, 7, "78", StockUnit.UNKNOWN,
-				64, null, true, SourceType.SERVER_RESPONSE, at);
+				null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, at);
 	}
 
 	@Test

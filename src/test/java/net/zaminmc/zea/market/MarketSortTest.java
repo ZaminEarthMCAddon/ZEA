@@ -39,14 +39,14 @@ class MarketSortTest {
 		data.record(shop(id, display), new ShopObservation(id, ShopDirection.SELLING,
 				new ItemFingerprint(PICKAXE, ItemFingerprint.Fidelity.EXACT),
 				display, new BigDecimal(price), PriceScope.PER_BULK, bulk,
-				"78", StockUnit.UNKNOWN, 64, null, true, SourceType.SERVER_RESPONSE, at));
+				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, at));
 	}
 
 	private static void buying(MarketData data, String id, String display, String price, Instant at) {
 		data.record(shop(id, display), new ShopObservation(id, ShopDirection.BUYING,
 				new ItemFingerprint(PICKAXE, ItemFingerprint.Fidelity.EXACT),
 				display, new BigDecimal(price), PriceScope.PER_ITEM, null,
-				"38", StockUnit.SPACE, null, 10, true, SourceType.SERVER_RESPONSE, at));
+				"38", StockUnit.SPACE, null, null, null, null, 10, true, List.of(), SourceType.SERVER_RESPONSE, at));
 	}
 
 	private static PhysicalShop shop(String id, String display) {
@@ -107,12 +107,12 @@ class MarketSortTest {
 			d.record(shop("s2", "Beta"), new ShopObservation("s2", ShopDirection.SELLING,
 					new ItemFingerprint(PICKAXE, ItemFingerprint.Fidelity.EXACT),
 					"Beta", new BigDecimal("1"), PriceScope.PER_BULK, null,
-					null, StockUnit.UNKNOWN, null, null, false, SourceType.SERVER_RESPONSE, T.plusSeconds(1)));
+					null, StockUnit.UNKNOWN, null, null, null, null, null, false, List.of(), SourceType.SERVER_RESPONSE, T.plusSeconds(1)));
 			// A sign-only advert has no price at all.
 			d.record(shop("s3", "Gamma"), new ShopObservation("s3", ShopDirection.SELLING,
 					new ItemFingerprint("pick", ItemFingerprint.Fidelity.DISPLAY_ONLY),
 					"Gamma", null, null, null, "36", StockUnit.UNKNOWN,
-					null, null, false, SourceType.SIGN_ONLY, T.plusSeconds(2)));
+					null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T.plusSeconds(2)));
 		});
 
 		// On the raw-price sort Beta is judgeable (a real 1G advert), and
