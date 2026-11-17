@@ -4601,3 +4601,77 @@ destination lifecycle are pinned by tests. In-game verification — the
 panel against the GUI at every scale, the search-driven filter, the
 detail view's offer rows, the Navigate flow against a live server —
 remains the live checklist.
+
+## 2026-11-17 — The NEU item pane, the migrated organization, and the derived-stat rework
+
+### What the browser was, and what it became
+
+The shop index beside the inventory was a small floating panel: its height
+followed the container GUI's, its header was a 16-pixel strip with glyph
+buttons, its grid scrolled by rows with the page hint tucked into the
+corner, and selecting a tile blew the whole thing up into a centered modal.
+None of that was NEU's item pane, so the pane is rebuilt on the actual
+NEUOverlay layout and interaction model — studied from the upstream source
+with its full history, not from screenshots: the mandatory commits
+(9f372b3's keyboard-repeat lesson, 02019f3's search length, 5014caa's
+null-safety, 0ca1609's dedup, cf9fee0's stack-override handling) all inform
+the rebuild.
+
+The geometry now is NEU's math adapted to the modern scaled coordinate
+space: the pane anchors to the screen's right edge and spans the screen's
+full height, a third of the screen wide; the grid centers inside it by
+splitting the leftover width and height in half and paginates by NEU's
+ceiling-based column and row counts; the tile hit box is the item plus its
+one-pixel gutter, so a click in the stride's middle gap lands nowhere. The
+nav element carries Prev and Next flanking the page pill (NEU's
+renderNavElement), the sort bar carries the order icons from the left and
+the direction filters from the right, scaled down on narrow panes the way
+NEU scales them, and the pane gains a real close and NEU's edge tab to
+reopen it. The detail view is NEU's info-pane model: the variant's offers
+open inside the pane — back arrow, summary, grouped offer rows, the
+explicit Navigate footer — never a centered modal. The layout math is
+pinned to the values NEU's own formulas produce, computed by hand from the
+upstream source, so a drift against NEU's model fails the geometry tests
+first.
+
+### The organization moved
+
+ZEA and ZEA-REPO transferred from ZaminMC to ZaminEarthMCAddon through the
+GitHub transfer API — history, branches, tags, releases, issues and the
+Actions all preserved, old addresses redirecting. The organization profile
+carries its location and description, the `.github` profile README
+introduces the projects, and every stale reference — READMEs, schema
+ids, the map client's user agent, the repo sync's raw URLs — now resolves
+to the canonical location. `docs/ECOSYSTEM.md` records the mapping to the
+upstream ecosystem and, deliberately, which companion repositories are
+not built until reuse demands them.
+
+### The derived-stat rework
+
+The pickaxe tooltip read "Mining Speed: 8" and then "Mining Efficiency:
++26 [5]" — a statistic invented for an enchantment, followed by its raw
+level as an unexplained bracket. The mining section now shows one row,
+"Mining Speed: 34", with Efficiency folded in. Fortune becomes Mining
+Fortune, the vanilla expected-yield formula as +33 %, +75 %, +120 %,
+suppressed under Silk Touch (the blocked case is the indicators'). The
+conditional damage enchantments take their stat names — Undead Damage,
+Arthropod Damage, Aquatic Damage — with values still read live from each
+enchantment's own effect data. The special enchantments gain a symbol
+registry classified applied/missing/not-applicable against the same
+isSupportedItem and areCompatible mechanisms the rarity budget uses,
+hidden when not applicable, hover-annotated, omitted when nothing applies.
+Breaking Power's mechanism exists and reads one authoritative mapping —
+which is deliberately empty today, because no authoritative source exists;
+a missing value is never fabricated.
+
+### Verification
+
+`./gradlew build` green; **1424 tests, 0 failures** (the geometry tests
+pin NEU's own formula outputs; the state classifier runs against
+fixtures constructed as the vanilla data writes exclusive sets). The
+GitHub transfer is verified through the API, the Actions run green on the
+merged develop. In-game verification — the pane at every GUI scale, the
+page navigation, the sort bar, the in-pane detail, the indicator glyphs'
+font coverage on the actual renderer, the search-driven filter against a
+live server — remains the live checklist: the sandbox cannot launch a
+client, and the report says so rather than claiming pixels it never drew.
