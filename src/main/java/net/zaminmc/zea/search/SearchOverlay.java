@@ -5,8 +5,10 @@ package net.zaminmc.zea.search;
  * exact values are pinned by tests. Matching slots get a subtle colored
  * fill under the item plus a one-pixel border around the slot's 16×16
  * area; non-matching stacks get a dark overlay on top that leaves the
- * silhouette visible. Empty slots are never dimmed or highlighted —
- * there is nothing to find in them.
+ * silhouette visible. Empty slots dim like everything else — a blank
+ * slot must not keep shouting while the items around it go dark — but
+ * they never carry the match highlight, since there is nothing in them
+ * to match.
  */
 public final class SearchOverlay {
         /** The dropdown's highlight color choices. */

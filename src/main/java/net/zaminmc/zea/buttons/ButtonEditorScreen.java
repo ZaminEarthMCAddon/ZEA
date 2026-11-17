@@ -11,12 +11,19 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.zaminmc.zea.ZeaClient;
+import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.search.SearchBarLayout;
+import net.zaminmc.zea.search.SearchBarWidget;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The NEU-style button editor: the standard inventory drawn as a canvas,
@@ -36,6 +43,14 @@ import java.util.Locale;
  * it validates (a blank command refuses, and the stored button stands).
  * Every accepted change persists immediately through the coordinator's
  * safe-write store, so a crash mid-edit loses at most the working copy.
+ *
+ * <p>The canvas is the real inventory: the standard texture with every
+ * live slot of the player's menu drawn on it, so a button is placed over
+ * what the player is actually carrying. The search bar renders below in
+ * its real footprint through the shared {@link SearchBarLayout} — the
+ * same rectangle the container screens and the above-search zone are
+ * laid out against — as a preview only: it is never a child widget, so
+ * it cannot take focus, carets or clicks.
  */
 public final class ButtonEditorScreen extends Screen {
         /** The standard survival inventory texture the canvas draws. */
@@ -96,6 +111,10 @@ public final class ButtonEditorScreen extends Screen {
         private EditBox iconSearchField;
         private CommandSuggestor suggestor;
 
+        /** The search bar preview below the canvas; renders only, never takes input. */
+        @Nullable
+        private SearchBarWidget barPreview;
+
         private final ButtonDragSession drag = new ButtonDragSession();
         private ButtonEditForm form;
         private boolean panelOpen;
@@ -153,6 +172,16 @@ public final class ButtonEditorScreen extends Screen {
 
                 suggestor = new CommandSuggestor(minecraft, commandField);
 
+                ZeaConfig config = ZeaClient.config();
+                if (config != null && config.inventorySearchEnabled()) {
+                        barPreview = new SearchBarWidget(font, 0, 0, CANVAS_X, ZeaClient.search());
+                        barPreview.calculatorEnabled(config.inventorySearchCalculatorEnabled());
+                        // The real bar restores the per-screen query; the preview mirrors it.
+                        barPreview.setValue(ZeaClient.search().query());
+                } else {
+                        barPreview = null;
+                }
+
                 buildIconList();
                 refreshIcons();
         }
@@ -192,6 +221,8 @@ public final class ButtonEditorScreen extends Screen {
                 context.blit(RenderPipelines.GUI_TEXTURED, INVENTORY_TEXTURE, guiLeft, guiTop,
                                 0.0f, 0.0f, CANVAS_X, CANVAS_Y, 256, 256);
 
+                zea$renderLiveInventory(context);
+
                 for (InventoryButton button : owner.buttons()) {
                         int x = canvasToScreenX(button);
                         int y = canvasToScreenY(button);
@@ -208,6 +239,11 @@ public final class ButtonEditorScreen extends Screen {
                                 ButtonRenderer.drawSwatch(context, x, y, button.style());
                         }
                         drawButtonFace(context, button, x, y);
+                }
+
+                if (barPreview != null) {
+                        SearchBarLayout.apply(barPreview, guiLeft, CANVAS_X, height);
+                        barPreview.extractWidgetRenderState(context, mouseX, mouseY, delta);
                 }
 
                 if (selected() == null) {
@@ -227,9 +263,31 @@ public final class ButtonEditorScreen extends Screen {
                 }
         }
 
-        /** The button's face \u2014 the container view's own drawing, so the preview is exact. */
+        /** The button's face — the container view's own drawing, so the preview is exact. */
         private void drawButtonFace(GuiGraphicsExtractor context, InventoryButton button, int x, int y) {
                 ButtonRenderer.drawFace(context, font, button, x, y, true);
+        }
+
+        /**
+         * The real inventory, drawn into the canvas: every live slot of the
+         * player's menu at its vanilla position — items, counts, durability
+         * bars and all — so a button is placed over what the player is
+         * actually carrying instead of a blank grid that hides it.
+         */
+        private void zea$renderLiveInventory(GuiGraphicsExtractor context) {
+                Player player = minecraft == null ? null : minecraft.player;
+                if (player == null) {
+                        return;
+                }
+                for (Slot slot : player.inventoryMenu.slots) {
+                        ItemStack stack = slot.getItem();
+                        if (!stack.isEmpty()) {
+                                int x = guiLeft + slot.x;
+                                int y = guiTop + slot.y;
+                                context.item(stack, x, y);
+                                context.itemDecorations(font, stack, x, y);
+                        }
+                }
         }
 
         /**

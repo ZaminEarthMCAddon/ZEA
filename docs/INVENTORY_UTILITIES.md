@@ -40,9 +40,12 @@ dev.27 entry.
 - *Close on execute*: when enabled, the screen closes after the command
   dispatched — and only if the command itself did not already open
   another screen.
-- `/zeabuttons` opens the button editor: a live canvas of the inventory
-  with every button at its region position, a control panel (add, edit,
-  move up/down, region, enable, delete) and the preset row. The same
+- `/zeabuttons` opens the button editor: the inventory as a canvas —
+  the standard texture with the player's actual items drawn on it, the
+  search bar in its real screen-bottom footprint through the shared
+  `SearchBarLayout` — every button at its zone slot, the preset row at
+  the top left, and a hover panel for the selected button's command
+  (with server-backed tab completion), name, style and icon. The same
   editor is reachable from the config's *Open button editor* button.
 - Presets: **Default** (a starter canvas), **Buttons Everywhere**
   (every region full) and **Empty** (none). Preset buttons carry blank
@@ -51,9 +54,7 @@ dev.27 entry.
   keeps the replaced set recoverable through *Restore previous* until
   the next regular edit.
 - The rebindable *Toggle button editing* key (Controls → ZEA, unbound
-  by default) turns edit mode on in a container screen: gold borders,
-  dragging a button between regions, right-click to edit, and a **+**
-  ghost in the top row for new buttons. Esc leaves edit mode first.
+  by default) opens the editor over the current container screen.
 
 ### Layout rules
 

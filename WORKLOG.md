@@ -4341,3 +4341,37 @@ as ancestors of develop before any deletion.
 `fix/search-bar-fixes`, `fix/shop-quantity-chat-bypass` and
 `session16-parallel-implementation` deleted on the remote and locally
 after the containment check; `develop` kept, as instructed.
+
+## 2026-11-17 — The editor canvas: the live inventory and the search bar preview
+
+### The live report
+
+Two symptoms on the button editor, straight off the user's screenshot:
+the inventory behind the buttons was blank (texture only — the player's
+actual items never drew), and the search bar was nowhere in the editor,
+so a button parked near it landed blind. The SearchBarLayout javadoc
+already promised the editor preview ("any preview (the button editor's
+canvas) both go through these functions") — nobody had wired it.
+
+### The fix
+
+- **The canvas is the real inventory.** `ButtonEditorScreen` now draws
+  every live slot of the player's menu onto the texture —
+  `inventoryMenu.slots` at their vanilla coordinates, item plus
+  `itemDecorations` for counts, durability and cooldown — before the
+  buttons, so a button renders over what the player is actually
+  carrying.
+- **The search bar previews in its real footprint.** The editor builds
+  a render-only `SearchBarWidget` when the inventory search is enabled
+  (calculator flag honored, the per-screen query mirrored, no responder)
+  and positions it through the one `SearchBarLayout.apply` call the
+  container screens use — never a child widget, so it cannot take
+  focus, carets or clicks, and no editor keybinding changes.
+
+### Verification
+
+`./gradlew build` green; **1339 tests, 0 failures**. In-game
+verification — the item layer under the buttons, the bar's footprint
+against the above-search zone, and the mirrored query — is the live
+checklist.
+
