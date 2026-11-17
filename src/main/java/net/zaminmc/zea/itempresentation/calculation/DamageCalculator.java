@@ -134,18 +134,26 @@ public final class DamageCalculator {
                                                 snapshot, Attributes.SWEEPING_DAMAGE_RATIO);
                 EnchantmentDamage enchantDamage = enchantmentDamage(snapshot);
                 double playerDamage = held ? base : 0.0;
+                // Active attack-damage effects join the held total at their
+                // enumerated amounts — Strength's +3 per level, a Weakness's
+                // -4, whatever the live effect data registers on the
+                // attribute. The amounts come from the effect templates the
+                // game itself applies, read live per tooltip; the attack-
+                // damage instance's value is deliberately not differenced
+                // against them, because the client's instance does not carry
+                // the held item's equipment modifier to subtract cleanly.
                 double effectBonus = 0.0;
                 String effectLabel = "";
                 if (held) {
-                        // Everything the live attack-damage instance holds
-                        // beyond the base and the held item's own modifiers
-                        // is active-effect contribution — Strength's +3 per
-                        // level, a Weakness's -4, whatever else applies.
-                        effectBonus = wielder.attackDamageLive() - base - itemDamage;
+                        for (WielderContext.EffectAnnotation effect : wielder.attackDamageEffects()) {
+                                effectBonus += effect.amount();
+                        }
                         if (Math.abs(effectBonus) < 1e-9) {
                                 effectBonus = 0.0;
+                                effectLabel = "";
+                        } else {
+                                effectLabel = effectLabel(wielder, effectBonus);
                         }
-                        effectLabel = effectLabel(wielder, effectBonus);
                 }
                 return Optional.of(new ItemStatistics.MeleeDamage(
                                 itemDamage,
@@ -161,26 +169,20 @@ public final class DamageCalculator {
         }
 
         /**
-         * The name behind {@code effectBonus} — the active attack-
-         * damage effects' display names, joined, when their summed
-         * amounts actually account for the bonus. A residue the named
-         * effects do not explain (a modded modifier the attribute
-         * carries without an effect behind it) stays unnamed: the
-         * total is still exact, the annotation simply declines to
-         * attribute it to Strength.
+         * The names behind {@code effectBonus} — the active attack-
+         * damage effects' display names, joined. {@code effectBonus} is
+         * exactly the sum of the context's enumerated amounts, so the
+         * label always accounts for the annotation's number.
          */
         private static String effectLabel(WielderContext wielder, double effectBonus) {
                 if (effectBonus == 0.0 || wielder.attackDamageEffects().isEmpty()) {
                         return "";
                 }
-                double named = 0.0;
                 List<String> names = new ArrayList<>();
                 for (WielderContext.EffectAnnotation effect : wielder.attackDamageEffects()) {
-                        named += effect.amount();
                         names.add(effect.label());
                 }
-                return Math.abs(named - effectBonus) < 1e-6
-                                ? String.join(" + ", names) : "";
+                return String.join(" + ", names);
         }
 
         /**
