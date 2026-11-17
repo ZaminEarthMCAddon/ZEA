@@ -4666,7 +4666,7 @@ a missing value is never fabricated.
 
 ### Verification
 
-`./gradlew build` green; **1424 tests, 0 failures** (the geometry tests
+`./gradlew build` green; **1422 tests, 0 failures** (the geometry tests
 pin NEU's own formula outputs; the state classifier runs against
 fixtures constructed as the vanilla data writes exclusive sets). The
 GitHub transfer is verified through the API, the Actions run green on the
