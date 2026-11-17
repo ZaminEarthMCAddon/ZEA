@@ -1,6 +1,10 @@
 package net.zaminmc.zea.rarity;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.VanillaBootstrap;
 import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
 import org.junit.jupiter.api.Test;
@@ -11,10 +15,14 @@ import java.util.List;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.EnchantmentStyle;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.footerLabel;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.isAttributeSectionHeader;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.recolorTree;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.removeAdvancedDurabilityLines;
+import static net.zaminmc.zea.rarity.RarityTooltipEditor.removeEnchantmentExplanationLore;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.removeVanillaAttributeSections;
 import static net.zaminmc.zea.rarity.RarityTooltipEditor.styleForLevels;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -202,6 +210,150 @@ class EnchantmentStylingTest {
                                 Component.literal("minecraft:test_item")));
                 removeVanillaAttributeSections(lines, EnchantmentStylingTest::isMarker);
                 assertEquals(List.of("Test Sword", "server lore", "minecraft:test_item"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        // ------------------------------------------------------------------
+        // Name recoloring (the pure tree seam)
+        // ------------------------------------------------------------------
+
+        /**
+         * The live-server regression this seam exists for: a custom
+         * name whose color lives in child runs — the root is
+         * colorless, an aqua child carries the display — kept its
+         * server color while the footer below showed the rarity,
+         * because the old root-only recolor never reached the
+         * children. The tree recolor replaces every explicit color,
+         * root and children alike, and preserves the text and the
+         * non-color styling.
+         */
+        @Test
+        void serverNameWithChildColorsRecolorsThroughTheTree() {
+                MutableComponent name = Component.empty()
+                                .append(Component.literal("Diamond ").withStyle(ChatFormatting.AQUA))
+                                .append(Component.literal("Sword")
+                                                .withStyle(ChatFormatting.AQUA)
+                                                .withStyle(ChatFormatting.BOLD));
+                TextColor epic = RarityEngine.textColor(ItemRarity.EPIC);
+                MutableComponent recolored = recolorTree(name, epic);
+                assertEquals("Diamond Sword", recolored.getString(),
+                                "the exact displayed text survives");
+                assertEquals(epic, recolored.getStyle().getColor(),
+                                "the root takes the rarity color");
+                assertEquals(2, recolored.getSiblings().size(),
+                                "the child runs survive as children");
+                for (Component run : recolored.getSiblings()) {
+                        assertEquals(epic, run.getStyle().getColor(),
+                                        "a child run's color follows the rarity");
+                }
+                assertTrue(recolored.getSiblings().get(1).getStyle().isBold(),
+                                "non-color styling survives");
+                assertNotEquals(name, recolored, "the original tree is never modified");
+        }
+
+        /** A root-colored name recolors exactly as before — the root path never regressed. */
+        @Test
+        void rootColoredNameStillRecolors() {
+                MutableComponent name = Component.literal("Bow")
+                                .withStyle(ChatFormatting.AQUA);
+                TextColor legendary = RarityEngine.textColor(ItemRarity.LEGENDARY);
+                MutableComponent recolored = recolorTree(name, legendary);
+                assertEquals("Bow", recolored.getString());
+                assertEquals(legendary, recolored.getStyle().getColor());
+                assertTrue(recolored.getSiblings().isEmpty(), "no children to walk");
+        }
+
+        /** The recolor reaches grandchildren — servers nest deeper than one level. */
+        @Test
+        void recolorReachesGrandchildren() {
+                MutableComponent name = Component.empty()
+                                .append(Component.empty()
+                                                .append(Component.literal("Deep")
+                                                                .withStyle(ChatFormatting.AQUA)));
+                TextColor color = RarityEngine.textColor(ItemRarity.COMMON);
+                MutableComponent recolored = recolorTree(name, color);
+                assertEquals("Deep", recolored.getString());
+                assertEquals(color, recolored.getSiblings().get(0).getSiblings().get(0)
+                                .getStyle().getColor(),
+                                "the grandchild's color follows the rarity");
+        }
+
+        // ------------------------------------------------------------------
+        // Advanced durability dedup (the pure seam)
+        // ------------------------------------------------------------------
+
+        /**
+         * The duplicate-durability fix: the native advanced
+         * {@code item.durability} line goes when the stat block above
+         * already shows the same pair, while the identifier, the
+         * component count and everything else keep their places.
+         */
+        @Test
+        void advancedDurabilityLineIsRemovedAndTheTrailerStays() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("Durability: 1354 / 1561"),
+                                Component.translatable("item.durability", 1354, 1561),
+                                Component.literal("minecraft:test_item"),
+                                Component.translatable("item.components", 19)));
+                removeAdvancedDurabilityLines(lines);
+                assertEquals(List.of("Test Sword", "Durability: 1354 / 1561",
+                                "minecraft:test_item", "19 component(s)"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        /**
+         * A plain-text line that merely spells the durability words is
+         * not the translatable advanced entry — server lore phrased the
+         * same way survives.
+         */
+        @Test
+        void plainTextDurabilityLookalikeStays() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("Durability: 100 / 200")));
+                removeAdvancedDurabilityLines(lines);
+                assertEquals(List.of("Test Sword", "Durability: 100 / 200"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        // ------------------------------------------------------------------
+        // Enchantment-explanation lore removal (the pure seam)
+        // ------------------------------------------------------------------
+
+        /**
+         * The explanation lore a server attaches beside its
+         * enchantments — the observed phrase bank and the held
+         * enchantments' live descriptions — is removed, while flavor
+         * and usage lore in the same block keeps its place and the
+         * name line is never touched.
+         */
+        @Test
+        void explanationLoreIsRemovedAndOtherLoreStays() {
+                EnchantmentFixtures fixtures = new EnchantmentFixtures();
+                ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+                mutable.set(fixtures.get("sharpness"), 5);
+                ItemEnchantments held = mutable.toImmutable();
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Diamond Sword"),
+                                Component.literal("Increases attack damage."),
+                                Component.literal("Right-click to activate"),
+                                Component.literal("Sharpness"),
+                                Component.literal("A gift from the mayor")));
+                removeEnchantmentExplanationLore(lines, held);
+                assertEquals(List.of("Diamond Sword", "Right-click to activate",
+                                "A gift from the mayor"),
+                                lines.stream().map(Component::getString).toList());
+        }
+
+        /** With no enchantments held there is nothing to explain — every lore line stays. */
+        @Test
+        void explanationRemovalWithoutEnchantmentsChangesNothing() {
+                List<Component> lines = new ArrayList<>(List.of(
+                                Component.literal("Test Sword"),
+                                Component.literal("Increases attack damage.")));
+                removeEnchantmentExplanationLore(lines, ItemEnchantments.EMPTY);
+                assertEquals(List.of("Test Sword", "Increases attack damage."),
                                 lines.stream().map(Component::getString).toList());
         }
 }

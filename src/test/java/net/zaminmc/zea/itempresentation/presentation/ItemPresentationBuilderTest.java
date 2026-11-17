@@ -156,7 +156,15 @@ class ItemPresentationBuilderTest {
                                 lineStarting(lines, "Fire Protection IV").getString());
         }
 
-        /** A bow shows the fully-drawn projectile damage, velocity and draw time, never melee attack speed. */
+        /**
+         * A bow shows the fully-drawn damage, velocity and draw time,
+         * never melee attack speed — and its labels carry no
+         * qualifiers: on a bow there is nothing else "Damage" or
+         * "Velocity" could belong to, so "Projectile Damage" and
+         * "Projectile Velocity" are noise. The draw time value is
+         * green, the one bow number marked apart from the white
+         * cadence numbers.
+         */
         @Test
         void bowShowsFullyDrawnDamageVelocityAndDrawTime() {
                 ItemStatistics stats = new ItemStatistics(
@@ -164,13 +172,18 @@ class ItemPresentationBuilderTest {
                                 Optional.of(new ItemStatistics.ProjectileStats(3.0, 2.0, 3.0, 5, 20, 1, 0, false, 0, true)),
                                 Optional.empty(), Optional.empty());
                 List<Component> lines = ItemPresentationBuilder.build(ItemCategory.BOW, stats);
-                assertEquals("Projectile Damage: +15 [5]",
-                                lineStarting(lines, "Projectile Damage").getString());
-                assertEquals("Projectile Velocity: 60 blocks/s",
-                                lineStarting(lines, "Projectile Velocity").getString());
+                assertEquals("Damage: +15 [5]",
+                                lineStarting(lines, "Damage:").getString());
+                assertEquals("Velocity: 60 blocks/s",
+                                lineStarting(lines, "Velocity:").getString());
                 assertEquals("Draw Time: 1s", lineStarting(lines, "Draw Time:").getString());
+                assertFalse(containsLineStarting(lines, "Projectile"),
+                                "a bow never qualifies its damage or velocity with 'Projectile'");
                 assertFalse(containsLineStarting(lines, "Attack Speed:"),
                                 "a bow must never show melee attack speed");
+                Component drawTime = lineStarting(lines, "Draw Time:");
+                assertEquals(0x55FF55, drawTime.getSiblings().get(0).getStyle().getColor().getValue(),
+                                "the draw time value is green");
         }
 
         /** A multishot crossbow shows reload time, three projectiles and pierce depth. */
