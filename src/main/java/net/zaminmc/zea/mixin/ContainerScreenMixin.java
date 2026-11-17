@@ -502,42 +502,6 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
 	private void zea$onMouseClick(MouseButtonEvent event, boolean doubleClick,
 			CallbackInfoReturnable<Boolean> cir) {
 		AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
-		// The browser is the top layer: a click over it never
-		// reaches a slot. A tile click opens a variant's detail; an
-		// offer click selects it; a selection never issues a
-		// command.
-		ItemBrowser browser = ZeaClient.browser();
-		if (browser != null && ZeaClient.config() != null
-				&& ZeaClient.config().inventoryShopBrowserEnabled()
-				&& !zea$isCreative(self)
-				&& browser.click(self, event.x(), event.y())) {
-			cir.setReturnValue(true);
-			return;
-		}
-		InventoryButtons buttons = ZeaClient.inventoryButtons();
-		SlotLocks locks = ZeaClient.slotLocks();
-		if (locks != null && locks.pairingActive() && !ZeaKeys.LOCK_SLOT.isDown()) {
-			locks.endPairing();
-		}
-		if (zea$buttonsActive(buttons)) {
-			ButtonGeometry.Placement hit = ButtonGeometry.at(zea$placements(buttons, self),
-					event.x(), event.y());
-			if (hit != null) {
-				zea$activateButton(self, buttons, hit.button());
-				cir.setReturnValue(true);
-				return;
-			}
-		}
-		if (locks != null && locks.pairingActive() && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
-			Slot slot = hoveredSlot;
-			int containerSlot = slot == null ? -1 : zea$containerSlot(slot);
-			if (containerSlot >= 0 && containerSlot <= 8) {
-				locks.bind(locks.pairingSlot(), containerSlot);
-				locks.endPairing();
-				cir.setReturnValue(true);
-				return;
-			}
-		}
 		SearchBarWidget bar = zea$searchBar;
 		if (bar != null) {
 			// NEU's group: the settings plate opens the config,
@@ -577,6 +541,42 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
 				}
 			} else if (self.getFocused() == bar) {
 				self.setFocused(null);
+			}
+		}
+		// The browser is the top layer: a click over it never
+		// reaches a slot. A tile click opens a variant's detail; an
+		// offer click selects it; a selection never issues a
+		// command.
+		ItemBrowser browser = ZeaClient.browser();
+		if (browser != null && ZeaClient.config() != null
+				&& ZeaClient.config().inventoryShopBrowserEnabled()
+				&& !zea$isCreative(self)
+				&& browser.click(self, event.x(), event.y())) {
+			cir.setReturnValue(true);
+			return;
+		}
+		InventoryButtons buttons = ZeaClient.inventoryButtons();
+		SlotLocks locks = ZeaClient.slotLocks();
+		if (locks != null && locks.pairingActive() && !ZeaKeys.LOCK_SLOT.isDown()) {
+			locks.endPairing();
+		}
+		if (zea$buttonsActive(buttons)) {
+			ButtonGeometry.Placement hit = ButtonGeometry.at(zea$placements(buttons, self),
+					event.x(), event.y());
+			if (hit != null) {
+				zea$activateButton(self, buttons, hit.button());
+				cir.setReturnValue(true);
+				return;
+			}
+		}
+		if (locks != null && locks.pairingActive() && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+			Slot slot = hoveredSlot;
+			int containerSlot = slot == null ? -1 : zea$containerSlot(slot);
+			if (containerSlot >= 0 && containerSlot <= 8) {
+				locks.bind(locks.pairingSlot(), containerSlot);
+				locks.endPairing();
+				cir.setReturnValue(true);
+				return;
 			}
 		}
 	}

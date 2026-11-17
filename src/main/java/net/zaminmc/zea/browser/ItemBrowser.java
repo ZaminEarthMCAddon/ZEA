@@ -262,18 +262,25 @@ public final class ItemBrowser {
 		graphics.fill(pill[0] - 1, pill[1], pill[0] + pill[2] + 1, pill[1] + pill[3], PILL_LIGHT);
 		graphics.fill(pill[0], pill[1] + 1, pill[0] + pill[2] + 1, pill[1] + pill[3], PILL_DARK);
 		graphics.fill(pill[0], pill[1] + 1, pill[0] + pill[2], pill[1] + pill[3] - 1, FG);
-		String pageText = "Page: " + (Math.min(maxPages, state.page() + 1)) + "/" + maxPages
-				+ (m.screenHeight < 340 ? "" : "");
+		String pageText = "Page: " + (Math.min(maxPages, state.page() + 1)) + "/" + maxPages;
 		Component pageComponent = Component.literal(pageText).withStyle(style -> style.withBold(true));
-		int labelWidth = font.width(pageComponent);
-		int maxLabel = pill[2] - 10;
-		if (labelWidth > maxLabel) {
-			pageText = font.substrByWidth(pageComponent, maxLabel).getString();
-			pageComponent = Component.literal(pageText).withStyle(style -> style.withBold(true));
-			labelWidth = font.width(pageComponent);
-		}
-		graphics.text(font, pageComponent, pill[0] + (pill[2] - labelWidth) / 2,
-				pill[1] + (pill[3] - 8) / 2 + 1, 0xFF000000, false);
+		drawScaledCentered(graphics, font, pageComponent,
+				pill[0] + pill[2] / 2f, pill[1] + (pill[3] - 8) / 2f + 1, pill[2] - 10, 0xFF000000);
+	}
+
+	/**
+	 * NEU's {@code drawStringCenteredScaledMaxWidth}: the label centered
+	 * on the point, scaled down when it would overflow the maximum width.
+	 */
+	private static void drawScaledCentered(GuiGraphicsExtractor graphics, Font font, Component text,
+			float centerX, float top, float maxLen, int color) {
+		int width = font.width(text);
+		float scale = width > maxLen ? maxLen / width : 1f;
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(centerX - width * scale / 2f, top);
+		graphics.pose().scale(scale, scale);
+		graphics.text(font, text, 0, 0, color, false);
+		graphics.pose().popMatrix();
 	}
 
 	/**
@@ -302,9 +309,8 @@ public final class ItemBrowser {
 		Font font = Minecraft.getInstance().font;
 		String label = mirrored ? "Prev" : "Next";
 		Component comp = Component.literal(label).withStyle(style -> style.withBold(true));
-		int labelWidth = font.width(comp);
-		graphics.text(font, comp, x + (int) (w * 300 / 480f) - labelWidth / 2 + pressed,
-				y + h / 2 - 4 + pressed, 0xFF000000, false);
+		drawScaledCentered(graphics, font, comp,
+				x + w * 300 / 480f + pressed, y + h / 2f - 4 + pressed, w * 240 / 480f, 0xFF000000);
 	}
 
 	/** Whether any mouse button is currently held — NEU's Mouse.isButtonDown probe. */
@@ -351,8 +357,9 @@ public final class ItemBrowser {
 			// The rounded plate: NEU's item_mask at 18×18 tinted the
 			// foreground colour, one pixel larger than the item on every
 			// side.
-			graphics.blit(NeuTextures.ITEM_MASK, x - 1, y - 1,
-					x + BrowserGeometry.ITEM_SIZE + 1, y + BrowserGeometry.ITEM_SIZE + 1, 0f, 1f, 0f, 1f);
+			graphics.blit(RenderPipelines.GUI_TEXTURED, NeuTextures.ITEM_MASK, x - 1, y - 1,
+					0f, 0f, BrowserGeometry.ITEM_SIZE + 2, BrowserGeometry.ITEM_SIZE + 2,
+					36, 36, 36, 36, FG);
 			drawVariantIcon(graphics, variant, x, y);
 			if (BrowserGeometry.contains(x - 1, y - 1, BrowserGeometry.ITEM_SIZE + 2,
 					BrowserGeometry.ITEM_SIZE + 2, mouseX, mouseY)) {
@@ -569,9 +576,9 @@ public final class ItemBrowser {
 
 		// Identity: the item's own stack and its enchantment summary.
 		VariantStacks.Resolved resolved = VariantStacks.of(variant.token());
-		graphics.blit(NeuTextures.ITEM_MASK, contentLeft, m.boxPadding + 17,
-				contentLeft + BrowserGeometry.ITEM_SIZE + 2, m.boxPadding + 17
-								+ BrowserGeometry.ITEM_SIZE + 2, 0f, 1f, 0f, 1f);
+		graphics.blit(RenderPipelines.GUI_TEXTURED, NeuTextures.ITEM_MASK, contentLeft,
+				m.boxPadding + 17, 0f, 0f, BrowserGeometry.ITEM_SIZE + 2,
+				BrowserGeometry.ITEM_SIZE + 2, 36, 36, 36, 36, FG);
 		graphics.item(resolved.stack(), contentLeft + 1, m.boxPadding + 18);
 		String sub = resolved.exact()
 				? (variant.enchantments().isEmpty() ? "No enchantments"
@@ -663,7 +670,8 @@ public final class ItemBrowser {
 	/**
 	 * One offer row: NEU's selected-item-group framing for the selected
 	 * row, the hover wash, and the row's own text — direction, owner,
-	 * price, stock, where, age.
+	 * price on the first line with the age right-aligned; stock and
+	 * where on the second, everything trimmed into the pane's width.
 	 */
 	private void drawOfferRow(GuiGraphicsExtractor graphics, Font font, Offer offer,
 			int left, int width, int y, int rowHeight, int mouseX, int mouseY) {
@@ -678,21 +686,33 @@ public final class ItemBrowser {
 			graphics.fill(left, y, left + width, y + rowHeight - 2, ROW_HOVER);
 		}
 		ShopObservation observation = offer.observation();
-		// Direction first, by label — color never carries it alone.
-		String tag = observation.direction() == ShopDirection.SELLING ? "[BUY FROM]" : "[SELL TO]";
-		graphics.text(font, tag, left + 2, y + 2,
-				observation.direction() == ShopDirection.SELLING ? BUY_COLOR : SELL_COLOR, true);
+		// Line 1: the direction tag, then the owner in the middle space,
+		// then the price right-aligned — the middle shrinks, never overlaps.
+		String tag = observation.direction() == ShopDirection.SELLING ? "[BUY FROM] " : "[SELL TO] ";
+		int tagColor = observation.direction() == ShopDirection.SELLING ? BUY_COLOR : SELL_COLOR;
+		String price = priceOrDash(offer.unitPrice());
 		String owner = offer.shop().owner() == null ? "?" : offer.shop().owner();
-		int ownerWidth = font.width(owner);
-		graphics.text(font, owner, left + 66, y + 2, TEXT, true);
-		graphics.text(font, priceOrDash(offer.unitPrice()) + priceNote(observation),
-				left + 66 + ownerWidth + 8, y + 2, TEXT, true);
-		String stock = stockLine(observation);
-		graphics.text(font, stock, left + 2, y + 12, TEXT_DIM, true);
-		graphics.text(font, whereLine(offer), left + 2 + font.width(stock) + 8, y + 12, TEXT_DIM, true);
+		int priceWidth = font.width(price);
+		int middle = width - font.width(tag) - priceWidth - 6;
+		graphics.text(font, tag, left + 2, y + 2, tagColor, true);
+		if (middle > 8) {
+			String trimmed = font.plainSubstrByWidth(owner, middle);
+			graphics.text(font, trimmed, left + 2 + font.width(tag), y + 2, TEXT, true);
+		}
+		graphics.text(font, price, left + width - 2 - priceWidth, y + 2, TEXT, true);
+
+		// Line 2: stock, the bulk note and where, trimmed, the age right-aligned.
+		String stock = stockLine(observation) + priceNote(observation);
+		String where = whereLine(offer);
 		String age = MarketAge.format(observation.observedAt(), Instant.now())
 				+ (observation.sourceType() == SourceType.REMOTE_SHARED ? " · shared" : "");
-		graphics.text(font, age, left + width - 4 - font.width(age), y + 2, TEXT_DIM, true);
+		int ageWidth = font.width(age);
+		int detailWidth = width - ageWidth - 8;
+		if (detailWidth > 8) {
+			String line = font.plainSubstrByWidth(stock + (stock.isEmpty() ? "" : " · ") + where, detailWidth);
+			graphics.text(font, line, left + 2, y + 12, TEXT_DIM, true);
+		}
+		graphics.text(font, age, left + width - 2 - ageWidth, y + 12, TEXT_DIM, true);
 	}
 
 	/**
@@ -752,6 +772,42 @@ public final class ItemBrowser {
 		return where + " · " + coords;
 	}
 
+	private @Nullable Variant variantOf(@Nullable String token) {
+		if (token == null) {
+			return null;
+		}
+		for (Variant variant : state.results()) {
+			if (variant.token().equals(token)) {
+				return variant;
+			}
+		}
+		return null;
+	}
+
+	private static List<Offer> offersOf(Variant variant, ShopDirection direction) {
+		return variant.offers().stream()
+				.filter(offer -> offer.observation().direction() == direction)
+				.toList();
+	}
+
+	private static String priceOrDash(@Nullable BigDecimal price) {
+		return price == null ? "—" : format(price);
+	}
+
+	private static String format(BigDecimal price) {
+		return price.setScale(2, java.math.RoundingMode.HALF_UP)
+				.stripTrailingZeros().toPlainString() + "G";
+	}
+
+	private static String summaryLine(VariantPricing.SideStats stats) {
+		String line = "best " + priceOrDash(stats.best());
+		if (stats.median() != null) {
+			line += " · median " + format(stats.median());
+		}
+		return line + " · " + stats.shops() + " shop" + (stats.shops() == 1 ? "" : "s")
+				+ " · " + stats.owners() + " owner" + (stats.owners() == 1 ? "" : "s");
+	}
+
 	// ------------------------------------------------------------------
 	// Edge tab — NEU's 64 px item_pane_tab_arrow
 	// ------------------------------------------------------------------
@@ -808,41 +864,6 @@ public final class ItemBrowser {
 		return ZeaClient.search() == null ? "" : ZeaClient.search().query().trim();
 	}
 
-	private @Nullable Variant variantOf(@Nullable String token) {
-		if (token == null) {
-			return null;
-		}
-		for (Variant variant : state.results()) {
-			if (variant.token().equals(token)) {
-				return variant;
-			}
-		}
-		return null;
-	}
-
-	private static List<Offer> offersOf(Variant variant, ShopDirection direction) {
-		return variant.offers().stream()
-				.filter(offer -> offer.observation().direction() == direction)
-				.toList();
-	}
-
-	private static String priceOrDash(@Nullable BigDecimal price) {
-		return price == null ? "—" : format(price);
-	}
-
-	private static String format(BigDecimal price) {
-		return price.stripTrailingZeros().toPlainString() + "G";
-	}
-
-	private static String summaryLine(VariantPricing.SideStats stats) {
-		String line = "best " + priceOrDash(stats.best());
-		if (stats.median() != null) {
-			line += " · median " + format(stats.median());
-		}
-		return line + " · " + stats.shops() + " shop" + (stats.shops() == 1 ? "" : "s")
-				+ " · " + stats.owners() + " owner" + (stats.owners() == 1 ? "" : "s");
-	}
-
 	// ------------------------------------------------------------------
 	// Interaction
 	// ------------------------------------------------------------------
@@ -861,23 +882,19 @@ public final class ItemBrowser {
 		if (m == null) {
 			return false;
 		}
-		// A pane still mid-slide swallows the clicks over its region —
-		// NEU's factor gate runs before everything else.
-		if (paneOffset.getValue() < 0.99f && BrowserGeometry.inPane(itemFactor, m, mx, my)) {
-			return true;
-		}
-		// The edge tab, while the pane is closed.
-		if (!state.isOpen()) {
-			return false;
-		}
 		// The info pane's region, while the detail is open — NEU's
 		// mouseInput gates it before the item pane.
 		if (state.view() == ItemBrowserState.View.DETAIL && infoFactor > 0.01f
 				&& mx < BrowserGeometry.infoPaneRight(m, infoFactor)) {
 			return clickInfoPane(m, mx, my);
 		}
+		// NEU's factor gate: everything right of the pane's animated edge
+		// is the pane's — handled when open, swallowed while it slides.
 		if (!BrowserGeometry.inPane(itemFactor, m, mx, my)) {
 			return false;
+		}
+		if (!state.isOpen()) {
+			return true;
 		}
 		for (int[] button : BrowserGeometry.navButtons(m, paneLeft,
 				BrowserGeometry.maxPages(state.results().size(), m), boldWidths(screen.getFont()))) {
@@ -943,10 +960,8 @@ public final class ItemBrowser {
 		for (int[] icon : BrowserGeometry.orderIcons(m, paneLeft, ORDER_ICON_COUNT)) {
 			if (BrowserGeometry.contains(icon[0], icon[1], icon[2], icon[2], mx, my)
 					&& icon[3] < orders.length) {
-				if (mx >= icon[0] && mx < icon[0] + icon[2]) {
-					state.setOrder(orders[icon[3]]);
-					playPressSound();
-				}
+				state.setOrder(orders[icon[3]]);
+				playPressSound();
 				return;
 			}
 		}
