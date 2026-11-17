@@ -4020,6 +4020,7 @@ rebased tree (+13 over the session: the equipment exclusions, the
 compact formats, the grouped section, the trident throw, the
 rule-based mining speed, the footer label, and the four
 attribute-removal seams).
+
 ## 2026-11-17 (session 16, P0 port) — The shop-quantity chat bypass
 
 ### The regression
@@ -4375,3 +4376,71 @@ verification — the item layer under the buttons, the bar's footprint
 against the above-search zone, and the mirrored query — is the live
 checklist.
 
+## 2026-11-17 (session 22) — The server-item tooltip polish: six fixes on a branch
+
+The live EarthMC-style items exposed six presentation defects the local
+matrix could not show, fixed on `fix/rpg-tooltip-bugs`:
+
+- **Bow labels.** "Projectile Damage" and "Projectile Velocity" lost
+  their qualifier on a bow — nothing else on a bow could own the
+  numbers, so the lines read "Damage: +15 [5]" and "Velocity: 60
+  blocks/s". Tridents and crossbows keep their distinguishing
+  qualifiers; the bow's draw time value turned green (§a), the one
+  bow number a faster-is-better eye tracks.
+- **Names kept their server color.** The recolor only repainted the
+  root style, but server custom names carry their color in child
+  runs — an aqua "Diamond Sword" whose root is colorless stayed aqua
+  while the footer below showed the rarity. The recolor now walks the
+  whole component tree (`recolorTree`, built on `copy()` because
+  `plainCopy()` resets the style), replacing every explicit color
+  with the rarity's while preserving text, translations and non-color
+  styling. The anvil-renamed root-styled case is pinned unchanged.
+- **Duplicate durability.** The stat block's "Durability: 1354 /
+  1561" and F3+H's native `item.durability` line under the footer
+  said the same thing twice. The native line now goes whenever the
+  stat block presents the pair; the identifier, component count and
+  source footer keep their places and order.
+- **The enchantment section widened the box.** The wrap budget was
+  240 glyphs — wider than any stat line or advanced identifier the
+  rest of the tooltip produces (~160), so five bow enchantments
+  joined into one 239-glyph line. The budget is now 165: the sword's
+  six wrap 2-2-2, the bow's five 4-1, and the box keeps the width
+  the other content already demands.
+- **Enchantment explanations survived.** Servers attach prose lore
+  beside their enchantments ("Increases attack damage.", "The tool
+  loses durability slower."). Vanilla 26.3 emits no description lines
+  of its own (the bytecode shows `ItemEnchantments.addToTooltip`
+  calls only `getFullname`), so these are server lore, and the
+  compact section left them orphaned where the vanilla names had
+  been. `EnchantmentExplanations` recognizes them two ways — the
+  held enchantments' live synced `description()` text, and a bank of
+  the observed phrases, matched as whole trimmed lines
+  case-insensitively — and only recognized lines go; flavor and
+  usage lore keep their place.
+
+### Verification
+
+`./gradlew build` green: **1237 tests, 0 failures** (+12: the bow
+label and green draw-time pins, the explanation matcher, the tree
+recolor through child runs and grandchildren, the durability dedup
+with its plain-text lookalike, and the lore-removal seam with its
+no-enchantments counter-case). Live in the 26.3 client: EarthMC-style
+items were rebuilt with a datapack function (the chat input caps at
+256 characters — the 373-character commands truncated into parser
+errors, so the five `/give`s live in
+`saves/New World (1)/datapacks/zea_test` and run as
+`/function zea:testitems`). The rendered tooltips, read back from
+the pixels: the aqua child-run "Diamond Sword" wears EPIC purple
+with the §5 footer and no explanations, durability once, six
+enchantments wrapped 2-2-2 in chroma; the aqua "Bow" wears LEGENDARY
+gold with "Damage: +15 [5]", "Velocity: 60 blocks/s", a green "1s"
+draw time and five chroma-wrapped enchantments; the plain enchanted
+sword, the Protection IV chestplate and the untouched vanilla golden
+apple all behave; the maxed enchantment colors rotate on the
+eight-second hue wheel two-and-a-half seconds apart (blue-violet →
+orange). One trap documented for the next session: `/reload`
+rebuilds the enchantment registry, and `EnchantBudget`'s per-item
+cache then holds stale holders — every enchantment reads foreign
+gray and rarity falls to the material tier until the world is
+re-entered; not a code bug, but a cache-invalidation seam worth
+wiring to the reload event someday.

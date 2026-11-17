@@ -17,6 +17,7 @@ import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.itempresentation.calculation.ItemStatistics;
 import net.zaminmc.zea.itempresentation.calculation.StatisticsEngine;
+import net.zaminmc.zea.itempresentation.presentation.EnchantmentExplanations;
 import net.zaminmc.zea.itempresentation.presentation.EnchantmentSection;
 import net.zaminmc.zea.itempresentation.presentation.ItemPresentationBuilder;
 import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
@@ -45,14 +46,19 @@ import java.util.function.ToIntFunction;
  *       compact stat block, and the vanilla per-line enchantment list
  *       is replaced by the compact grouped section (blue names, grey
  *       separators, comma-boundary wrapping). Only the replaced lines
- *       are removed — lore, item descriptions and native advanced
- *       diagnostics survive.</li>
+ *       are removed — the enchantment-explanation lore servers attach
+ *       beside their enchantments, and the native advanced durability
+ *       line the stat block already shows, go too; other lore,
+ *       item descriptions and the native advanced diagnostics
+ *       survive.</li>
  *   <li><b>Name coloring</b> — the title line takes the rarity's
  *       color, on a rendering copy: the text, its translations, its
  *       non-color styling and the underlying stack are all preserved.
  *       Custom names are recolored the same way — the exact displayed
- *       text survives; only the presentation color follows the
- *       rarity.</li>
+ *       text survives; only the presented colors follow the rarity,
+ *       through the whole component tree, because server custom names
+ *       carry their color in child runs a root recolor never
+ *       reached.</li>
  *   <li><b>Enchantment tier styling</b> — when the compact section is
  *       disabled, vanilla's own enchantment lines are recolored by
  *       level tier instead: grey below-max, the animated chroma or
@@ -76,11 +82,14 @@ import java.util.function.ToIntFunction;
 public final class RarityTooltipEditor {
         /**
          * The widest the wrapped enchantment and missing-upgrade
-         * sections may be, in glyphs. A tooltip never strays near the
-         * screen edge: at the widest vanilla GUI scale the screen fits
-         * this twice over.
+         * sections may be, in glyphs — the natural width of the rest
+         * of the tooltip. The widest lines the RPG block itself
+         * produces (the longest stat line, the advanced registry
+         * identifier) sit around 160 glyphs, so a section wider than
+         * this only widened the whole box; at 165 the wrapped lines
+         * stay inside the width the other content already demands.
          */
-        private static final int MAX_SECTION_WIDTH = 240;
+        private static final int MAX_SECTION_WIDTH = 165;
 
         /** Narrowest wrap budget, for very small windows. */
         private static final int MIN_SECTION_WIDTH = 120;
@@ -157,9 +166,12 @@ public final class RarityTooltipEditor {
          * Inserts the RPG block: the compact stat section after the
          * item name, and the compact grouped enchantment section after
          * it, removing only the vanilla lines they replace — the
-         * {@code item.modifiers.*} attribute listing and the per-line
-         * enchantment entries. When the item carries no statistics and
-         * no enchantments, nothing is inserted and nothing is removed.
+         * {@code item.modifiers.*} attribute listing, the per-line
+         * enchantment entries, the enchantment-explanation lore a
+         * server attached alongside them, and the native advanced
+         * durability line the stat block already shows. When the item
+         * carries no statistics and no enchantments, nothing is
+         * inserted and nothing is removed.
          */
         private static void insertRpgBlock(List<Component> lines, ItemStack stack, ItemCategory category) {
                 ItemStatistics statistics = StatisticsEngine.statisticsOf(stack, levelLookup());
@@ -173,10 +185,66 @@ public final class RarityTooltipEditor {
                         removeVanillaAttributeSections(lines, line -> isNativeAdvancedLine(line, stack));
                 }
                 removeVanillaEnchantmentLines(lines, enchantments);
+                removeEnchantmentExplanationLore(lines, enchantments);
+                if (statistics.durability().isPresent()) {
+                        removeAdvancedDurabilityLines(lines);
+                }
                 // The stat block carries its own leading and trailing
                 // blank separators; insert after the name (line 0).
                 lines.addAll(1, statLines);
                 insertCompactEnchantments(lines, stack, enchantments, 1 + statLines.size());
+        }
+
+        /**
+         * Removes the enchantment-explanation lore lines — the gray
+         * prose a server attaches beside its enchantments ("Increases
+         * attack damage.", "The tool loses durability slower."),
+         * recognized by {@link EnchantmentExplanations} against the
+         * held enchantments' live descriptions and the known-phrase
+         * bank. Only recognized lines go; other lore — flavor text,
+         * usage hints — keeps its place and its text. The name line
+         * (index 0) is never touched. Package-private as the pure seam
+         * the lore-removal tests pin.
+         */
+        static void removeEnchantmentExplanationLore(List<Component> lines,
+                        ItemEnchantments enchantments) {
+                if (enchantments.isEmpty()) {
+                        return;
+                }
+                List<String> descriptions = new ArrayList<>();
+                for (var entry : enchantments.entrySet()) {
+                        descriptions.add(entry.getKey().value().description().getString());
+                }
+                for (int i = lines.size() - 1; i >= 1; i--) {
+                        if (EnchantmentExplanations.isExplanation(lines.get(i).getString(), descriptions)) {
+                                lines.remove(i);
+                        }
+                }
+        }
+
+        /**
+         * Removes Minecraft's native advanced durability line — the
+         * translatable {@code item.durability} entry ("Durability: 1354
+         * / 1561") F3+H places under the rarity footer — when the stat
+         * block above already presents the same current/maximum pair.
+         * The duplicate carried no new information; the remaining
+         * advanced lines (the registry identifier, the component count,
+         * the source footer) are untouched and keep their order.
+         * Package-private as the pure seam the durability-dedup tests
+         * pin.
+         */
+        static void removeAdvancedDurabilityLines(List<Component> lines) {
+                for (int i = lines.size() - 1; i >= 1; i--) {
+                        if (isDurabilityLine(lines.get(i))) {
+                                lines.remove(i);
+                        }
+                }
+        }
+
+        /** Whether the line is the translatable {@code item.durability} advanced entry. */
+        private static boolean isDurabilityLine(Component line) {
+                return line.getContents() instanceof TranslatableContents contents
+                                && contents.getKey().equals("item.durability");
         }
 
         /**
@@ -266,17 +334,47 @@ public final class RarityTooltipEditor {
          * Recolors the title line to the rarity color, on a rendering
          * copy. The exact displayed text, its translations, its
          * non-color styling and any child formatting survive — only
-         * the root color follows the rarity — and the underlying
+         * the presented colors follow the rarity — and the underlying
          * ItemStack and its name component are never modified.
+         *
+         * <p>The recolor walks the whole component tree, not just the
+         * root: server custom names carry their color in child runs
+         * (an aqua "Diamond Sword" whose root style is colorless),
+         * and a root-only recolor never reached them — the name kept
+         * its server color while the footer below showed the rarity.
+         * Every explicit color in the tree, root and children alike,
+         * is replaced by the rarity color.
          */
         private static void recolorName(List<Component> lines, ItemRarity rarity) {
                 if (lines.isEmpty()) {
                         return;
                 }
-                Component name = lines.get(0);
-                MutableComponent recolored = name.copy()
-                                .withStyle(style -> style.withColor(RarityEngine.textColor(rarity)));
-                lines.set(0, recolored);
+                lines.set(0, recolorTree(lines.get(0), RarityEngine.textColor(rarity)));
+        }
+
+        /**
+         * A rendering copy of {@code node} with every explicit color
+         * in its tree — its own and each descendant's — replaced by
+         * {@code color}. Text, translations, siblings and non-color
+         * styling are preserved; only colors change.
+         *
+         * <p>{@code copy()} is the base, not {@code plainCopy()}: the
+         * plain copy resets the style, and the node's own bold or
+         * italic would go with it. {@code copy()} keeps the style but
+         * carries the original sibling instances, so the sibling list
+         * is rebuilt from recolored trees — no original is shared
+         * with the result or mutated. Package-private as the pure seam
+         * the recolor tests pin.
+         */
+        static MutableComponent recolorTree(Component node, TextColor color) {
+                MutableComponent recolored = node.copy()
+                                .withStyle(style -> style.withColor(color));
+                List<Component> children = new ArrayList<>(recolored.getSiblings());
+                recolored.getSiblings().clear();
+                for (Component child : children) {
+                        recolored.append(recolorTree(child, color));
+                }
+                return recolored;
         }
 
         /**

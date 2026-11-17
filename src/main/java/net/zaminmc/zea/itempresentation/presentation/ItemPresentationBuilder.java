@@ -167,12 +167,20 @@ public final class ItemPresentationBuilder {
          * Power's level in the bracket), thrown damage for tridents,
          * the loaded projectile's damage for crossbows, launch
          * velocity, draw/reload/throw time, projectile count under
-         * Multishot, and pierce depth.
+         * Multishot, and pierce depth. A bow's qualifiers are dropped —
+         * on a bow there is nothing else the damage or the velocity
+         * could belong to, so the lines read just "Damage" and
+         * "Velocity"; tridents and crossbows keep their qualifiers
+         * because they distinguish the thrown/loaded numbers from the
+         * melee ones. The draw time is green: it is the one bow number
+         * a faster-is-better eye tracks, and the utility-green marks
+         * it apart from the white cadence numbers.
          */
         private static List<Component> projectileLines(ItemCategory category, ItemStatistics.ProjectileStats projectile) {
                 List<Component> lines = new ArrayList<>();
                 boolean trident = category == ItemCategory.TRIDENT;
-                String damageLabel = trident ? "Thrown Damage" : "Projectile Damage";
+                boolean bow = category == ItemCategory.BOW;
+                String damageLabel = trident ? "Thrown Damage" : bow ? "Damage" : "Projectile Damage";
                 double damage = projectile.velocityScaled()
                                 ? projectile.fullyCharged() : projectile.flat();
                 if (projectile.firework()) {
@@ -186,12 +194,12 @@ public final class ItemPresentationBuilder {
                 } else {
                         lines.add(statLine(damageLabel, "+" + format(damage), DAMAGE_RED));
                 }
-                lines.add(statLine(trident ? "Throw Velocity" : "Projectile Velocity",
+                lines.add(statLine(trident ? "Throw Velocity" : bow ? "Velocity" : "Projectile Velocity",
                                 format(projectile.speed() * 20.0) + " blocks/s", VALUE_WHITE));
                 if (trident) {
                         lines.add(statLine("Throw Time", seconds(projectile.chargeTicks()), VALUE_WHITE));
-                } else if (category == ItemCategory.BOW) {
-                        lines.add(statLine("Draw Time", seconds(projectile.chargeTicks()), VALUE_WHITE));
+                } else if (bow) {
+                        lines.add(statLine("Draw Time", seconds(projectile.chargeTicks()), BONUS_GREEN));
                 } else {
                         lines.add(statLine("Reload Time", seconds(projectile.chargeTicks()), VALUE_WHITE));
                 }
