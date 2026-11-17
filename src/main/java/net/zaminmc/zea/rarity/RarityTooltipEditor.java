@@ -129,7 +129,6 @@ public final class RarityTooltipEditor {
          * @param stack the hovered item
          */
         public static List<Component> edit(List<Component> list, ItemStack stack) {
-                ZeaClient.LOGGER.info("tooltip-edit entry stack={} lines={}", stack.getItem(), list.size());
                 ZeaConfig cfg = ZeaClient.config();
                 if (cfg == null || list.isEmpty()) {
                         return list;
@@ -143,9 +142,6 @@ public final class RarityTooltipEditor {
                 }
                 List<Component> edited = new ArrayList<>(list);
                 ItemRarity rarity = RarityEngine.rarityOf(stack);
-                ZeaClient.LOGGER.info("tooltip-edit stack={} category={} rpgFlag={} nameFlag={} rarity={}",
-                                stack.getItem(), category, cfg.rarityRpgStatsEnabled(),
-                                cfg.rarityNameColoringEnabled(), rarity);
                 if (cfg.rarityRpgStatsEnabled()) {
                         insertRpgBlock(edited, stack, category);
                 }
