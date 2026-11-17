@@ -7,6 +7,7 @@ import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Builds the RPG-style stat lines for one item — the compact block
@@ -76,7 +77,8 @@ public final class ItemPresentationBuilder {
                 List<Component> lines = new ArrayList<>();
                 statistics.meleeDamage().ifPresent(melee -> lines.addAll(meleeLines(category, melee)));
                 statistics.spear().ifPresent(spear -> lines.addAll(spearLines(spear)));
-                statistics.miningSpeed().ifPresent(mining -> lines.addAll(miningLines(mining)));
+                statistics.miningSpeed().ifPresent(mining ->
+                                lines.addAll(miningLines(mining, statistics.miningFortune())));
                 statistics.armor().ifPresent(armor -> lines.addAll(armorLines(armor)));
                 statistics.projectile().ifPresent(projectile -> lines.addAll(projectileLines(category, projectile)));
                 statistics.smashDamage().ifPresent(smash -> lines.addAll(smashLines(smash)));
@@ -179,20 +181,23 @@ public final class ItemPresentationBuilder {
         }
 
         /**
-         * The mining section: the tool's own speed, and Efficiency's
-         * live contribution as its own line with the enchantment's
-         * level in the bracket. Both numbers describe blocks the tool
-         * is correct for — the representative case — and Efficiency
-         * still reads as the enchantment it is in the enchantment
-         * section.
+         * The mining section: one Mining Speed row, the tool's own
+         * speed with Efficiency's live contribution already folded in —
+         * a diamond pickaxe with Efficiency V reads "Mining Speed: 34",
+         * and there is no separate Efficiency statistic beside it
+         * (Efficiency is an enchantment, and the enchantment section is
+         * where it presents). Fortune's expected yield follows as its
+         * own Mining Fortune row when the item carries it; Silk Touch
+         * blocks Fortune, and the blocked case is the indicators'
+         * business, never a number here. Both numbers describe blocks
+         * the tool is correct for — the representative case.
          */
-        private static List<Component> miningLines(ItemStatistics.MiningSpeed mining) {
+        private static List<Component> miningLines(ItemStatistics.MiningSpeed mining,
+                        Optional<ItemStatistics.MiningFortune> fortune) {
                 List<Component> lines = new ArrayList<>();
-                lines.add(statLine("Mining Speed", format(mining.baseSpeed()), VALUE_WHITE));
-                if (mining.efficiencyBonus() > 0.0) {
-                        lines.add(bonusStatLine("Mining Efficiency",
-                                        mining.efficiencyBonus(), mining.efficiencyLevel(), BONUS_GREEN));
-                }
+                lines.add(statLine("Mining Speed", format(mining.correctForDrops()), VALUE_WHITE));
+                fortune.ifPresent(f -> lines.add(statLine("Mining Fortune",
+                                "+" + Math.round(f.percentBonus()) + "%", BONUS_GREEN)));
                 return lines;
         }
 

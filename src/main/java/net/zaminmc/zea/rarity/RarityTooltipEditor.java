@@ -15,18 +15,21 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.itempresentation.calculation.BreakingPower;
 import net.zaminmc.zea.itempresentation.calculation.ItemStatistics;
 import net.zaminmc.zea.itempresentation.calculation.StatisticsEngine;
 import net.zaminmc.zea.itempresentation.calculation.WielderContext;
 import net.zaminmc.zea.itempresentation.presentation.EnchantmentExplanations;
 import net.zaminmc.zea.itempresentation.presentation.EnchantmentSection;
 import net.zaminmc.zea.itempresentation.presentation.ItemPresentationBuilder;
+import net.zaminmc.zea.itempresentation.presentation.SpecialEnchantments;
 import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
 import net.zaminmc.zea.itempresentation.recognition.ItemClassifier;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToIntFunction;
 
@@ -116,6 +119,13 @@ public final class RarityTooltipEditor {
          */
         private static final int ADVANCED_ID_GRAY = 0x555555;
 
+        /**
+         * The Breaking Power line's dark gray — {@code §8}, the same
+         * 0x555555 the advanced lines wear, and the color the format
+         * spec pins for the rating's single line.
+         */
+        static final int BREAKING_POWER_GRAY = 0x555555;
+
         private RarityTooltipEditor() {
         }
 
@@ -186,7 +196,9 @@ public final class RarityTooltipEditor {
                 List<Component> statLines = ItemPresentationBuilder.build(category, statistics);
                 ItemEnchantments enchantments = stack.getOrDefault(
                                 DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
-                if (statLines.isEmpty() && enchantments.isEmpty()) {
+                List<Component> indicatorRow = SpecialEnchantments.row(
+                                SpecialEnchantments.indicators(stack, levelLookup(), category));
+                if (statLines.isEmpty() && enchantments.isEmpty() && indicatorRow.isEmpty()) {
                         return;
                 }
                 if (!statLines.isEmpty()) {
@@ -197,10 +209,37 @@ public final class RarityTooltipEditor {
                 if (statistics.durability().isPresent()) {
                         removeAdvancedDurabilityLines(lines);
                 }
+                // Breaking Power sits above everything — its own dark-gray
+                // line between the name and the statistics — on a pickaxe
+                // with an authoritative value; a pickaxe without one, and
+                // every other item class, shows no line at all.
+                int insertAt = 1;
+                if (category == ItemCategory.PICKAXE) {
+                        Optional<Integer> breakingPower = BreakingPower.of(stack.getItem());
+                        if (breakingPower.isPresent()) {
+                                lines.add(insertAt, Component.literal("Breaking Power " + breakingPower.get())
+                                                .withColor(BREAKING_POWER_GRAY));
+                                insertAt += 1;
+                        }
+                }
                 // The stat block carries its own leading and trailing
                 // blank separators; insert after the name (line 0).
-                lines.addAll(1, statLines);
-                insertCompactEnchantments(lines, stack, enchantments, 1 + statLines.size());
+                lines.addAll(insertAt, statLines);
+                insertAt += statLines.size();
+                // The indicator row follows the statistics directly; a
+                // populated stat block's trailing blank already separates
+                // it from the enchantment section, and the row's absence
+                // leaves the layout untouched.
+                if (!indicatorRow.isEmpty()) {
+                        if (statLines.isEmpty()) {
+                                lines.add(insertAt, Component.empty());
+                                insertAt += 1;
+                        }
+                        lines.addAll(insertAt, indicatorRow);
+                        lines.add(insertAt + indicatorRow.size(), Component.empty());
+                        insertAt += indicatorRow.size() + 1;
+                }
+                insertCompactEnchantments(lines, stack, enchantments, insertAt);
         }
 
         /**

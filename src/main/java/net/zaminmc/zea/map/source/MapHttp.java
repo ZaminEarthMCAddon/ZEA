@@ -85,7 +85,7 @@ public final class MapHttp {
 				.uri(URI.create(url))
 				.timeout(timeout)
 				.header("Accept-Encoding", "gzip")
-				.header("User-Agent", "ZEA (github.com/ZaminMC/ZEA)");
+				.header("User-Agent", "ZEA (github.com/ZaminEarthMCAddon/ZEA)");
 		if (bearerKey != null && !bearerKey.isBlank()) {
 			builder.header("Authorization", "Bearer " + bearerKey);
 		}
@@ -124,7 +124,7 @@ public final class MapHttp {
 						.timeout(timeout)
 						.header("Content-Type", "application/json")
 						.header("Accept-Encoding", "gzip")
-						.header("User-Agent", "ZEA (github.com/ZaminMC/ZEA)");
+						.header("User-Agent", "ZEA (github.com/ZaminEarthMCAddon/ZEA)");
 		HttpResponse<byte[]> response = http.send(
 						builder.POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8)).build(),
 						HttpResponse.BodyHandlers.ofByteArray());

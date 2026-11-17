@@ -74,17 +74,22 @@ public final class DamageCalculator {
         static final double PLAYER_BASE_SWEEPING = 0.0;
 
         /**
-         * The condition text for the target-conditional damage
-         * enchantments, keyed by registry path. The <em>values</em> are
-         * always read live from the effect data; only the human phrasing
-         * of what the loot condition selects is curated here, because a
-         * loot condition is opaque to the tooltip. Unknown conditional
-         * enchantments fall back to the honest "(conditional)".
+         * The RPG stat name for the target-conditional damage
+         * enchantments, keyed by registry path — the stat each
+         * enchantment modifies, in the Hypixel-style vocabulary:
+         * Smite is Undead Damage, Bane of Arthropods is Arthropod
+         * Damage, Impaling is Aquatic Damage. The <em>values</em> are
+         * always read live from the effect data — the enchantment's own
+         * loot condition, and with it the mob classification, stays the
+         * game's, never a manually written mob list. A conditional
+         * enchantment outside the mapping keeps the honest enchantment
+         * name with an "(conditional)" suffix instead of inventing a
+         * stat name for it.
          */
-        private static final Map<String, String> CONDITION_LABELS = Map.of(
-                        "smite", "vs undead",
-                        "bane_of_arthropods", "vs arthropods",
-                        "impaling", "vs aquatic mobs");
+        private static final Map<String, String> CONDITION_STATS = Map.of(
+                        "smite", "Undead Damage",
+                        "bane_of_arthropods", "Arthropod Damage",
+                        "impaling", "Aquatic Damage");
 
         private DamageCalculator() {
         }
@@ -232,9 +237,6 @@ public final class DamageCalculator {
                                 continue;
                         }
                         String fullname = Enchantment.getFullname(holder, level).getString();
-                        String condition = holder.unwrapKey()
-                                        .map(key -> CONDITION_LABELS.get(key.identifier().getPath()))
-                                        .orElse(null);
                         for (ConditionalEffect<EnchantmentValueEffect> conditionalEffect : effects) {
                                 // process(level, random, base) — base 0 because
                                 // enchantment damage is additive, not a multiplier
@@ -245,9 +247,12 @@ public final class DamageCalculator {
                                         bonusLevel = Math.max(bonusLevel, level);
                                         bonusLabels.add(fullname);
                                 } else {
+                                        String statName = holder.unwrapKey()
+                                                        .map(key -> CONDITION_STATS.get(key.identifier().getPath()))
+                                                        .orElse(null);
                                         conditional.add(new ItemStatistics.ConditionalBonus(
-                                                        fullname + " (" + (condition != null
-                                                                        ? condition : "conditional") + ")",
+                                                        statName != null ? statName
+                                                                        : fullname + " (conditional)",
                                                         value));
                                 }
                         }

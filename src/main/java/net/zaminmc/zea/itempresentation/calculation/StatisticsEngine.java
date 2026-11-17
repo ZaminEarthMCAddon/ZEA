@@ -61,6 +61,8 @@ public final class StatisticsEngine {
                                 ? DamageCalculator.calculate(wielder.holds(stack), snapshot, wielder) : Optional.empty();
                 Optional<ItemStatistics.MiningSpeed> mining = category.isMiningTool()
                                 ? MiningSpeedCalculator.calculate(stack, snapshot) : Optional.empty();
+                Optional<ItemStatistics.MiningFortune> fortune = category.isMiningTool()
+                                ? MiningFortuneCalculator.calculate(snapshot) : Optional.empty();
                 Optional<ItemStatistics.ArmorStats> armor = category.isArmor()
                                 ? ArmorCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.Durability> durability = DurabilityCalculator.calculate(
@@ -71,7 +73,7 @@ public final class StatisticsEngine {
                                 ? MaceCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
                 Optional<ItemStatistics.SpearStats> spear = category == ItemCategory.SPEAR
                                 ? SpearCalculator.calculate(stack, snapshot) : Optional.empty();
-                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear,
+                return new ItemStatistics(melee, mining, fortune, armor, durability, projectile, smash, spear,
                                 magicFind(snapshot));
         }
 

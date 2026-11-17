@@ -14,7 +14,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
- * The ZaminMC/ZEA-REPO sync: fetches the shared shop dataset, validates
+ * The ZaminEarthMCAddon/ZEA-REPO sync: fetches the shared shop dataset, validates
  * it, caches it and hands the accepted records to the market — without
  * ever blocking the game and without ever letting the repository
  * overwrite newer local observations (see {@link DatasetMerger}).
@@ -38,9 +38,9 @@ public final class RepoSync {
 	public static final Logger LOGGER = LoggerFactory.getLogger("ZEA/RepoSync");
 
 	/** The shared dataset repository. */
-	public static final String REPOSITORY = "https://github.com/ZaminMC/ZEA-REPO";
+	public static final String REPOSITORY = "https://github.com/ZaminEarthMCAddon/ZEA-REPO";
 	/** Raw content base for the repository's files. */
-	public static final String RAW_BASE = "https://raw.githubusercontent.com/ZaminMC/ZEA-REPO/main";
+	public static final String RAW_BASE = "https://raw.githubusercontent.com/ZaminEarthMCAddon/ZEA-REPO/main";
 	/** The manifest the repository's CI generates and keeps current. */
 	public static final String MANIFEST_URL = RAW_BASE + "/manifest.json";
 

@@ -76,4 +76,28 @@ class EnchantmentExplanationsTest {
                                 "This sword increases attack damage. Also everything else.", List.of()),
                                 "a phrase inside other prose is not an explanation line");
         }
+
+        /**
+         * The two mining-tool prose lines the server attaches beside
+         * Efficiency and Silk Touch are explanations too: whole-line
+         * matches against the confirmed bank, never substring filters,
+         * so unrelated lore survives and the structured stat block and
+         * enchantment section replace them.
+         */
+        @Test
+        void theMiningToolProseLinesAreExplanations() {
+                assertTrue(EnchantmentExplanations.isExplanation(
+                                "Allows fragile blocks such as glass to be collected.", List.of()),
+                                "the silk-touch prose is a known explanation");
+                assertTrue(EnchantmentExplanations.isExplanation(
+                                "Increases mining speed.", List.of()),
+                                "the efficiency prose is a known explanation");
+                assertTrue(EnchantmentExplanations.isExplanation(
+                                "  increases mining speed.  ", List.of()),
+                                "the match tolerates surrounding whitespace");
+                assertFalse(EnchantmentExplanations.isExplanation(
+                                "Increases mining speed on soul sand", List.of()),
+                                "a line that merely extends the phrase is not an explanation");
+        }
 }
+

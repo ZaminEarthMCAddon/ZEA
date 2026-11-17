@@ -21,3 +21,4 @@ remappedSrc/
 
 # Test-run log output
 logs/
+gradle-local.properties

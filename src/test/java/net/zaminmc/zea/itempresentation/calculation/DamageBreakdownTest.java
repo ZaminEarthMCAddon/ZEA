@@ -236,7 +236,7 @@ class DamageBreakdownTest {
                                                 new ItemStatistics(melee, Optional.empty(), Optional.empty(),
                                                                 Optional.empty(), Optional.empty(),
                                                                 Optional.empty(), Optional.empty(),
-                                                                Optional.empty()));
+                                                                Optional.empty(), Optional.empty()));
                 assertTrue(lines.stream().noneMatch(line -> line.getString().toLowerCase().contains("critical")),
                                 "the tooltip never presents a critical as the base damage");
         }
