@@ -45,6 +45,7 @@ import net.zaminmc.zea.hud.HudSubsystem;
 import net.zaminmc.zea.map.MapEngine;
 import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
+import net.zaminmc.zea.nav.SpawnCommandObserver;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
 import net.zaminmc.zea.search.InventorySearch;
@@ -59,6 +60,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -93,6 +95,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static CaptureRecorder captureRecorder;
         private static ExecutorService marketExecutor;
         private static MarketSubsystem market;
+        private static SpawnCommandObserver spawnCommands;
         private static MapSubsystem map;
         private static MinimapHud minimapHud;
 
@@ -130,6 +133,35 @@ public final class ZeaClient implements ClientModInitializer {
         /** The physical-shop market subsystem. */
         public static MarketSubsystem market() {
                 return market;
+        }
+
+        /** The spawn navigation observer behind /n spawn and /t spawn tracking. */
+        public static SpawnCommandObserver spawnCommands() {
+                return spawnCommands;
+        }
+
+        /**
+         * One outgoing command reached vanilla's send path — the single
+         * point typed commands, clicked links and macro dispatch share.
+         * Spawn navigation commands are recorded with the position before
+         * the send; everything else passes untouched, and nothing is ever
+         * intercepted, canceled or rewritten.
+         */
+        public static void noteCommandIssued(String command) {
+                SpawnCommandObserver observer = spawnCommands;
+                if (observer == null || !lifecycle.onEarthMc()) {
+                        return;
+                }
+                Minecraft client = Minecraft.getInstance();
+                if (client.level == null || client.player == null) {
+                        return;
+                }
+                observer.startFrom(command,
+                                                client.level.dimension().identifier().toString(),
+                                                lifecycle.earthMcServer().map(ServerIdentity::host).orElse("unknown"),
+                                                client.player.getX(), client.player.getZ(),
+                                                Instant.now())
+                                .ifPresent(observer::observe);
         }
 
         /** The universal HUD element subsystem; see {@code /zeahud}. */
@@ -177,6 +209,7 @@ public final class ZeaClient implements ClientModInitializer {
                                                 paths.buttons(),
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
+                spawnCommands = new SpawnCommandObserver();
                 marketExecutor = newIoExecutor("ZEA-Market");
                 // The claim cache is constructed here because the market's town
                 // resolution reads it; the map subsystem reuses this instance
@@ -228,6 +261,9 @@ public final class ZeaClient implements ClientModInitializer {
                                 }
                 });
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inventoryButtons.reset());
+                // Pending spawn navigation belongs to one connection, like
+                // the market's pending inspections.
+                ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> spawnCommands.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
                 // the context; menus and singleplayer share "generic".
@@ -253,6 +289,10 @@ public final class ZeaClient implements ClientModInitializer {
                                 Identifier.fromNamespaceAndPath("zea", "minimap"), minimapHud);
                 ClientTickEvents.END_CLIENT_TICK.register(client -> {
                         map.tick(client);
+                        spawnCommands.tick(
+                                                        client.player == null ? null
+                                                                        : new double[] {client.player.getX(), client.player.getZ()},
+                                                        Instant.now());
                         while (ZeaKeys.OPEN_MAP.consumeClick()) {
                                 if (client.gui.screen() == null) {
                                         map.openWorldMap(client);
