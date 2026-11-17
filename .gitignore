@@ -22,3 +22,13 @@ remappedSrc/
 # Test-run log output
 logs/
 gradle-local.properties
+
+# Dev-client runtime artifacts (loom 1.19 puts the config dir at project root)
+.fabric/
+/config/
+/downloads/
+data/
+shots/
+/options.txt
+/servers.dat
+/servers.dat_old
