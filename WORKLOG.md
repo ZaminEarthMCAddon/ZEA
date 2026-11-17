@@ -4675,3 +4675,115 @@ page navigation, the sort bar, the in-pane detail, the indicator glyphs'
 font coverage on the actual renderer, the search-driven filter against a
 live server — remains the live checklist: the sandbox cannot launch a
 client, and the report says so rather than claiming pixels it never drew.
+
+## 2026-11-17 (late) — "not a custom ai slop ui": the pane rebuilt on NEU's rendering, verified live
+
+### The verdict that reopened the pane
+
+The pane built last session reproduced NEU's *geometry* but drew
+everything as flat rects and text glyphs, and the user's in-game
+screenshot from the Paris market came back with a one-line verdict: the
+sidebar "no way looks like the NEU's level", not "a custom ai slop ui".
+The complaint was right — the geometry was NEU's, the surface was not.
+This session re-read NEUOverlay.java for its *rendering* — not its
+layout math — and rebuilt both surfaces on what the source actually
+does, then drove the real client through the whole matrix with synthetic
+input and read every frame from screenshots.
+
+### What the source study changed
+
+NEU's surfaces run on textures and animation, not rects: the search bar
+is a nine-slice of a 20×20 plate (4-pixel border slices, the gold
+variant in search mode); the nav arrows are 480×160 textures with a
+hover/press overlay and a one-pixel press shift; every item sits on an
+18×18 rounded `item_mask` tinted the foreground colour; the page pill is
+a three-layer bevel with a bold black label; the close button is a red
+disc; the edge tab is a 64 px chevron at 30 % alpha; the order and
+filter icons are textured squares with gold active variants and
+ascending/descending overlays; the pane, the info pane and the tab all
+slide on a 200 ms `LerpingFloat` (ported verbatim); the pane's
+background is the blur-plus-`0xc8101010` backdrop plus a config tint
+(alpha 6 blue by default — nearly invisible); tooltips carry yellow
+bold action hints after a blank line; presses play the vanilla click;
+the search group — settings plate, bar, search-mode plate — anchors
+bottom-center of the *screen* and takes click precedence over the pane.
+Most of those textures are now copied unmodified into
+`assets/zea/textures/browser/` (LGPL-3.0, credited in NOTICE.txt); the
+two icon shapes NEU lacks — observation-age ordering and the two shop
+directions — are drawn by `scripts/gen_zea_icons.py` in NEU's exact
+icon language (frame colours and palettes sampled from the upstream
+PNGs pixel by pixel).
+
+The geometry layer became NEU's scale-dependent formulas exactly: box
+padding `panePadding * 2 / scaleFactor + 5`, the nav strip's height
+`max(searchBarHeight / scaleFactor, 16)`, the centering splits, the
+ceiling column and row counts, the nav buttons' search-bar-derived size,
+and NEU's `drawStringCenteredScaledMaxWidth` (the page pill scales its
+label instead of clipping). The detail view became NEU's info pane: a
+second same-width pane sliding in from the screen's *left* while the
+grid stays live on the right — the close disc at its top-right, the
+offer rows trimmed into the pane's width, the Navigate footer styled as
+NEU's wide button. The search bar is NEU's bar: nine-slice texture,
+white value, blinking cursor, light-gray selection, gold in matching
+mode, the settings plate opening ZEA's config and the search-mode plate
+toggling matching mode, right-click clearing.
+
+### The live harness, and what it caught
+
+The previous sessions' "the sandbox cannot launch a client" ended here:
+the dev client boots for real again — Xvfb display, the GLX probe
+failing into the Vulkan fallback on llvmpipe (Mesa 25.0.7 unpacked from
+the Debian debs into the project because the sandbox has no root), a
+local flat-world dedicated server behind RCON, quickPlay auto-connect
+injected through loom's launch.cfg (devlaunchinjector forwards
+`clientArgs`, not leftover argv), and the whole flow — server, client,
+XTEST input, x11grab screenshots — driven inside single tool calls
+because the sandbox reaps background processes between them. The
+browser's data came from a seeded `market.json` (five shops, 132
+observations, 29 exact-fingerprint variants) written to the config dir
+loom 1.19 actually hands the client (`<project>/config`, not `run/`).
+
+Five defects fell out of the pixels and are fixed:
+
+- the mid-slide click gate swallowed every click over the open pane —
+  its offset is 2/3, always below the 0.99 gate — replaced by NEU's
+  factor rule (handled when open, swallowed only over the moving edge);
+- the info pane's offer rows overlapped at third scale — the rows are
+  NEU's trimmed-line model now (tag, owner in the shrinking middle,
+  price right-aligned; stock, bulk note and where trimmed with the age
+  right-aligned), and prices compact to two decimals;
+- the item plates rendered white — the mask blit carries the foreground
+  tint, and the nav labels scale instead of clipping;
+- the search group is clicked before the pane (NEU's guiGroup
+  precedence) so its plates stay reachable over an open pane;
+- the harness coordinates were rebased to the game's real GUI scale
+  (3, not the assumed 2 — measured from the pixels, as before).
+
+### What the live pass now covers
+
+Pane slide-in on tab hover; the grid's variant tiles with enchantment
+glints on tinted rounded plates; tile tooltips with the market summary
+and the yellow `LMB : View offers!` hint; the info pane's slide from
+the left with the red disc closing it; offer selection lighting the
+Navigate footer (selection never navigates); the search bar filtering
+the grid live ("pick" → the pickaxe variants); `e`, `.` and `/` staying
+text while the bar is focused and the inventory staying open; right-click
+clearing; escape unfocusing; the order and direction icons switching
+with their gold active states; the gold matching-mode bar. The flavor
+texts, the page pill, the empty-state, the page turn and the Next button
+were checked against a one-page index (Next correctly does nothing when
+there is no second page).
+
+### Verification
+
+`./gradlew build` green; **1423 tests, 0 failures** — the geometry
+tests re-pinned to NEU's formulas computed by hand at three scales
+(480×320@1, 1280×800@2, 1920×1080@3), the state tests extended for the
+ascending direction, and the search layout tests rewritten for the
+bottom-center anchor. The in-game pass itself is the other half of the
+receipts: the shots live in `zea/shots/` (kept out of the repository
+along with the other dev-runtime artifacts by the new ignore rules).
+Not yet verified live: the Navigate action against a real EarthMC town
+(the dev server has no claims), the info pane against a variant whose
+token decodes only approximately, and the pane at every GUI scale —
+scale 3 is the one the harness ran.
