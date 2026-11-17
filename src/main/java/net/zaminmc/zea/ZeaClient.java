@@ -29,10 +29,6 @@ import net.zaminmc.zea.config.ConfigScreen;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.config.ZeaPaths;
-import net.zaminmc.zea.discovery.DiscoveryCommands;
-import net.zaminmc.zea.discovery.DiscoveryStore;
-import net.zaminmc.zea.discovery.DiscoverySubsystem;
-
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.map.MapSubsystem;
@@ -43,7 +39,6 @@ import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.market.sync.DatasetMerger;
 import net.zaminmc.zea.market.sync.RepoSync;
 import net.zaminmc.zea.market.sync.SharedShops;
-import net.zaminmc.zea.market.ui.MarketScreen;
 import net.zaminmc.zea.hud.HudCommands;
 import net.zaminmc.zea.hud.HudSubsystem;
 import net.zaminmc.zea.map.MapEngine;
@@ -91,7 +86,6 @@ public final class ZeaClient implements ClientModInitializer {
         private static ZeaConfig config;
         private static HudSubsystem hud;
         private static MapEngine mapEngine;
-        private static DiscoverySubsystem discovery;
         private static RepoSync repoSync;
         private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
@@ -192,11 +186,6 @@ public final class ZeaClient implements ClientModInitializer {
                 return mapEngine;
         }
 
-        /** The native discovery subsystem; see {@code /zeadiscovery}. */
-        public static DiscoverySubsystem discovery() {
-                return discovery;
-        }
-
         @Override
         public void onInitializeClient() {
                 LOGGER.info("ZEA loading");
@@ -266,14 +255,6 @@ public final class ZeaClient implements ClientModInitializer {
                                                 net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 28, false),
                                 new ShopDestinationHud());
                 ClientTickEvents.END_CLIENT_TICK.register(client -> mapEngine.tick());
-                // Native discovery: its own toggle file, its own capture, and
-                // the ZEA-REPO consumer — local-first, gated on discovery.
-                discovery = new DiscoverySubsystem(lifecycle,
-                                                new DiscoveryStore(paths.localObservations(),
-                                                                                paths.navigationObservations(),
-                                                                                paths.remoteCache()),
-                                                paths.discoveryState(),
-                                                mapEngine.claims());
                 repoExecutor = newIoExecutor("ZEA-Repo");
                 // The shared dataset sync: fetch and parse on the repo
                 // executor, merge on the client thread into the market
@@ -361,20 +342,11 @@ public final class ZeaClient implements ClientModInitializer {
                 ShareCommands.register(zea, coordinator);
                 CaptureCommands.register(zea, captureRecorder, lifecycle::onEarthMc);
                 HudCommands.register(zea, () -> hud);
-                DiscoveryCommands.register(zea, () -> discovery);
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(zea));
                 // /zeabuttons — the button editor. Deferred through the
                 // client queue like the settings screen: a client command
                 // runs mid-keystroke in the chat screen, whose follow-up
                 // close would otherwise wipe the editor before a frame.
-                // /zeamarket — the market browser. Deferred through the
-                // client queue like the other screens.
-                ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
-                                ClientCommands.literal("zeamarket").executes(context -> {
-                                        Minecraft client = context.getSource().getClient();
-                                        client.execute(() -> client.gui.setScreen(new MarketScreen()));
-                                        return 1;
-                                })));
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
                                 ClientCommands.literal("zeamap").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
@@ -461,9 +433,6 @@ public final class ZeaClient implements ClientModInitializer {
                         }
                         if (mapEngine != null) {
                                 mapEngine.shutdown();
-                        }
-                        if (discovery != null) {
-                                discovery.shutdown();
                         }
                         if (repoExecutor != null) {
                                 repoExecutor.shutdown();

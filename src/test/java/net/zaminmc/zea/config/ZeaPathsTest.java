@@ -26,13 +26,6 @@ class ZeaPathsTest {
                 assertEquals(configDir.resolve("zea"), paths.root());
                 assertEquals(configDir.resolve("zea/config.json"), paths.mainConfig());
                 assertEquals(configDir.resolve("zea/hud.json"), paths.hudSettings());
-                assertEquals(configDir.resolve("zea/discovery.json"), paths.discoveryState());
-                assertEquals(configDir.resolve("zea/market/local-observations.json"), paths.localObservations());
-                assertEquals(configDir.resolve("zea/market/navigation-observations.json"),
-                                paths.navigationObservations());
-                assertEquals(configDir.resolve("zea/market/remote-cache.json"), paths.remoteCache());
-                assertTrue(paths.navigationObservations().toString().contains("market"),
-                                "the private navigation history lives beside, not inside, the public dataset");
         }
 
         @Test

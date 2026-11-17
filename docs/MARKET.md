@@ -53,15 +53,17 @@ its unit justifies.
 | `market.model` | Immutable domain: shop, observation, fingerprint, response |
 | `market.parse` | Response and sign parsers (anchored, structural-first) |
 | `market.interaction` | Sign-use geometry and the response correlation tracker |
-| `market` | The subsystem (wiring), the data index, persistence, observation factory, travel |
+| `market` | The subsystem (wiring), the data index, persistence, observation factory |
 | `market.store` | The versioned JSON store with per-entry tolerance |
 | `market.pricing` | Exact-decimal normalization and best-offer resolution |
-| `market.search` | Local, offline-capable search over the index |
-| `market.tx` | Transaction calculator and the transaction state machine |
-| `market.ui` | Shop screen, market browser, observation ages |
+| `market.index` | The item-variant index and the owner-balanced price aggregation |
+| `market.tx` | The transaction calculator behind the chat's shop-quantity flow |
+| `market.ui` | Observation ages (presentation formatting) |
 | `market.tooltip` | The market section in item tooltips |
-| `market.sync` | The validated submission queue for ZEA-REPO |
+| `market.sync` | The shared-dataset sync (manifest, cache, merge) and the validated submission queue for ZEA-REPO |
 | `market.config` | The Market settings category |
+| `browser` | The inventory shop index: variant grid, detail views, variant display stacks |
+| `nav` | Spawn-command observation, shop destinations, smart navigation |
 
 Threading follows the house model: all state mutations and reads are on
 the client thread; disk writes snapshot onto the `ZEA-Market` executor
@@ -79,39 +81,81 @@ display-text token (sign-only evidence) can never join an exact match.
 When the preview cannot be decoded, identity degrades to unknown rather
 than guessing.
 
+## The inventory shop index
+
+The browser draws NEU-style beside the container GUI: one tile per exact
+item variant, each rendered from the variant's own display stack (the
+fingerprint token's encoded patch parsed back through the codec against
+the level's registries — glint and durability included; a tile whose
+patch cannot decode is marked approximate). The existing inventory
+search bar drives the filter — one search system, shared with slot
+matching. A tile's tooltip carries the identity, counts and best prices;
+clicking opens the variant's detail: the owner-balanced market summary
+per side, and every physical shop as its own offer, grouped by
+transaction direction, cheapest purchase and highest payout first.
+Selecting an offer only selects it — a selection and a navigation are
+separate interactions.
+
 ## Transaction safety
 
-The shop screen drives an explicit state machine: entering → review →
-submitted → timed out (unknown outcome). The confirm exists only in
-review, fires once (a second confirm can never send a duplicate), and
-goes through `ClientPacketListener.sendChat` — the same pathway EarthMC
-expects. A wait that outlives the timeout becomes an honest unknown: no
-retry, no invented success. EarthMC's success/failure message shapes
-have not been captured yet; the state machine will grow those
-transitions only from real captures.
+Nothing is ever sent from the browser by selecting or navigating alone.
+The quantity entry a shop purchase requires runs through the chat's
+shop-quantity flow (`market.tx` computes the plan; the player types the
+number), and the server's answer is the only success signal. EarthMC's
+success/failure message shapes have not been captured yet; until they
+are, no outcome is claimed.
 
-## Navigation
+## Smart navigation
 
-Travel is a button. The nation spawn command is sent through
-`sendCommand` (the same path as manual typing) when the shop's nation
-is resolved; exact coordinates are always recorded and displayed.
-Today no nation-resolution source is wired (see the blocker below), so
-shops without a resolved nation show coordinates and the reason. A
-waypoint system arrives with the map subsystem's screens.
+Navigate is explicit — the detail view's footer button, for the
+selected offer. The planner reads the shop's resolved town and nation
+and the player's current nation from claim geometry:
+
+- Already inside the destination nation: the waypoint is set and **no
+  spawn command is issued** — teleporting back to a spawn the player
+  is already inside would be a regression.
+- The town confidently resolved (the sign sits inside its claim):
+  `/t spawn <town>` is preferred.
+- Only the nation resolved: `/n spawn <nation>`.
+- Neither known: no command is invented; the waypoint alone guides.
+
+The dispatch goes through the ordinary send path, where the spawn
+observer records it like a typed command (macros included). The
+temporary waypoint points at the shop's exact sign or chest, shows
+label, distance and bearing in its HUD element, and clears when the
+player reaches and inspects that shop, affirmatively leaves its
+nation, or the world session ends — never on a timer. Unknown
+geography says unknown; the clicked sign's coordinates stay the
+authoritative location.
 
 ## ZEA-REPO integration
 
-Implemented: the local submission queue. Server-verified observations
-with usable identity, price and position validate into submission
-records that preserve observation time and submission time separately;
-the queue dedupes by shop + identity + measurement; the file survives
-restarts; a future repository client drains batches it has actually
-accepted.
+Implemented, the consumer side: the sync follows the repository's
+CI-generated `manifest.json` (conditional GET), resolves whatever shop
+dataset the manifest lists, skips the download when the manifest's
+SHA-256 matches the last accepted snapshot, validates every record in
+isolation, caches the accepted snapshot (a restart serves it from disk
+before the network answers anything) and merges it on the client
+thread. The merge rules are timestamp-safe and pinned by tests: a
+shop the local set does not know joins with shared provenance; a
+shared observation strictly newer than the shop's newest local one is
+appended while the local record stays in the history; a timestamp tie
+keeps the local one; an older shared record is skipped; re-merging
+appends nothing twice. Only locally captured observations become
+submission candidates.
 
-Not implemented, and deliberately not invented: the remote side. The
-ZEA-REPO repository has no shop dataset — no `schemas/shop.schema.json`,
-no manifest entry, no contribution workflow. The missing contract, for
-whoever implements the adapter:
+Implemented, the producer side: the local submission queue.
+Server-verified observations with usable identity, price and position
+validate into submission records that preserve observation time and
+submission time separately; the queue dedupes by shop + identity +
+measurement; the file survives restarts; a future repository client
+drains batches it has actually accepted.
+
+Not implemented, and deliberately not invented: the repository's own
+shop dataset. The ZEA-REPO repository has no shop dataset yet — no
+`schemas/shop.schema.json`, no manifest entry, no contribution
+workflow, and no credential path a public mod could use. The missing
+contract, for whoever implements the adapter:
 
 1. A dataset directory (`datasets/shops/`) plus a schema accepting the
    `SubmissionRecord` shape in `market.sync.SubmissionValidator` (shop
@@ -130,11 +174,12 @@ because the shop has one, never the observing player's identity.
 ## Known limitations
 
 - Success/failure transaction outcomes are not recognized (no captured
-  message shapes); every send ends in the honest unknown state.
-- Nation resolution has no wired source; the field is plumbed through
-  and stays null until an authorized dataset or verified API path
-  exists.
-- Waypoints do not exist yet; travel is the nation spawn command only.
+  message shapes); no outcome is claimed after a send.
+- Nation and town resolution follow the map subsystem's claim store;
+  where claims are not loaded, the fields stay unknown — never guessed
+  from proximity.
+- The destination marker is a HUD element (label, distance, bearing),
+  not yet a marker drawn on the world map and minimap canvases.
 - The shop response component tree was parsed from observed text
   shapes; a real capture via `/zea capture` should confirm the hover
   layout (the parser tolerates missing hovers already).

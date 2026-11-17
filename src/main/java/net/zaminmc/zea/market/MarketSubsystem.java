@@ -21,7 +21,6 @@ import net.zaminmc.zea.market.interaction.ShopSignGeometry;
 import net.zaminmc.zea.market.model.ShopResponse;
 import net.zaminmc.zea.market.store.MarketStore;
 import net.zaminmc.zea.market.sync.SubmissionQueue;
-import net.zaminmc.zea.market.ui.ShopScreens;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -118,16 +117,6 @@ public final class MarketSubsystem {
 			net.zaminmc.zea.nav.ShopDestinationTracker destinations = ZeaClient.destinationTracker();
 			if (destinations != null) {
 				destinations.clearFor(recorded.shop().shopId());
-			}
-			// The structured shop interface replaces the raw chat wall for
-			// server-verified inspections when the player wants it. A
-			// partial response never opens a falsely complete screen; a
-			// sign-only advert stays in the market data without
-			// interrupting the player.
-			if (config.openShopScreen && inspection.response() != null
-					&& inspection.response().completeness() == ShopResponse.Completeness.COMPLETE
-					&& inspection.response().price() != null) {
-				ShopScreens.open(recorded.shop(), recorded.observation(), inspection.response());
 			}
 		});
 	}

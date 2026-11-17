@@ -4444,3 +4444,73 @@ cache then holds stale holders — every enchantment reads foreign
 gray and rarity falls to the material tier until the world is
 re-entered; not a code bug, but a cache-invalidation seam worth
 wiring to the reload event someday.
+
+
+## 2026-11-17 — The shop index: the NEU-style inventory browser and the legacy removal
+
+### What replaced what
+
+The standalone market system is gone: `/zeamarket`, `MarketScreen`,
+`ShopScreen`/`ShopScreens`, `MarketTravel`, `MarketSort`,
+`market.search`, and the entire `discovery` package (the broken
+`/zea zeadiscovery` path — its mutable-POJO observation model, its
+second capture loop, its `RepoClient` whose navigation hook read a
+slash-prefixed command form the send path never produces). What
+survived from the old work is the machinery that had actually proven
+itself under tests: the response parser and its correlation tracker,
+the fingerprint model, the shop/observation store, the pricing engine,
+the submission queue, and the market tooltips.
+
+### The parser now covers every observed response shape
+
+The EarthMC fixtures pinned as regression tests — boxed blocks
+(`| ... |` between `+---+` rules), plain blocks, `100% remaining.`,
+`You can buy 4.` (an item limit, never confused with the stock of 47),
+buying shops that price per bulk (`Price per 12x ... - 1G`) and report
+their limit in bulks, and the server's enchantment section in both
+styles — go past what the parser anchored on. New recorded fields:
+`remainingPercent`, `maxBuyItems`, `maxSellBulks`, the enchantment
+lines verbatim; store schema v2, additive and nullable. A per-item
+selling shop is complete without a bulk size — the old rule demanded
+one and degraded those responses to PARTIAL.
+
+### Two identity bugs the fixtures flushed out
+
+- The fingerprint codec ran against the built-in registry view only.
+  Enchantments live in a data-driven registry since 26.3, so every
+  enchanted item encoded as the same `unencodable` token — all
+  enchanted variants of one item collapsed into one identity. The
+  codec now runs against the level's registry view, and a patch that
+  cannot canonically encode degrades to an unknown fingerprint rather
+  than a token that would silently match a different product.
+- The spawn-command hook assumed a slash-prefixed command; the send
+  path strips it. The observer accepts both forms.
+
+### The new pipeline, end to end
+
+Sign click → response correlation → exact fingerprint → shop +
+observation records (unchanged, now with the richer fields) →
+`ItemVariantIndex` (one tile per exact token; offers are per shop and
+never merged away) → `VariantPricing` (owner-balanced: one vote per
+owner, best/worst/median over the votes, documented exactly) → the
+`browser` package's inventory panel (tiles rendered from the variant's
+own display stack — the token's encoded patch parsed back through the
+codec against the level's registries; approximate tiles are marked) →
+`nav`'s smart navigation (already-in-nation ⇒ waypoint only; town ⇒
+`/t spawn`; nation ⇒ `/n spawn`; unknown ⇒ nothing invented; the
+dispatch goes through the tracked send path; the waypoint clears on
+inspection of that shop, on affirmatively leaving its nation, on
+replacement, on session end — never on a timer) → `market.sync`'s
+`RepoSync` (manifest-following, hash-gated download, isolated
+validation, offline cache) → `DatasetMerger` (remote strictly newer
+appends, ties keep local, stale skips, re-merges dedupe).
+
+### Verification
+
+`./gradlew build` green; **1347 tests, 0 failures**. The fixtures run
+as parser regression tests whole-block and line-by-line; the merge
+rules, the pricing balance, the navigation decisions and the
+destination lifecycle are pinned by tests. In-game verification — the
+panel against the GUI at every scale, the search-driven filter, the
+detail view's offer rows, the Navigate flow against a live server —
+remains the live checklist.
