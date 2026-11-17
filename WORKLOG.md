@@ -4787,3 +4787,89 @@ Not yet verified live: the Navigate action against a real EarthMC town
 (the dev server has no claims), the info pane against a variant whose
 token decodes only approximately, and the pane at every GUI scale —
 scale 3 is the one the harness ran.
+
+## 2026-11-18 — The indicator bug report: brackets, rarity colors, real glyphs
+
+### The report
+
+The player filed the indicator bug report against the row as shipped in
+dev.80: the symbols must render inside square brackets (`[∞]`, `[♻]`,
+`[🔮]`, `[🛡]`, `[🔥]`); the applied color must come from **ZEA's own
+rarity hierarchy** — the level maps to a tier, the maximum legitimate
+level is always Legendary gold, lower levels step down proportionally,
+single-level enchantments are gold — with no separate enchantment
+palette; missing-but-applicable stays neutral gray; incompatible stays
+hidden; no permanent APPLIED/MISSING labels; the row stays below the
+statistics; and missing-glyph boxes are not accepted.
+
+### What was actually wrong
+
+Three real defects, all in `SpecialEnchantments`:
+
+- **A palette of its own.** `APPLIED_COLOR` 0x55FFFF (aqua) and
+  `MISSING_COLOR` 0x555555 — every applied indicator the same aqua
+  regardless of level, exactly what the report forbids.
+- **Broken glyphs.** The registry writes `🛡️` with a bare U+FE0F
+  variation selector, which has no glyph and renders as a box. Worse:
+  Minecraft 26.3 **removed unifont** (verified against the
+  sha1-matched client jar: `include/unifont.json` ships an empty
+  provider list, no `unicode_page_*.png` exists), so eight of the
+  registry's codepoints — `♻ 🔮 💥 🎯 💨 🫧 🏃 👣`, including the
+  report's own Mending and Silk Touch examples — have no glyph at all
+  in the default font.
+- **No brackets, double spaces** — the row read as bare glyphs padded
+  apart.
+
+### The fix
+
+- **The color rule is one formula, not a palette.**
+  `tierFor(level, maxLevel)` maps the ladder endpoints (minimum
+  Common, maximum Legendary) and distributes the levels between
+  proportionally, nearest tier, halves up. The report's own example —
+  Unbreaking I/II/III → Common/Epic/Legendary — falls out of the
+  formula; M=2 spans Common→Legendary; M=4 fills each tier once; M=5
+  reads Common, Uncommon, Epic, Epic, Legendary. Single-level
+  enchantments short-circuit to Legendary (their only level is their
+  maximum). Every color is `ItemRarity`'s own RGB through
+  `TextColor.fromRgb` — nothing redefined, nothing duplicated. Missing
+  indicators take `ChatFormatting.GRAY`'s value, the same neutral gray
+  the stat labels and the basic enchantment lines already use.
+- **The glyphs are shipped, not wished for.** ZEA now carries a bitmap
+  font, `zea:enchant_indicators`
+  (`assets/zea/font/enchant_indicators.json` over a generated
+  `enchant_symbols.png`, 64×8): the eight missing codepoints as
+  hand-pixelled 8×8 white masks in the exact style of the emoji
+  vanilla still ships in `nonlatin_european.png` — same cell size,
+  same ascent 7, ink densities 13–27 px against vanilla's 11–34.
+  `scripts/gen_enchant_font.py` (the `gen_button_texture.py`
+  precedent) draws them; advance simulation with the BitmapProvider
+  formula (`int(0.5+ink)+1`) puts every glyph at 8–9 px, inside
+  vanilla emoji's own range. The registry records per entry which font
+  renders its symbol (`FontSource.VANILLA`/`ZEA`, verified against the
+  shipped 26.3 assets), the renderer routes only the ZEA-font symbols
+  through `Style.withFont`, and the brackets always stay in the
+  vanilla font — a codepoint is never sent to a font that lacks it.
+- **Brackets and spacing.** Each indicator renders as `[symbol]`, the
+  hover text now on the whole part so it works over the brackets too,
+  single spaces between indicators. The VS16 is gone from the
+  registry; symbols are bare base codepoints, pinned to exactly one
+  codepoint each by test.
+- Untouched, per the report's "preserve" list: the registry membership
+  and symbols, the per-class profiles, the three-state classifier and
+  its vanilla-mechanism gates, the row's position under the stat
+  block, the hover summaries, and every other tooltip element.
+
+### Test
+
+`SpecialEnchantmentsTest` grew from eight to twenty-three: the tier
+rule against the report's Unbreaking example verbatim, single-level
+gold, two-level span, four-level one-each, five-level proportional and
+monotonic, clamping both directions, colors being the rarity
+constants; bracketed single-spaced row text; gold/epic/gray on all
+three parts of an indicator; no state labels; font routing both ways
+through the rendered styles; brackets always default font; one
+codepoint per symbol (no VS16); and the shipped bitmap font's
+codepoint set asserted equal to the registry's ZEA-font set with the
+texture present. `./gradlew build` green. In-game verification — the
+seventeen glyphs live in the client font, the three states, the tier
+colors at Unbreaking I/II/III — is this session's live checklist.

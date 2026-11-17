@@ -1,18 +1,22 @@
 package net.zaminmc.zea.itempresentation.presentation;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
+import net.zaminmc.zea.rarity.ItemRarity;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,7 +42,7 @@ import java.util.Optional;
  *
  * <ul>
  *   <li>{@code APPLIED} — the enchantment is on the item; its symbol
- *       shows in the active color.</li>
+ *       shows in the rarity color its applied level maps to.</li>
  *   <li>{@code MISSING} — the item supports it, nothing conflicts, and
  *       the enchantment is absent; its symbol shows in neutral gray —
  *       a potential upgrade, never a defect.</li>
@@ -48,6 +52,17 @@ import java.util.Optional;
  *       siblings); its symbol does not show at all.</li>
  * </ul>
  *
+ * <p><b>Colors.</b> There is no enchantment palette. An applied
+ * indicator reuses {@link ItemRarity}'s existing hierarchy — the same
+ * tiers and RGB values the rarity footer and the tier ladder already
+ * show — through one general rule: the maximum legitimate level always
+ * maps to Legendary gold, the lowest level to Common, and the levels
+ * between spread proportionally across the tiers in between (nearest
+ * tier, halves up). A single-level enchantment's only level is its
+ * maximum, so it shows gold. The spec's own example — Unbreaking,
+ * maximum III — lands on Common, Epic, Legendary, exactly what the
+ * rule produces. Missing indicators take the legacy neutral gray.
+ *
  * <p>Applicability and conflicts come from the game's own enchantment
  * definitions — {@link Enchantment#isSupportedItem} and {@link
  * Enchantment#areCompatible}, the same mechanisms the rarity budget
@@ -56,6 +71,16 @@ import java.util.Optional;
  * enchantments are worth a symbol per item class; a candidate the item
  * class cannot carry falls out as not applicable and is hidden.
  *
+ * <p><b>Fonts.</b> Minecraft 26.3 dropped unifont, so the default font
+ * defines only a curated codepoint set. Every registry symbol was
+ * verified against the shipped font assets: ten of them render from
+ * vanilla ({@code ∞ 🛡 🔥 🏹 ☄ ⚡ 🔱 ⚓ ❄}), the other eight
+ * ({@code ♻ 🔮 💥 🎯 💨 🫧 🏃 👣}) have no vanilla glyph and render
+ * from ZEA's own bitmap font, {@code zea:enchant_indicators} — the
+ * 8×8 doodle-style texture {@code gen_enchant_font.py} generates. The
+ * split is recorded per registry entry, so a codepoint is never routed
+ * to a font that lacks it and the missing-glyph box cannot appear.
+ *
  * <p>The row omits its heading: the symbols are compact enough to
  * explain themselves through their hover text, which carries the
  * enchantment's name, its level when applied, and a one-line effect
@@ -63,44 +88,55 @@ import java.util.Optional;
  * section — and its spacing — is omitted.
  */
 public final class SpecialEnchantments {
-        /** The active color for an applied indicator (§b, the aqua family). */
-        static final int APPLIED_COLOR = 0x55FFFF;
-        /** The neutral gray for a missing indicator — the potential-upgrade color. */
-        static final int MISSING_COLOR = 0x555555;
+        /** ZEA's bitmap font for the glyphs vanilla's default font does not define. */
+        static final FontDescription FONT = new FontDescription.Resource(
+                        Identifier.fromNamespaceAndPath("zea", "enchant_indicators"));
 
         /**
-         * The indicator registry: registry-key path to its symbol and its
-         * one-line effect summary. Riptide and Multishot intentionally
-         * share the trident-glyph symbol; their registry paths — and with
-         * them their identities, states and conflicts — stay distinct.
+         * The indicator registry: registry-key path to its symbol, the
+         * font that renders the symbol, and its one-line effect summary.
+         * Riptide and Multishot intentionally share the trident-glyph
+         * symbol; their registry paths — and with them their identities,
+         * states and conflicts — stay distinct. Symbols carry no
+         * variation selector: the glyphs live on the base codepoints,
+         * and a bare {@code U+FE0F} has no glyph of its own.
          */
         private static final Map<String, Entry> REGISTRY = buildRegistry();
 
+        /** Where a symbol's glyph comes from — the verified 26.3 split. */
+        enum FontSource {
+                /** The vanilla default font defines the codepoint. */
+                VANILLA,
+                /** ZEA's bitmap font defines the codepoint. */
+                ZEA
+        }
+
         private static Map<String, Entry> buildRegistry() {
                 Map<String, Entry> registry = new LinkedHashMap<>();
-                register(registry, "infinity", "∞", "Arrows are not consumed");
-                register(registry, "mending", "♻", "Repairs with gathered XP");
-                register(registry, "silk_touch", "🔮", "Blocks drop themselves");
-                register(registry, "unbreaking", "🛡️", "Durability loss often avoided");
-                register(registry, "fire_aspect", "🔥", "Sets targets on fire");
-                register(registry, "punch", "🏹", "Arrows knock targets back");
-                register(registry, "knockback", "☄", "Melee hits knock targets back");
-                register(registry, "flame", "💥", "Arrows set targets on fire");
-                register(registry, "channeling", "⚡", "Summons lightning in storms");
-                register(registry, "riptide", "🔱", "Launches you with the trident");
-                register(registry, "multishot", "🔱", "Fires three arrows at once");
-                register(registry, "piercing", "🎯", "Arrows pierce through entities");
-                register(registry, "wind_burst", "💨", "Launches you on smash hit");
-                register(registry, "aqua_affinity", "⚓", "Full mining speed underwater");
-                register(registry, "respiration", "🫧", "Longer underwater breathing");
-                register(registry, "soul_speed", "🏃", "Speeds you up on soul blocks");
-                register(registry, "swift_sneak", "👣", "Faster sneaking");
-                register(registry, "frost_walker", "❄", "Freezes water underfoot");
+                register(registry, "infinity", "∞", FontSource.VANILLA, "Arrows are not consumed");
+                register(registry, "mending", "♻", FontSource.ZEA, "Repairs with gathered XP");
+                register(registry, "silk_touch", "🔮", FontSource.ZEA, "Blocks drop themselves");
+                register(registry, "unbreaking", "🛡", FontSource.VANILLA, "Durability loss often avoided");
+                register(registry, "fire_aspect", "🔥", FontSource.VANILLA, "Sets targets on fire");
+                register(registry, "punch", "🏹", FontSource.VANILLA, "Arrows knock targets back");
+                register(registry, "knockback", "☄", FontSource.VANILLA, "Melee hits knock targets back");
+                register(registry, "flame", "💥", FontSource.ZEA, "Arrows set targets on fire");
+                register(registry, "channeling", "⚡", FontSource.VANILLA, "Summons lightning in storms");
+                register(registry, "riptide", "🔱", FontSource.VANILLA, "Launches you with the trident");
+                register(registry, "multishot", "🔱", FontSource.VANILLA, "Fires three arrows at once");
+                register(registry, "piercing", "🎯", FontSource.ZEA, "Arrows pierce through entities");
+                register(registry, "wind_burst", "💨", FontSource.ZEA, "Launches you on smash hit");
+                register(registry, "aqua_affinity", "⚓", FontSource.VANILLA, "Full mining speed underwater");
+                register(registry, "respiration", "🫧", FontSource.ZEA, "Longer underwater breathing");
+                register(registry, "soul_speed", "🏃", FontSource.ZEA, "Speeds you up on soul blocks");
+                register(registry, "swift_sneak", "👣", FontSource.ZEA, "Faster sneaking");
+                register(registry, "frost_walker", "❄", FontSource.VANILLA, "Freezes water underfoot");
                 return Map.copyOf(registry);
         }
 
-        private static void register(Map<String, Entry> registry, String path, String symbol, String effect) {
-                registry.put(path, new Entry(path, symbol, effect));
+        private static void register(Map<String, Entry> registry, String path, String symbol,
+                        FontSource font, String effect) {
+                registry.put(path, new Entry(path, symbol, font, effect));
         }
 
         /**
@@ -113,11 +149,21 @@ public final class SpecialEnchantments {
                 return entry == null ? null : entry.symbol();
         }
 
-        private record Entry(String path, String symbol, String effect) {
+        /**
+         * The font that renders {@code path}'s symbol — the test seam for
+         * the font-routing rules, so no codepoint is ever sent to a font
+         * that lacks its glyph.
+         */
+        static FontSource fontOf(String path) {
+                Entry entry = REGISTRY.get(path);
+                return entry == null ? null : entry.font();
+        }
+
+        private record Entry(String path, String symbol, FontSource font, String effect) {
         }
 
         /** One indicator's computed state and presentation data. */
-        public record Indicator(String path, String symbol, String display, int level,
+        public record Indicator(String path, String symbol, String display, int level, int maxLevel,
                         State state, String effect) {
         }
 
@@ -129,6 +175,26 @@ public final class SpecialEnchantments {
         }
 
         private SpecialEnchantments() {
+        }
+
+        /**
+         * The rarity tier an applied level maps to — the one general
+         * rule every registry enchantment shares. The maximum level is
+         * always {@link ItemRarity#LEGENDARY}, the minimum always
+         * {@link ItemRarity#COMMON}, and the levels between distribute
+         * proportionally (nearest tier; halves round up). A
+         * single-level enchantment has no distance to travel: its only
+         * level is its maximum, so it is Legendary.
+         */
+        static ItemRarity tierFor(int level, int maxLevel) {
+                ItemRarity[] tiers = ItemRarity.values();
+                int top = tiers.length - 1;
+                if (maxLevel <= 1) {
+                        return tiers[top];
+                }
+                int clamped = Math.clamp(level, 1, maxLevel);
+                long scaled = Math.round((clamped - 1) * (double) top / (maxLevel - 1));
+                return tiers[(int) scaled];
         }
 
         /**
@@ -219,16 +285,21 @@ public final class SpecialEnchantments {
                                 continue;
                         }
                         int level = present.getOrDefault(holder.get(), 0);
+                        int maxLevel = holder.get().value().getMaxLevel();
                         String display = Enchantment.getFullname(holder.get(), Math.max(1, level)).getString();
-                        indicators.add(new Indicator(path, entry.symbol(), display, level, state, entry.effect()));
+                        indicators.add(new Indicator(path, entry.symbol(), display, level, maxLevel,
+                                        state, entry.effect()));
                 }
                 return List.copyOf(indicators);
         }
 
         /**
          * The indicator row for {@code indicators}: one compact line of
-         * symbols, applied in aqua and missing in gray, each carrying its
-         * hover text. Empty when nothing shows.
+         * space-separated bracketed symbols — {@code [symbol]}, the
+         * brackets from the vanilla font around the glyph — each part
+         * fully colored and carrying its hover text. An applied
+         * indicator takes its level's rarity tier color; a missing one
+         * the legacy neutral gray. Empty when nothing shows.
          */
         public static List<Component> row(List<Indicator> indicators) {
                 if (indicators.isEmpty()) {
@@ -238,16 +309,34 @@ public final class SpecialEnchantments {
                 boolean first = true;
                 for (Indicator indicator : indicators) {
                         if (!first) {
-                                line.append(Component.literal("  "));
+                                line.append(Component.literal(" "));
                         }
-                        int color = indicator.state() == State.APPLIED ? APPLIED_COLOR : MISSING_COLOR;
-                        MutableComponent glyph = Component.literal(indicator.symbol()).withColor(color);
-                        glyph.withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(
-                                        Component.literal(hoverText(indicator)))));
-                        line.append(glyph);
+                        line.append(bracketed(indicator));
                         first = false;
                 }
                 return List.of(line);
+        }
+
+        /**
+         * One indicator as {@code [symbol]}: brackets and symbol in one
+         * color, the symbol in the font that has its glyph, and the
+         * hover text on the whole part so it works on the brackets too.
+         */
+        private static MutableComponent bracketed(Indicator indicator) {
+                TextColor color = indicator.state() == State.APPLIED
+                                ? TextColor.fromRgb(tierFor(indicator.level(), indicator.maxLevel()).rgb())
+                                : TextColor.fromLegacyFormat(ChatFormatting.GRAY);
+                MutableComponent part = Component.empty();
+                part.append(Component.literal("[").withColor(color));
+                MutableComponent glyph = Component.literal(indicator.symbol()).withColor(color);
+                if (fontOf(indicator.path()) == FontSource.ZEA) {
+                        glyph.withStyle(style -> style.withFont(FONT));
+                }
+                part.append(glyph);
+                part.append(Component.literal("]").withColor(color));
+                part.withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(
+                                Component.literal(hoverText(indicator)))));
+                return part;
         }
 
         /** The hover text: the name, the applied level, and the effect summary. */
