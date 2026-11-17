@@ -227,13 +227,28 @@ public final class ZeaConfig extends Config {
                 @ConfigOrder(2)
                 public SearchBar searchBar = new SearchBar();
 
-                @Category(name = "Slot binding", desc = "Bind inventory slots to hotbar slots.")
+                @Category(name = "Shop index", desc = "The item browser beside the inventory: every item "
+                                + "variant observed in EarthMC shops, with the physical shops behind it.")
                 @ConfigOrder(3)
+                public ShopBrowser shopBrowser = new ShopBrowser();
+
+                @Category(name = "Slot binding", desc = "Bind inventory slots to hotbar slots.")
+                @ConfigOrder(4)
                 public SlotBinding slotBinding = new SlotBinding();
 
                 @Category(name = "Slot locking", desc = "Protect inventory slots from accidental actions.")
-                @ConfigOrder(4)
+                @ConfigOrder(5)
                 public SlotLocking slotLocking = new SlotLocking();
+        }
+
+        /** The inventory shop-index browser. */
+        public static final class ShopBrowser {
+                @ConfigOption(name = "Shop index browser", desc = "Show the item browser on the "
+                                + "inventory's right side: observed item variants, their physical shops, "
+                                + "and navigation to them.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean enabled = true;
         }
 
         /** The inventory search bar. */
@@ -1036,6 +1051,12 @@ public final class ZeaConfig extends Config {
         public boolean inventorySearchEnabled() {
                 return inventoryButtons != null && inventoryButtons.searchBar != null
                                 && inventoryButtons.searchBar.enabled;
+        }
+
+        /** Whether the inventory shop-index browser is shown. */
+        public boolean inventoryShopBrowserEnabled() {
+                return inventoryButtons != null && inventoryButtons.shopBrowser != null
+                                && inventoryButtons.shopBrowser.enabled;
         }
 
         /** Whether the search bar evaluates arithmetic. */

@@ -98,9 +98,12 @@ public final class ItemFingerprints {
 	 * view that carries the data-driven registries (enchantments) item
 	 * components reference. Read on the client thread, where every
 	 * fingerprint is computed. No client (headless test JVM) is the same
-	 * as no level: both fall back to the built-in view.
+	 * as no level: both fall back to the built-in view. Package-external
+	 * readers (the browser's stack reconstruction) share this view so a
+	 * token and its display stack always resolve against the same
+	 * registries.
 	 */
-	private static Optional<RegistryAccess> levelAccess() {
+	public static Optional<RegistryAccess> levelAccess() {
 		try {
 			Minecraft client = Minecraft.getInstance();
 			ClientLevel level = client == null ? null : client.level;

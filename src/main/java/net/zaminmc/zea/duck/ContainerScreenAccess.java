@@ -15,4 +15,10 @@ public interface ContainerScreenAccess {
 
         /** The container GUI's height ({@code imageHeight}). */
         int zea$imageHeight();
+
+        /** The container GUI's left edge ({@code leftPos}). */
+        int zea$leftPos();
+
+        /** The container GUI's top edge ({@code topPos}). */
+        int zea$topPos();
 }

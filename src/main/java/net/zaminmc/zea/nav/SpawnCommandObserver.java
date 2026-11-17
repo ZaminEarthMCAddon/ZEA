@@ -64,15 +64,20 @@ public final class SpawnCommandObserver {
 		if (command == null) {
 			return Optional.empty();
 		}
-		String line = command.trim().toLowerCase(Locale.ROOT);
+		String trimmed = command.trim();
+		// The send path hands the command over without its leading
+		// slash; the parser accepts both so a slash-prefixed caller
+		// never slips through unrecorded.
+		String stripped = trimmed.startsWith("/") ? trimmed.substring(1) : trimmed;
+		String line = stripped.toLowerCase(Locale.ROOT);
 		SpawnAttempt.Type type;
 		String body;
-		if (line.startsWith("/n spawn ")) {
+		if (line.startsWith("n spawn ")) {
 			type = SpawnAttempt.Type.NATION;
-			body = command.trim().substring("/n spawn ".length());
-		} else if (line.startsWith("/t spawn ")) {
+			body = stripped.substring("n spawn ".length());
+		} else if (line.startsWith("t spawn ")) {
 			type = SpawnAttempt.Type.TOWN;
-			body = command.trim().substring("/t spawn ".length());
+			body = stripped.substring("t spawn ".length());
 		} else {
 			return Optional.empty();
 		}

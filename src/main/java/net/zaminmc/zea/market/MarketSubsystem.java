@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.chat.capture.MessageCapture;
 import net.zaminmc.zea.chat.model.CapturedMessage;
 import net.zaminmc.zea.earthmc.ServerIdentity;
@@ -111,6 +112,12 @@ public final class MarketSubsystem {
 			if (data.record(recorded.shop(), recorded.observation())) {
 				persistence.markDirty(MarketPersistence.snapshot(data));
 				submissions.enqueue(recorded.shop(), recorded.observation());
+			}
+			// The player has reached and inspected the shop they were
+			// navigating to: the waypoint has done its job and is gone.
+			net.zaminmc.zea.nav.ShopDestinationTracker destinations = ZeaClient.destinationTracker();
+			if (destinations != null) {
+				destinations.clearFor(recorded.shop().shopId());
 			}
 			// The structured shop interface replaces the raw chat wall for
 			// server-verified inspections when the player wants it. A

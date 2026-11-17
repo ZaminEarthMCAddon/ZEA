@@ -18,6 +18,7 @@ import net.minecraft.resources.Identifier;
 import net.zaminmc.zea.buttons.ButtonActivator;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.buttons.InventoryButtons;
+import net.zaminmc.zea.browser.ItemBrowser;
 import net.zaminmc.zea.earthmc.ServerIdentity;
 import net.zaminmc.zea.chat.ChatSubsystem;
 import net.zaminmc.zea.chat.capture.CaptureCommands;
@@ -48,6 +49,8 @@ import net.zaminmc.zea.hud.HudSubsystem;
 import net.zaminmc.zea.map.MapEngine;
 import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
+import net.zaminmc.zea.nav.ShopDestinationHud;
+import net.zaminmc.zea.nav.ShopDestinationTracker;
 import net.zaminmc.zea.nav.SpawnCommandObserver;
 import net.zaminmc.zea.rarity.EnchantBudget;
 import net.zaminmc.zea.rarity.RarityEngine;
@@ -99,6 +102,8 @@ public final class ZeaClient implements ClientModInitializer {
         private static ExecutorService marketExecutor;
         private static MarketSubsystem market;
         private static SpawnCommandObserver spawnCommands;
+        private static ShopDestinationTracker destinationTracker;
+        private static ItemBrowser browser;
         private static MapSubsystem map;
         private static MinimapHud minimapHud;
 
@@ -141,6 +146,16 @@ public final class ZeaClient implements ClientModInitializer {
         /** The spawn navigation observer behind /n spawn and /t spawn tracking. */
         public static SpawnCommandObserver spawnCommands() {
                 return spawnCommands;
+        }
+
+        /** The inventory shop-index browser session. */
+        public static ItemBrowser browser() {
+                return browser;
+        }
+
+        /** The shop destination (temporary waypoint) tracker. */
+        public static ShopDestinationTracker destinationTracker() {
+                return destinationTracker;
         }
 
         /**
@@ -213,6 +228,8 @@ public final class ZeaClient implements ClientModInitializer {
                                                 new ButtonActivator(zea$commandSender(), ButtonActivator.DEFAULT_COOLDOWN_MILLIS));
                 search = new InventorySearch();
                 spawnCommands = new SpawnCommandObserver();
+                destinationTracker = new ShopDestinationTracker();
+                browser = new ItemBrowser();
                 marketExecutor = newIoExecutor("ZEA-Market");
                 // The claim cache is constructed here because the market's town
                 // resolution reads it; the map subsystem reuses this instance
@@ -241,6 +258,13 @@ public final class ZeaClient implements ClientModInitializer {
                                                 config.map.minimap.size * 2, config.map.minimap.size * 2,
                                                 net.zaminmc.zea.hud.HudAnchor.BOTTOM_RIGHT, 8, 8, false),
                                 new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY, () -> mapEngine));
+                hud.register(
+                                new net.zaminmc.zea.hud.HudElementSpec(
+                                                Identifier.fromNamespaceAndPath("zea", "hud/destination"),
+                                                "Shop destination",
+                                                180, 14,
+                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 28, false),
+                                new ShopDestinationHud());
                 ClientTickEvents.END_CLIENT_TICK.register(client -> mapEngine.tick());
                 // Native discovery: its own toggle file, its own capture, and
                 // the ZEA-REPO consumer — local-first, gated on discovery.
@@ -276,6 +300,9 @@ public final class ZeaClient implements ClientModInitializer {
                 // Pending spawn navigation belongs to one connection, like
                 // the market's pending inspections.
                 ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> spawnCommands.reset());
+                // The waypoint belongs to one world session, like the
+                // pending state above it.
+                ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> destinationTracker.reset());
                 // Slot locks belong to the server they were made on: the
                 // connect hostname (the same key history isolates) decides
                 // the context; menus and singleplayer share "generic".
@@ -305,6 +332,16 @@ public final class ZeaClient implements ClientModInitializer {
                                                         client.player == null ? null
                                                                         : new double[] {client.player.getX(), client.player.getZ()},
                                                         Instant.now());
+                        // The destination's lifecycle reads the player's world
+                        // and nation; the nation resolution (claim geometry)
+                        // runs once a second, not per tick.
+                        if (destinationTracker.destination() != null) {
+                                destinationTick++;
+                                if (destinationTick >= 20) {
+                                        destinationTick = 0;
+                                        destinationTracker.tick(currentWorld(), playerNation());
+                                }
+                        }
                         while (ZeaKeys.OPEN_MAP.consumeClick()) {
                                 if (client.gui.screen() == null) {
                                         map.openWorldMap(client);
@@ -353,6 +390,26 @@ public final class ZeaClient implements ClientModInitializer {
                                 })));
                 ClientLifecycleEvents.CLIENT_STOPPING.register(client -> shutdownBackgroundWork());
                 ZeaKeys.register();
+        }
+
+        private static int destinationTick;
+
+        /** The player's current world, or null outside one. */
+        private static String currentWorld() {
+                Minecraft client = Minecraft.getInstance();
+                return client.level == null ? null : client.level.dimension().identifier().toString();
+        }
+
+        /** The nation the player stands in, from claim geometry; null when unknown. */
+        private static String playerNation() {
+                Minecraft client = Minecraft.getInstance();
+                if (market == null || market.townLookup() == null
+                                || client.player == null || client.level == null) {
+                        return null;
+                }
+                var resolved = market.townLookup().at(client.level.dimension().identifier().toString(),
+                                (int) Math.floor(client.player.getX()), (int) Math.floor(client.player.getZ()));
+                return resolved == null ? null : resolved.nation();
         }
 
         /**

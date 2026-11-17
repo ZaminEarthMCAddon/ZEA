@@ -86,6 +86,26 @@ public final class ItemVariantIndex {
 		}
 
 		/**
+		 * The variant's enchantment lines as the servers reported them,
+		 * most-reported first (first-seen on a tie). Presentation and
+		 * search text only — the fingerprint, never this list, is the
+		 * identity.
+		 */
+		public List<String> enchantments() {
+			Map<String, Integer> votes = new LinkedHashMap<>();
+			for (Offer offer : offers) {
+				for (String enchantment : offer.observation().enchantments()) {
+					votes.merge(enchantment, 1, Integer::sum);
+				}
+			}
+			return votes.entrySet().stream()
+					.sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
+							.thenComparing(Map.Entry::getKey))
+					.map(Map.Entry::getKey)
+					.toList();
+		}
+
+		/**
 		 * The text this variant matches by search: item name, registry id
 		 * (inside the fingerprint token), the server's enchantment lines
 		 * and the owners. Search never reconstructs the identity — this
