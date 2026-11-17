@@ -23,18 +23,24 @@ class CalculationMathTest {
         }
 
         /**
-         * The melee total is base plus enchantment bonus — the
-         * enchantment contribution is additive, never a multiplier on
-         * the item's base damage. The split label and level ride along
-         * for the presentation's bracket indicator.
+         * The melee total is item plus enchantment plus — when held —
+         * the wielder's base and active effects. The enchantment
+         * contribution is additive, never a multiplier on the item's
+         * base damage. The split label and level ride along for the
+         * presentation's bracket indicator.
          */
         @Test
-        void meleeDamageTotalIsBasePlusEnchantment() {
-                ItemStatistics.MeleeDamage damage = new ItemStatistics.MeleeDamage(
-                                8.0, 3.0, "Sharpness V", 5, 1.6, 0.0, 0, List.of());
-                assertEquals(11.0, damage.total(), 1e-9);
-                assertEquals("Sharpness V", damage.bonusLabel());
-                assertEquals(5, damage.bonusLevel());
+        void meleeDamageTotalIsItemPlusEnchantmentPlusWielder() {
+                ItemStatistics.MeleeDamage spare = new ItemStatistics.MeleeDamage(
+                                6.0, 3.0, "Sharpness V", 5, 0.0, 0.0, "", 1.6, 0.0, List.of());
+                assertEquals(9.0, spare.total(), 1e-9,
+                                "a spare sword's total is the item plus the enchantment");
+                ItemStatistics.MeleeDamage held = new ItemStatistics.MeleeDamage(
+                                6.0, 3.0, "Sharpness V", 5, 1.0, 3.0, "Strength", 1.6, 0.0, List.of());
+                assertEquals(13.0, held.total(), 1e-9,
+                                "a held sword adds the wielder's base and active effects");
+                assertEquals("Sharpness V", held.bonusLabel());
+                assertEquals(5, held.bonusLevel());
         }
 
         /**
@@ -127,5 +133,6 @@ class CalculationMathTest {
                 assertTrue(empty.projectile().isEmpty());
                 assertTrue(empty.smashDamage().isEmpty());
                 assertTrue(empty.spear().isEmpty());
+                assertTrue(empty.magicFind().isEmpty());
         }
 }

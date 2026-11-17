@@ -41,8 +41,14 @@ public final class StatisticsEngine {
          * @param registries the level's registry access, for enchantment
          *        effect resolution; may be {@code null} outside a level,
          *        in which case enchantment contributions are zero
+         * @param wielder the player holding — or not holding — the
+         *        hovered stack, read live from the attribute system;
+         *        {@link WielderContext#NONE} when the context is
+         *        unknown, which keeps the player's base damage and
+         *        active effects out of the totals
          */
-        public static ItemStatistics statisticsOf(ItemStack stack, HolderLookup.Provider registries) {
+        public static ItemStatistics statisticsOf(
+                        ItemStack stack, HolderLookup.Provider registries, WielderContext wielder) {
                 if (stack == null || stack.isEmpty()) {
                         return ItemStatistics.empty();
                 }
@@ -52,7 +58,7 @@ public final class StatisticsEngine {
                 }
                 ItemSnapshot snapshot = ItemSnapshot.of(stack, registries);
                 Optional<ItemStatistics.MeleeDamage> melee = category.isMeleeWeapon()
-                                ? DamageCalculator.calculate(stack, snapshot) : Optional.empty();
+                                ? DamageCalculator.calculate(wielder.holds(stack), snapshot, wielder) : Optional.empty();
                 Optional<ItemStatistics.MiningSpeed> mining = category.isMiningTool()
                                 ? MiningSpeedCalculator.calculate(stack, snapshot) : Optional.empty();
                 Optional<ItemStatistics.ArmorStats> armor = category.isArmor()
@@ -65,6 +71,20 @@ public final class StatisticsEngine {
                                 ? MaceCalculator.calculate(stack.getItem(), snapshot) : Optional.empty();
                 Optional<ItemStatistics.SpearStats> spear = category == ItemCategory.SPEAR
                                 ? SpearCalculator.calculate(stack, snapshot) : Optional.empty();
-                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear);
+                return new ItemStatistics(melee, mining, armor, durability, projectile, smash, spear,
+                                magicFind(snapshot));
+        }
+
+        /**
+         * The Magic Find stat — ZEA's compact RPG interpretation of the
+         * Looting enchantment's drop-rate contribution, one point per
+         * level, read from the hovered stack's own enchantments. Empty
+         * when the item carries no Looting: the stat exists only where
+         * the enchantment does, and the player's other equipment never
+         * contributes it to a hovered item.
+         */
+        static Optional<Integer> magicFind(ItemSnapshot snapshot) {
+                int level = EnchantmentLevel.byPath(snapshot, "looting");
+                return level > 0 ? Optional.of(level) : Optional.empty();
         }
 }

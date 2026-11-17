@@ -67,8 +67,8 @@ final class EnchantmentEffects {
         /**
          * The level of the first held enchantment contributing an
          * {@code add_value} effect to {@code attribute}, or 0 when none
-         * does — e.g. Sweeping Edge's level behind a {@code
-         * sweeping_damage_ratio} contribution, so the presentation can
+         * does — e.g. Efficiency's level behind a {@code
+         * mining_efficiency} contribution, so the presentation can
          * render the bracket indicator. Only the level is returned;
          * the amount itself comes from {@link #attributeContribution}.
          */

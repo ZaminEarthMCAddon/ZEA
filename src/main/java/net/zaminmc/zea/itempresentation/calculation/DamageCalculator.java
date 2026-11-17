@@ -3,7 +3,6 @@ package net.zaminmc.zea.itempresentation.calculation;
 import net.minecraft.core.Holder;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.ConditionalEffect;
@@ -19,43 +18,54 @@ import java.util.Optional;
  * mace's smash attack is {@link MaceCalculator}'s concern, the spear's
  * charged attack is {@link SpearCalculator}'s).
  *
- * <p>The base attack damage is resolved the way Minecraft resolves it
- * when the item is held: the {@link ItemAttributeModifiers} component is
- * asked to {@code compute} the {@link Attributes#ATTACK_DAMAGE} value
- * for the main-hand slot, starting from the attribute's default. The
- * item's {@code ADD_VALUE} modifier (the "+7" on a diamond sword) lands
- * on top of the player's base, exactly as equipping does — so the
- * presented number is the damage a normal hit actually deals, not just
- * the item's own modifier.
+ * <p>The damage is split by source. The item's own contribution is the
+ * {@link ItemAttributeModifiers} component's {@code compute} of
+ * {@link Attributes#ATTACK_DAMAGE} for the main-hand slot minus the
+ * baseline it started from — the diamond sword's +6 lands on top of
+ * whatever base the item is being evaluated against, and the delta is
+ * the item's, never the player's. The player's base (1.0, verified in
+ * {@code Player.createAttributes}'s 26.3 bytecode) is read from the
+ * wielder's live attribute instance — not assumed — and enters the
+ * total only when the hovered stack is the stack actually held: a
+ * spare sword in a chest slot deals its own damage, not "item plus
+ * fist". Active attack-damage effects (Strength's +3 per level, read
+ * live from the attribute value) join the total under the same held
+ * condition, with the effect's name riding along for the annotation.
  *
  * <p>Enchantment damage is read from the enchantment's {@link
  * EnchantmentEffectComponents#DAMAGE} effects through the live
  * {@link Enchantment#getEffects} API — the data-driven effect list, not
- * a hardcoded Sharpness formula. Each effect's {@link
- * EnchantmentValueEffect#process} is evaluated with a fixed-seed random
- * source so the tooltip is deterministic: the same item always shows the
- * same damage. Unconditional effects contribute to {@code
- * enchantmentBonus} (labelled, so the presentation can split base from
- * enchantment); effects whose condition cannot be evaluated without a
- * target (Smite vs undead, Bane of Arthropods vs arthropods) are listed
- * as conditional bonuses instead of folded in.
+ * a hardcoded Sharpness formula (the 26.3 data writes {@code 1 + 0.5
+ * per level above first}, which is the {@code 0.5 x level + 0.5} rule
+ * at every level). Each effect's {@link EnchantmentValueEffect#process}
+ * is evaluated with a fixed-seed random source so the tooltip is
+ * deterministic. Unconditional effects contribute to {@code
+ * enchantmentBonus} (labelled, so the presentation can bracket the
+ * enchantment's level); effects whose condition cannot be evaluated
+ * without a target (Smite vs undead, Bane of Arthropods vs arthropods)
+ * are listed as conditional bonuses instead of folded in.
  *
- * <p>The attack speed and sweeping ratio come from the same {@code
- * compute} path on their respective attributes — plus, for sweeping,
- * the live {@code sweeping_damage_ratio} contribution of the Sweeping
- * Edge enchantment, which vanilla expresses as an attribute effect
- * ({@code level / (level + 1)}) rather than an item modifier. An item
- * with no attack-damage modifier yields an empty result — a bow never
+ * <p>The attack speed is the effective value — base plus the item's
+ * main-hand modifier, the number the cooldown actually ticks down
+ * from — never the raw {@code -2.4}. When held it comes straight off
+ * the live {@code ATTACK_SPEED} instance (the wielder's effects
+ * included); when not, from the item's modifiers over the player
+ * base. The sweeping ratio is the item's own modifier plus the
+ * Sweeping Edge enchantment's live {@code sweeping_damage_ratio}
+ * contribution ({@code level / (level + 1)} in the 26.3 data) — the
+ * fraction of the hit a sweep deals to nearby entities. An item with
+ * no attack-damage modifier yields an empty result — a bow never
  * shows melee damage.
  */
 public final class DamageCalculator {
         /**
          * The player's base attack damage — the attribute value an
-         * empty hand swings with. The <em>generic</em> attribute
-         * default is 2.0, but the player supplier overrides it to 1.0
-         * (verified in {@code Player.createAttributes}'s 26.3
-         * bytecode), and the effective number a normal hit deals is
-         * computed on the player's base.
+         * empty hand swings with, used when no wielder is in play (a
+         * hovered stack nobody is holding is still an item a player
+         * could pick up). The <em>generic</em> attribute default is
+         * 2.0, but the player supplier overrides it to 1.0 (verified
+         * in {@code Player.createAttributes}'s 26.3 bytecode); a held
+         * stack reads the actual base from the wielder's instance.
          */
         static final double PLAYER_BASE_ATTACK_DAMAGE = 1.0;
         /** The player's base attack speed (4.0, the same as the generic default). */
@@ -80,15 +90,15 @@ public final class DamageCalculator {
         }
 
         /**
-         * The melee damage for {@code stack} from {@code snapshot}, or
-         * empty when the item carries no attack-damage modifier.
+         * The melee damage for an item from {@code snapshot}. {@code
+         * held} is the engine's decision, from the wielder context's
+         * reference-identity check, that the hovered stack is the stack
+         * actually held — it decides whether the player's base and
+         * active effects join the total.
          */
-        public static Optional<ItemStatistics.MeleeDamage> calculate(ItemStack stack, ItemSnapshot snapshot) {
+        public static Optional<ItemStatistics.MeleeDamage> calculate(
+                        boolean held, ItemSnapshot snapshot, WielderContext wielder) {
                 var modifiers = snapshot.attributeModifiers();
-                double attackDamage = modifiers.compute(
-                                Attributes.ATTACK_DAMAGE,
-                                PLAYER_BASE_ATTACK_DAMAGE,
-                                ItemSnapshot.WEAPON_SLOT);
                 // An item with no attack-damage modifier computes back to
                 // the attribute default (1.0 for ATTACK_DAMAGE). That is
                 // the player's fist, not a weapon statistic — bows and
@@ -96,10 +106,21 @@ public final class DamageCalculator {
                 if (!hasAttackDamageModifier(modifiers)) {
                         return Optional.empty();
                 }
-                double attackSpeed = modifiers.compute(
-                                Attributes.ATTACK_SPEED,
-                                PLAYER_BASE_ATTACK_SPEED,
-                                ItemSnapshot.WEAPON_SLOT);
+                double base = held ? wielder.attackDamageBase() : PLAYER_BASE_ATTACK_DAMAGE;
+                // The item's own contribution: the full main-hand value
+                // minus the base it was computed from. add_value lands on
+                // top of the base; a multiply-style modifier scales the
+                // same way in both terms, so the delta is the item's own.
+                double itemDamage = modifiers.compute(
+                                Attributes.ATTACK_DAMAGE,
+                                base,
+                                ItemSnapshot.WEAPON_SLOT) - base;
+                double attackSpeed = held
+                                ? wielder.attackSpeedLive()
+                                : modifiers.compute(
+                                                Attributes.ATTACK_SPEED,
+                                                PLAYER_BASE_ATTACK_SPEED,
+                                                ItemSnapshot.WEAPON_SLOT);
                 // The sweeping ratio is the item's own modifier plus the
                 // Sweeping Edge enchantment's live attribute contribution
                 // (level / (level + 1)); vanilla swords carry no base
@@ -111,18 +132,55 @@ public final class DamageCalculator {
                                 ItemSnapshot.WEAPON_SLOT)
                                 + EnchantmentEffects.attributeContribution(
                                                 snapshot, Attributes.SWEEPING_DAMAGE_RATIO);
-                int sweepingLevel = EnchantmentEffects.attributeLevel(
-                                snapshot, Attributes.SWEEPING_DAMAGE_RATIO);
                 EnchantmentDamage enchantDamage = enchantmentDamage(snapshot);
+                double playerDamage = held ? base : 0.0;
+                double effectBonus = 0.0;
+                String effectLabel = "";
+                if (held) {
+                        // Everything the live attack-damage instance holds
+                        // beyond the base and the held item's own modifiers
+                        // is active-effect contribution — Strength's +3 per
+                        // level, a Weakness's -4, whatever else applies.
+                        effectBonus = wielder.attackDamageLive() - base - itemDamage;
+                        if (Math.abs(effectBonus) < 1e-9) {
+                                effectBonus = 0.0;
+                        }
+                        effectLabel = effectLabel(wielder, effectBonus);
+                }
                 return Optional.of(new ItemStatistics.MeleeDamage(
-                                attackDamage,
+                                itemDamage,
                                 enchantDamage.bonus,
                                 enchantDamage.bonusLabel,
                                 enchantDamage.bonusLevel,
+                                playerDamage,
+                                effectBonus,
+                                effectLabel,
                                 attackSpeed,
                                 sweeping,
-                                sweepingLevel,
                                 enchantDamage.conditional));
+        }
+
+        /**
+         * The name behind {@code effectBonus} — the active attack-
+         * damage effects' display names, joined, when their summed
+         * amounts actually account for the bonus. A residue the named
+         * effects do not explain (a modded modifier the attribute
+         * carries without an effect behind it) stays unnamed: the
+         * total is still exact, the annotation simply declines to
+         * attribute it to Strength.
+         */
+        private static String effectLabel(WielderContext wielder, double effectBonus) {
+                if (effectBonus == 0.0 || wielder.attackDamageEffects().isEmpty()) {
+                        return "";
+                }
+                double named = 0.0;
+                List<String> names = new ArrayList<>();
+                for (WielderContext.EffectAnnotation effect : wielder.attackDamageEffects()) {
+                        named += effect.amount();
+                        names.add(effect.label());
+                }
+                return Math.abs(named - effectBonus) < 1e-6
+                                ? String.join(" + ", names) : "";
         }
 
         /**

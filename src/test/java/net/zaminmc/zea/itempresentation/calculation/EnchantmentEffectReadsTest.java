@@ -100,7 +100,8 @@ class EnchantmentEffectReadsTest {
          * Sweeping Edge's live read: the vanilla data writes the
          * {@code sweeping_damage_ratio} attribute as a fraction of
          * {@code level / (level + 1)}, on top of the item's own
-         * (default-zero) modifier.
+         * (default-zero) modifier. No level rides along — the
+         * presentation reads the ratio as a percentage, not a bracket.
          */
         @Test
         void sweepingEdgeReadsTheLiveFraction() {
@@ -116,8 +117,9 @@ class EnchantmentEffectReadsTest {
                 ItemSnapshot snapshot = snapshot(
                                 enchantments(sweeping, 3),
                                 null,
-                                meleeModifiers(7.0, -2.4));
-                Optional<ItemStatistics.MeleeDamage> melee = DamageCalculator.calculate(null, snapshot);
+                                meleeModifiers(6.0, -2.4));
+                Optional<ItemStatistics.MeleeDamage> melee = DamageCalculator.calculate(
+                                false, snapshot, WielderContext.NONE);
                 assertTrue(melee.isPresent());
                 assertEquals(0.75, melee.orElseThrow().sweepingRatio(), 1e-9,
                                 "Sweeping Edge III must read level / (level + 1)");
@@ -126,8 +128,9 @@ class EnchantmentEffectReadsTest {
         /**
          * Sharpness's live read through the damage effects: the vanilla
          * data is an {@code add} of {@code 1 + 0.5 per level above
-         * first}, so Sharpness V adds 3 and the presentation split
-         * carries the enchantment's fullname.
+         * first}, so Sharpness V adds 3 — the {@code 0.5 x level + 0.5}
+         * rule — and the presented damage keeps the player's base out
+         * of the item's own contribution.
          */
         @Test
         void sharpnessReadsTheLiveDamageEffect() {
@@ -139,15 +142,19 @@ class EnchantmentEffectReadsTest {
                 ItemSnapshot snapshot = snapshot(
                                 enchantments(sharpness, 5),
                                 null,
-                                meleeModifiers(7.0, -2.4));
-                Optional<ItemStatistics.MeleeDamage> melee = DamageCalculator.calculate(null, snapshot);
+                                meleeModifiers(6.0, -2.4));
+                Optional<ItemStatistics.MeleeDamage> melee = DamageCalculator.calculate(
+                                false, snapshot, WielderContext.NONE);
                 assertTrue(melee.isPresent());
                 assertEquals(3.0, melee.orElseThrow().enchantmentBonus(), 1e-9);
-                assertEquals(8.0, melee.orElseThrow().baseDamage(), 1e-9,
-                                "the player's base is 1.0, not the generic attribute default 2.0");
-                assertEquals(11.0, melee.orElseThrow().total(), 1e-9);
+                assertEquals(6.0, melee.orElseThrow().itemDamage(), 1e-9,
+                                "the item's own contribution is its modifier alone, never the player's base");
+                assertEquals(9.0, melee.orElseThrow().total(), 1e-9,
+                                "a spare sword deals item plus enchantment, no fist");
+                assertEquals(0.0, melee.orElseThrow().playerDamage(), 1e-9);
                 assertEquals("Sharpness V", melee.orElseThrow().bonusLabel());
-                assertEquals(1.6, melee.orElseThrow().attackSpeed(), 1e-9);
+                assertEquals(1.6, melee.orElseThrow().attackSpeed(), 1e-9,
+                                "the effective speed is base 4.0 plus the sword's -2.4");
         }
 
         /**
@@ -289,22 +296,55 @@ class EnchantmentEffectReadsTest {
         /**
          * A protection enchantment's EPF read: plain Protection's
          * {@code damage_protection} effect is {@code level}, so
-         * Protection IV on a chestplate lists 4 EPF against most
-         * damage.
+         * Protection IV on a chestplate rides the defense number as 40
+         * of the 120 (8 points × 10 plus 4 levels × 10), with the
+         * level itself as the bracket indicator.
          */
         @Test
-        void protectionReadsTheLiveEpf() {
-                Holder<Enchantment> protection = enchantment("Protection", effects -> effects.set(
+        void protectionReadsIntoDefenseOnTheRpgScale() {
+                KeyedEnchantments keyed = new KeyedEnchantments();
+                Holder<Enchantment> protection = keyed.holder("protection", "Protection", effects -> effects.set(
                                 EnchantmentEffectComponents.DAMAGE_PROTECTION,
                                 List.of(new ConditionalEffect<>(
                                                 new AddValue(LevelBasedValue.perLevel(1.0f)), Optional.empty()))));
                 ItemSnapshot snapshot = snapshot(enchantments(protection, 4), null, armorModifiers());
                 Optional<ItemStatistics.ArmorStats> armor = ArmorCalculator.calculate(null, snapshot);
                 assertTrue(armor.isPresent());
-                assertEquals(1, armor.orElseThrow().protectionEnchantments().size());
-                assertEquals(4.0, armor.orElseThrow().protectionEnchantments().get(0).value(), 1e-9);
-                assertTrue(armor.orElseThrow().protectionEnchantments().get(0).label().startsWith("Protection IV"));
-                assertEquals(8.0, armor.orElseThrow().armor(), 1e-9);
+                assertEquals(120.0, armor.orElseThrow().defense(), 1e-9,
+                                "8 armor points and 4 Protection levels, both on the 10x scale");
+                assertEquals(4, armor.orElseThrow().protectionLevel(),
+                                "the actual Protection level, never clamped");
+                assertTrue(armor.orElseThrow().specializedProtections().isEmpty(),
+                                "generic Protection must not reappear as a specialized stat");
+        }
+
+        /**
+         * A specialized protection enchantment stays out of the defense
+         * number: Fire Protection IV's EPF is {@code 2 x level}, so it
+         * reads 8 against fire damage on its own stat, while defense
+         * remains the bare armor points on the 10× scale.
+         */
+        @Test
+        void specializedProtectionsStayOutOfDefense() {
+                KeyedEnchantments keyed = new KeyedEnchantments();
+                Holder<Enchantment> fireProtection = keyed.holder("fire_protection", "Fire Protection",
+                                effects -> effects.set(
+                                        EnchantmentEffectComponents.DAMAGE_PROTECTION,
+                                        List.of(new ConditionalEffect<>(
+                                                        new AddValue(LevelBasedValue.perLevel(2.0f)), Optional.empty()))));
+                ItemSnapshot snapshot = snapshot(enchantments(fireProtection, 4), null, armorModifiers());
+                Optional<ItemStatistics.ArmorStats> armor = ArmorCalculator.calculate(null, snapshot);
+                assertTrue(armor.isPresent());
+                assertEquals(80.0, armor.orElseThrow().defense(), 1e-9,
+                                "specialized protection adds nothing to defense");
+                assertEquals(0, armor.orElseThrow().protectionLevel());
+                assertEquals(1, armor.orElseThrow().specializedProtections().size());
+                ItemStatistics.ConditionalBonus fire =
+                                armor.orElseThrow().specializedProtections().get(0);
+                assertEquals(8.0, fire.value(), 1e-9,
+                                "Fire Protection IV reads 2 x level EPF");
+                assertEquals("Fire Resistance", fire.label(),
+                                "the stat is named for the damage type it guards");
         }
 
         // ---------------------------------------------------------------------

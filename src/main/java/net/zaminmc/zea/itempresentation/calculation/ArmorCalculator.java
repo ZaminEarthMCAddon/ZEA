@@ -14,44 +14,57 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Armor statistics for a worn piece: armor points, toughness, knockback
- * resistance, and the protection enchantments the piece carries.
+ * Armor statistics for a worn piece: RPG defense, toughness, knockback
+ * resistance, and the specialized protection enchantments the piece
+ * carries.
  *
- * <p>The armor points, toughness and knockback resistance come from the
- * {@link ItemAttributeModifiers} component's {@code compute} for the
- * piece's equipment slot — the same path the game uses when the piece is
- * equipped. An item with no armor modifier yields an empty result.
+ * <p>The defense number is the RPG interpretation: the piece's vanilla
+ * armor points times ten, plus ten per level of generic Protection —
+ * the diamond chestplate's 8 points and Protection V's 50 bonus read
+ * as 130. The 10× scale is a presentation convention; the vanilla
+ * armor points and the game's damage math are untouched. The bracket
+ * level is the actual Protection level read from the enchantment
+ * component, never clamped — a server item with Protection VI shows
+ * VI. Toughness and knockback resistance keep their vanilla values.
  *
- * <p>Protection enchantments are <em>not</em> folded into a single
- * damage-reduction percentage. In the 26.3 data every protection
- * enchantment's {@code damage_protection} effect carries a
- * damage-source requirement — plain Protection applies to everything
- * that does not bypass invulnerability, Fire Protection only to fire,
- * Feather Falling only to falls — so a tooltip with no incoming damage
- * to evaluate must state the condition, not average over it. Each
- * enchantment is listed as a {@link ItemStatistics.ConditionalBonus}
- * whose value is the piece's enchantment-protection-factor (EPF)
- * contribution, read live from the effect; the reduction this piece
- * alone grants against matching damage is {@code min(20, epf) / 25} of
- * it, the vanilla combat rule (each EPF point is 4%, the whole set
- * caps at 80%).
+ * <p>The specialized protection enchantments are deliberately not part
+ * of defense. In the 26.3 data every protection enchantment's {@code
+ * damage_protection} effect carries a damage-source requirement —
+ * generic Protection applies to everything that does not bypass
+ * invulnerability, Fire Protection only to fire, Feather Falling only
+ * to falls — so each specialized enchantment is listed on its own
+ * stat, named for the damage type it guards, with the piece's
+ * enchantment-protection-factor (EPF) contribution read live from the
+ * effect data. The reduction the piece alone grants against matching
+ * damage is {@code min(20, epf) / 25} of it, the vanilla combat rule
+ * (each EPF point is 4%, the whole set caps at 80%); a single piece's
+ * value is its contribution, not the reduction the whole armor set
+ * buys.
  */
 public final class ArmorCalculator {
 
         /**
-         * The condition text for the protection enchantments, keyed by
-         * registry path. The EPF <em>values</em> are read live from the
-         * effect data; only the human phrasing of the damage type each
-         * loot condition selects is curated here, because a loot
-         * condition is opaque to a tooltip. Unknown protection
-         * enchantments fall back to the honest "(conditional)".
+         * The RPG defense scale: vanilla armor points multiply by ten,
+         * and each level of generic Protection adds ten. A presentation
+         * convention only — the attribute values the game uses stay
+         * vanilla.
          */
-        private static final Map<String, String> CONDITION_LABELS = Map.of(
-                        "protection", "most damage",
-                        "fire_protection", "fire damage",
-                        "blast_protection", "explosions",
-                        "projectile_protection", "projectiles",
-                        "feather_falling", "falls");
+        static final double DEFENSE_SCALE = 10.0;
+
+        /**
+         * The stat names for the specialized protection enchantments,
+         * keyed by registry path. The EPF <em>values</em> are read live
+         * from the effect data; only the human name of the damage type
+         * each enchantment guards is curated here. Generic Protection
+         * is not in this map — it contributes to defense, not to a
+         * specialized stat. Unknown protection enchantments fall back
+         * to the honest "(conditional)".
+         */
+        private static final Map<String, String> SPECIALIZED_LABELS = Map.of(
+                        "fire_protection", "Fire Resistance",
+                        "blast_protection", "Explosion Resistance",
+                        "projectile_protection", "Ranged Defense",
+                        "feather_falling", "Fall Resistance");
 
         private ArmorCalculator() {
         }
@@ -66,7 +79,7 @@ public final class ArmorCalculator {
                 if (slot == null) {
                         return Optional.empty();
                 }
-                double armor = modifiers.compute(
+                double armorPoints = modifiers.compute(
                                 Attributes.ARMOR, Attributes.ARMOR.value().getDefaultValue(), slot);
                 double toughness = modifiers.compute(
                                 Attributes.ARMOR_TOUGHNESS,
@@ -74,9 +87,12 @@ public final class ArmorCalculator {
                 double knockbackResistance = modifiers.compute(
                                 Attributes.KNOCKBACK_RESISTANCE,
                                 Attributes.KNOCKBACK_RESISTANCE.value().getDefaultValue(), slot);
+                int protectionLevel = EnchantmentLevel.byPath(snapshot, "protection");
+                double defense = armorPoints * DEFENSE_SCALE
+                                + protectionLevel * DEFENSE_SCALE;
                 return Optional.of(new ItemStatistics.ArmorStats(
-                                armor, toughness, knockbackResistance,
-                                protectionEnchantments(snapshot)));
+                                defense, toughness, knockbackResistance,
+                                protectionLevel, specializedProtections(snapshot)));
         }
 
         /**
@@ -102,14 +118,18 @@ public final class ArmorCalculator {
         }
 
         /**
-         * The protection enchantments on the item, each as a conditional
-         * bonus: the label is the enchantment's fullname at its held
-         * level plus the damage type it applies to, the value is its
-         * live EPF contribution. Enchantment effects whose requirements
-         * are empty still count — the datapack decides which protection
-         * is conditional, not ZEA.
+         * The specialized protection enchantments on the item, each as
+         * a conditional bonus: the label is the stat name for the
+         * damage type the enchantment guards (Fire Protection → "Fire
+         * Resistance"), the value is its live EPF contribution. Generic
+         * Protection is excluded — its level rides the defense number —
+         * and an unknown protection enchantment (a modded one) keeps
+         * its fullname with the honest "(conditional)" so nothing is
+         * silently merged into the wrong stat. Enchantment effects
+         * whose requirements are empty still count — the datapack
+         * decides which protection is conditional, not ZEA.
          */
-        private static List<ItemStatistics.ConditionalBonus> protectionEnchantments(ItemSnapshot snapshot) {
+        private static List<ItemStatistics.ConditionalBonus> specializedProtections(ItemSnapshot snapshot) {
                 if (!snapshot.hasEnchantments()) {
                         return List.of();
                 }
@@ -117,23 +137,26 @@ public final class ArmorCalculator {
                 List<ItemStatistics.ConditionalBonus> bonuses = new ArrayList<>();
                 for (ItemSnapshot.EnchantmentEntry entry : snapshot.enchantmentEntries()) {
                         Holder<Enchantment> holder = entry.enchantment();
-                        int level = entry.level();
+                        String path = holder.unwrapKey()
+                                        .map(key -> key.identifier().getPath())
+                                        .orElse("");
+                        if (path.equals("protection")) {
+                                continue;
+                        }
                         var effects = holder.value().getEffects(EnchantmentEffectComponents.DAMAGE_PROTECTION);
                         if (effects.isEmpty()) {
                                 continue;
                         }
                         double epf = 0.0;
                         for (var conditionalEffect : effects) {
-                                epf += conditionalEffect.effect().process(level, random, 0.0f);
+                                epf += conditionalEffect.effect().process(entry.level(), random, 0.0f);
                         }
                         if (epf > 0.0) {
-                                String label = Enchantment.getFullname(holder, level).getString();
-                                String condition = holder.unwrapKey()
-                                                .map(key -> CONDITION_LABELS.get(key.identifier().getPath()))
-                                                .orElse(null);
+                                String statName = SPECIALIZED_LABELS.get(path);
                                 bonuses.add(new ItemStatistics.ConditionalBonus(
-                                                label + " (" + (condition != null
-                                                                ? condition : "conditional") + ")",
+                                                statName != null ? statName
+                                                                : Enchantment.getFullname(holder, entry.level()).getString()
+                                                                                + " (conditional)",
                                                 epf));
                         }
                 }

@@ -14,20 +14,24 @@ import java.util.List;
  * rebuilt tooltip.
  *
  * <p>The presentation is deliberately terse: the final readable value,
- * never the arithmetic behind it. A damage line reads "Damage: +12
- * [5]" — total first, the contributing enchantment's level in the
- * bracket — and never "10 (7 base + 3 Sharpness V)". Positive
- * additive bonuses carry a leading {@code +}; ratios that are
- * percentages read as percentages ("Sweep Damage: +75%", never
- * "Sweeping Damage Ratio: 0.75"); durations read in seconds. No line
- * shows an internal attribute identifier or a raw ratio.
+ * never the arithmetic behind it — with the one exception the damage
+ * line earns, where the total is followed by compact color-coded
+ * annotations for the item, enchantment level, and (when held) the
+ * wielder's own contribution, because a Hypixel-style damage number
+ * that means three different things at once must be able to say which
+ * is which. Positive additive bonuses carry a leading {@code +};
+ * ratios that are percentages read as percentages ("Sweep Damage:
+ * +75%"); durations read in seconds. No line shows an internal
+ * attribute identifier or a raw ratio.
  *
  * <p>Colors follow the spec palette: grey labels, red damage values,
- * green defensive and utility bonuses, white for neutral cadence
- * numbers. Only sections with a populated statistic appear — a shovel
- * never shows attack damage, a bow never shows melee attack speed,
- * and a number that holds only under a condition states the condition
- * in its own line rather than masquerading as universal.
+ * yellow attack speed, aqua Magic Find, gold bow velocity, green
+ * defensive and utility bonuses, blue for a contributing enchantment's
+ * level bracket, and dark for the wielder's own damage. Only sections
+ * with a populated statistic appear — a shovel never shows attack
+ * damage, a bow never shows melee attack speed, and a number that
+ * holds only under a condition states the condition in its own line
+ * rather than masquerading as universal.
  *
  * <p>The builder is a pure transform: it takes the already-computed
  * {@link ItemStatistics} and the category, and emits {@link Component}
@@ -45,6 +49,16 @@ public final class ItemPresentationBuilder {
         private static final int BONUS_GREEN = 0x55FF55;
         /** The white value color for neutral cadence and capacity numbers. */
         private static final int VALUE_WHITE = 0xFFFFFF;
+        /** The yellow value color for the effective attack speed (§e). */
+        private static final int SPEED_YELLOW = 0xFFFF55;
+        /** The aqua value color for Magic Find (§b). */
+        private static final int MAGIC_AQUA = 0x55FFFF;
+        /** The gold value color for the bow's launch velocity (§6). */
+        private static final int VELOCITY_GOLD = 0xFFAA00;
+        /** The blue bracket color for a contributing enchantment's level (§9). */
+        private static final int ENCHANT_BLUE = 0x5555FF;
+        /** The dark color for the wielder's own damage contribution (§0). */
+        private static final int PLAYER_DARK = 0x000000;
 
         private ItemPresentationBuilder() {
         }
@@ -52,7 +66,11 @@ public final class ItemPresentationBuilder {
         /**
          * The RPG-style stat lines for {@code statistics} under
          * {@code category}. Returns an empty list when the item has no
-         * populated statistics to show.
+         * populated statistics to show. The block carries one trailing
+         * blank separator — the gap between the stats and the
+         * enchantment section — but no leading one: the stats sit
+         * directly under the item name, the way the spec's examples
+         * read them.
          */
         public static List<Component> build(ItemCategory category, ItemStatistics statistics) {
                 List<Component> lines = new ArrayList<>();
@@ -62,40 +80,80 @@ public final class ItemPresentationBuilder {
                 statistics.armor().ifPresent(armor -> lines.addAll(armorLines(armor)));
                 statistics.projectile().ifPresent(projectile -> lines.addAll(projectileLines(category, projectile)));
                 statistics.smashDamage().ifPresent(smash -> lines.addAll(smashLines(smash)));
+                statistics.magicFind().ifPresent(magicFind ->
+                                lines.add(statLine("Magic Find", "+" + magicFind, MAGIC_AQUA)));
                 statistics.durability().ifPresent(durability -> lines.add(durabilityLine(durability)));
                 if (!lines.isEmpty()) {
-                        lines.add(0, Component.empty());
                         lines.add(Component.empty());
                 }
                 return lines;
         }
 
         /**
-         * The melee damage section: damage (with the contributing
-         * enchantment's level in the bracket when one contributes),
-         * attack speed, sweeping, conditional bonuses. A spear's
-         * left-click is the jab, so its damage line says so; a
-         * trident's is the melee thrust.
+         * The melee damage section: the annotated damage line, the
+         * effective attack speed, the sweeping ratio, and the
+         * conditional bonuses. A spear's left-click is the jab, so its
+         * damage line says so; a trident's is the melee thrust.
          */
         private static List<Component> meleeLines(ItemCategory category, ItemStatistics.MeleeDamage melee) {
                 List<Component> lines = new ArrayList<>();
                 String damageKey = category == ItemCategory.SPEAR ? "Jab Damage"
                                 : category == ItemCategory.TRIDENT ? "Melee Damage"
                                 : "Damage";
-                if (melee.enchantmentBonus() > 0.0 && melee.bonusLevel() > 0) {
-                        lines.add(bonusStatLine(damageKey, melee.total(), melee.bonusLevel(), DAMAGE_RED));
-                } else {
-                        lines.add(statLine(damageKey, "+" + format(melee.baseDamage()), DAMAGE_RED));
-                }
-                lines.add(statLine("Attack Speed", format(melee.attackSpeed()), VALUE_WHITE));
+                lines.add(damageLine(damageKey, melee));
+                lines.add(statLine("Attack Speed", "+" + format(melee.attackSpeed()), SPEED_YELLOW));
                 if (melee.sweepingRatio() > 0.0) {
-                        lines.add(bonusStatLine("Sweep Damage",
-                                        melee.sweepingRatio() * 100.0, melee.sweepingLevel(), DAMAGE_RED, "%"));
+                        lines.add(statLine("Sweep Damage",
+                                        "+" + format(melee.sweepingRatio() * 100.0) + "%", DAMAGE_RED));
                 }
                 for (ItemStatistics.ConditionalBonus bonus : melee.conditional()) {
                         lines.add(statLine(bonus.label(), "+" + format(bonus.value()), DAMAGE_RED));
                 }
                 return lines;
+        }
+
+        /**
+         * The damage line: the final normal-hit total first, then the
+         * annotations that say where it came from — the item's own
+         * contribution in red parentheses, the contributing
+         * enchantment's level in the blue bracket, the wielder's base
+         * attack damage in dark parentheses (present only when the
+         * hovered stack is the one actually held), and the active
+         * attack-damage effects in green (red for a drain, Weakness).
+         * The annotations appear only once the total has more than one
+         * contributor — an unenchanted spare sword reads just "+6",
+         * because a single number that already is the item's own needs
+         * no breakdown of itself.
+         */
+        private static Component damageLine(String label, ItemStatistics.MeleeDamage melee) {
+                MutableComponent line = Component.literal(label + ": ")
+                                .withColor(LABEL_GRAY);
+                line.append(Component.literal("+" + format(melee.total()))
+                                .withColor(DAMAGE_RED));
+                boolean annotated = melee.playerDamage() > 0.0
+                                || melee.bonusLevel() > 0
+                                || melee.effectBonus() != 0.0;
+                if (annotated && melee.itemDamage() != 0.0) {
+                        line.append(Component.literal(" (" + format(melee.itemDamage()) + ")")
+                                        .withColor(DAMAGE_RED));
+                }
+                if (melee.bonusLevel() > 0) {
+                        line.append(Component.literal(" [" + melee.bonusLevel() + "]")
+                                        .withColor(ENCHANT_BLUE));
+                }
+                if (melee.playerDamage() > 0.0) {
+                        line.append(Component.literal(" (" + format(melee.playerDamage()) + ")")
+                                        .withColor(PLAYER_DARK));
+                }
+                if (melee.effectBonus() != 0.0) {
+                        String name = melee.effectLabel().isEmpty()
+                                        ? "" : " " + melee.effectLabel();
+                        String amount = (melee.effectBonus() > 0 ? "+" : "-")
+                                        + format(Math.abs(melee.effectBonus()));
+                        line.append(Component.literal(" (" + amount + name + ")")
+                                        .withColor(melee.effectBonus() > 0 ? BONUS_GREEN : DAMAGE_RED));
+                }
+                return line;
         }
 
         /**
@@ -139,22 +197,26 @@ public final class ItemPresentationBuilder {
         }
 
         /**
-         * The armor section: defense, toughness, knockback resistance,
-         * and the protection enchantments as conditional reductions —
-         * each states the damage type it applies to and the reduction
-         * this piece alone grants against it.
+         * The armor section: the RPG defense number (vanilla armor
+         * points and generic Protection, both on the 10× scale, the
+         * Protection level in the blue bracket), the vanilla toughness
+         * and knockback resistance, and the specialized protection
+         * enchantments as their own stats — each named for the damage
+         * type it guards, carrying the reduction this piece alone
+         * grants against it. Generic Protection never appears as its
+         * own line: it lives in the defense number.
          */
         private static List<Component> armorLines(ItemStatistics.ArmorStats armor) {
                 List<Component> lines = new ArrayList<>();
-                lines.add(statLine("Defense", "+" + format(armor.armor()), BONUS_GREEN));
+                lines.add(bonusStatLine("Defense", armor.defense(), armor.protectionLevel(), BONUS_GREEN));
                 if (armor.toughness() > 0.0) {
-                        lines.add(statLine("Armor Toughness", "+" + format(armor.toughness()), BONUS_GREEN));
+                        lines.add(statLine("Toughness", "+" + format(armor.toughness()), BONUS_GREEN));
                 }
                 if (armor.knockbackResistance() > 0.0) {
                         lines.add(statLine("Knockback Resistance",
                                         "+" + formatPercent(armor.knockbackResistance()), BONUS_GREEN));
                 }
-                for (ItemStatistics.ConditionalBonus protection : armor.protectionEnchantments()) {
+                for (ItemStatistics.ConditionalBonus protection : armor.specializedProtections()) {
                         lines.add(statLine(protection.label(),
                                         "-" + formatPercent(Math.min(20.0, protection.value()) / 25.0),
                                         BONUS_GREEN));
@@ -195,7 +257,9 @@ public final class ItemPresentationBuilder {
                         lines.add(statLine(damageLabel, "+" + format(damage), DAMAGE_RED));
                 }
                 lines.add(statLine(trident ? "Throw Velocity" : bow ? "Velocity" : "Projectile Velocity",
-                                format(projectile.speed() * 20.0) + " blocks/s", VALUE_WHITE));
+                                bow ? "+" + format(projectile.speed() * 20.0) + " Blocks/s"
+                                                : format(projectile.speed() * 20.0) + " blocks/s",
+                                bow ? VELOCITY_GOLD : VALUE_WHITE));
                 if (trident) {
                         lines.add(statLine("Throw Time", seconds(projectile.chargeTicks()), VALUE_WHITE));
                 } else if (bow) {
@@ -242,9 +306,17 @@ public final class ItemPresentationBuilder {
                 return lines;
         }
 
-        /** The durability line: current / maximum, and nothing else. */
+        /**
+         * The durability line: the maximum alone when the item is fully
+         * repaired — "1561", no "/ 1561" echoing itself — and current
+         * / maximum once it is damaged. The maximum is the real
+         * component value, never an Unbreaking-inflated effective one.
+         */
         private static Component durabilityLine(ItemStatistics.Durability durability) {
-                return statLine("Durability", durability.current() + " / " + durability.maximum(), VALUE_WHITE);
+                String value = durability.current() == durability.maximum()
+                                ? String.valueOf(durability.maximum())
+                                : durability.current() + " / " + durability.maximum();
+                return statLine("Durability", value, VALUE_WHITE);
         }
 
         /** A tick count as seconds, trailing zeros stripped. */
@@ -266,8 +338,9 @@ public final class ItemPresentationBuilder {
         /**
          * One "Label: +value [level]" line — the compact form for a
          * value an enchantment contributed to, the bracket carrying the
-         * contributing enchantment's level (Sharpness V → {@code [5]}).
-         * The percent variant appends a {@code %} to the number.
+         * contributing enchantment's level (Sharpness V → {@code [5]})
+         * in the blue enchantment color. The percent variant appends a
+         * {@code %} to the number.
          */
         private static Component bonusStatLine(String label, double value, int level, int valueColor) {
                 return bonusStatLine(label, value, level, valueColor, "");
@@ -278,7 +351,7 @@ public final class ItemPresentationBuilder {
                                 .withColor(LABEL_GRAY);
                 line.append(Component.literal("+" + format(value) + suffix).withColor(valueColor));
                 if (level > 0) {
-                        line.append(Component.literal(" [" + level + "]").withColor(LABEL_GRAY));
+                        line.append(Component.literal(" [" + level + "]").withColor(ENCHANT_BLUE));
                 }
                 return line;
         }

@@ -17,6 +17,7 @@ import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.itempresentation.calculation.ItemStatistics;
 import net.zaminmc.zea.itempresentation.calculation.StatisticsEngine;
+import net.zaminmc.zea.itempresentation.calculation.WielderContext;
 import net.zaminmc.zea.itempresentation.presentation.EnchantmentExplanations;
 import net.zaminmc.zea.itempresentation.presentation.EnchantmentSection;
 import net.zaminmc.zea.itempresentation.presentation.ItemPresentationBuilder;
@@ -174,7 +175,14 @@ public final class RarityTooltipEditor {
          * inserted and nothing is removed.
          */
         private static void insertRpgBlock(List<Component> lines, ItemStack stack, ItemCategory category) {
-                ItemStatistics statistics = StatisticsEngine.statisticsOf(stack, levelLookup());
+                // The wielder context is read live per tooltip: whether
+                // this stack is the one actually held, the player's own
+                // attribute bases, and the active attack-damage effects.
+                // Reference identity against the live main-hand stack
+                // decides "held" — an identical item elsewhere is a
+                // different instance and stays an item-only statistic.
+                WielderContext wielder = WielderContext.of(Minecraft.getInstance().player);
+                ItemStatistics statistics = StatisticsEngine.statisticsOf(stack, levelLookup(), wielder);
                 List<Component> statLines = ItemPresentationBuilder.build(category, statistics);
                 ItemEnchantments enchantments = stack.getOrDefault(
                                 DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);

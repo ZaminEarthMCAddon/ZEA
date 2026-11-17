@@ -33,37 +33,54 @@ public record ItemStatistics(
                 Optional<Durability> durability,
                 Optional<ProjectileStats> projectile,
                 Optional<SmashDamage> smashDamage,
-                Optional<SpearStats> spear) {
+                Optional<SpearStats> spear,
+                Optional<Integer> magicFind) {
 
         /** An empty statistics set — the item has no RPG-stat-worthy properties. */
         public static ItemStatistics empty() {
                 return new ItemStatistics(
                                 Optional.empty(), Optional.empty(), Optional.empty(),
                                 Optional.empty(), Optional.empty(), Optional.empty(),
-                                Optional.empty());
+                                Optional.empty(), Optional.empty());
         }
 
         /**
-         * The melee damage a weapon deals on a normal hit. Base attack
-         * damage plus the unconditional damage enchantments (Sharpness,
-         * Smite, Bane of Arthropods — whichever is present, they are
-         * mutually exclusive). Conditional-on-target effects are listed
-         * separately. {@code bonusLabel} names the enchantment behind
-         * {@code enchantmentBonus} and {@code bonusLevel} carries its
-         * level for the compact bracket indicator.
+         * The melee damage a weapon deals on a normal hit, split by
+         * source so the tooltip can annotate what each contributor
+         * adds. {@code itemDamage} is the item's intrinsic attack-damage
+         * contribution (the diamond sword's +6) — never the player's
+         * base, which is the wielder's, not the item's. {@code
+         * enchantmentBonus} is the unconditional damage enchantments
+         * (Sharpness — Smite and Bane of Arthropods are
+         * conditional-on-target and listed separately);
+         * {@code bonusLabel} names the enchantment and {@code
+         * bonusLevel} carries its level for the compact bracket
+         * indicator. {@code playerDamage} is the wielder's base attack
+         * damage, populated only when the hovered stack is the stack
+         * actually held, and {@code effectBonus} is the active
+         * attack-damage effects (Strength) under the same condition,
+         * with {@code effectLabel} naming the effect behind it. Both
+         * wielder fields are zero for an item nobody is holding — a
+         * chest slot's spare sword does not swing.
          */
         public record MeleeDamage(
-                        double baseDamage,
+                        double itemDamage,
                         double enchantmentBonus,
                         String bonusLabel,
                         int bonusLevel,
+                        double playerDamage,
+                        double effectBonus,
+                        String effectLabel,
                         double attackSpeed,
                         double sweepingRatio,
-                        int sweepingLevel,
                         List<ConditionalBonus> conditional) {
-                /** The total damage on a normal hit, base plus enchantment. */
+                /**
+                 * The total damage on a normal hit: the item, its
+                 * enchantments, and — when held — the wielder's base and
+                 * active effects.
+                 */
                 public double total() {
-                        return baseDamage + enchantmentBonus;
+                        return itemDamage + enchantmentBonus + playerDamage + effectBonus;
                 }
         }
 
@@ -89,20 +106,27 @@ public record ItemStatistics(
         }
 
         /**
-         * Armor stats for a worn piece. {@code armor} is the piece's own
-         * armor points; the protection enchantments contribute a
-         * <em>conditional</em> reduction that depends on the incoming
-         * damage type, so they are listed rather than folded into one
-         * misleading percentage. Each entry's value is the piece's
-         * enchantment-protection-factor contribution; the reduction this
-         * piece alone grants against matching damage is {@code min(20,
-         * epf) / 25}, the vanilla combat rule.
+         * Armor stats for a worn piece, on the RPG defense scale.
+         * {@code defense} is the piece's armor points times ten plus
+         * ten per level of generic Protection — the Hypixel-style
+         * 10× interpretation, a presentation convention that leaves the
+         * vanilla armor points themselves untouched. {@code
+         * protectionLevel} is the actual Protection level behind that
+         * bonus (the bracket indicator; zero when the piece carries
+         * none, never clamped). The specialized protection enchantments
+         * are <em>not</em> folded into defense: each states the damage
+         * type it guards and is listed as a {@link ConditionalBonus}
+         * whose value is the piece's enchantment-protection-factor
+         * contribution, read live from the effect data; the reduction
+         * this piece alone grants against matching damage is {@code
+         * min(20, epf) / 25}, the vanilla combat rule.
          */
         public record ArmorStats(
-                        double armor,
+                        double defense,
                         double toughness,
                         double knockbackResistance,
-                        List<ConditionalBonus> protectionEnchantments) {
+                        int protectionLevel,
+                        List<ConditionalBonus> specializedProtections) {
         }
 
         /**
@@ -233,9 +257,10 @@ public record ItemStatistics(
         /**
          * A bonus that applies only under a condition the tooltip must
          * state — e.g. "Sharpness V vs undead", "Density III per fallen
-         * block", "Protection IV vs fire". The label carries the
-         * condition in human terms; the value is the numeric
-         * contribution when the condition holds.
+         * block", or a specialized protection's damage type. The label
+         * carries the condition (or the mapped stat name) in human
+         * terms; the value is the numeric contribution when the
+         * condition holds.
          */
         public record ConditionalBonus(String label, double value) {
         }
