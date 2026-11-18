@@ -498,14 +498,20 @@ public final class ItemBrowser {
         // Sort bar
         // ------------------------------------------------------------------
 
-        /** The sort bar's icon counts: three order icons, three direction filters. */
+        /**
+         * The sort bar's icon counts: the three order buttons —
+         * alphabetical, rarity, price — and the five category filters:
+         * all, weapons and tools, armor, general, server items.
+         */
         static final int ORDER_ICON_COUNT = 3;
-        static final int FILTER_ICON_COUNT = 3;
+        static final int FILTER_ICON_COUNT = 5;
 
         /**
-         * The pane's bottom strip — NEU's sort bar: the foreground plate, the
-         * order icons from the left with their ascending overlays, the
-         * direction filters to the right, the selected icon gold.
+         * The pane's bottom strip — NEU's sort bar: the foreground plate,
+         * the three order buttons from the left (alphabetical, rarity,
+         * price) with NEU's direction arrow over the active one only, and
+         * the five category filters to the right (all, weapons and tools,
+         * armor, general, server items), the selected icon gold.
          */
         private void drawSortBar(GuiGraphicsExtractor graphics, AbstractContainerScreen<?> screen,
                         int mouseX, int mouseY) {
@@ -525,16 +531,16 @@ public final class ItemBrowser {
         private void drawOrderIcons(GuiGraphicsExtractor graphics, BrowserGeometry.Metrics m,
                         int mouseX, int mouseY) {
                 Identifier[] icons = {
-                                NeuTextures.ORDER_ALPHABETICAL, NeuTextures.ORDER_VALUE, NeuTextures.ORDER_AGE
+                                NeuTextures.ORDER_ALPHABETICAL, NeuTextures.ORDER_RARITY, NeuTextures.ORDER_VALUE
                 };
                 Identifier[] active = {
-                                NeuTextures.ORDER_ALPHABETICAL_ACTIVE, NeuTextures.ORDER_VALUE_ACTIVE,
-                                NeuTextures.ORDER_AGE_ACTIVE
+                                NeuTextures.ORDER_ALPHABETICAL_ACTIVE, NeuTextures.ORDER_RARITY_ACTIVE,
+                                NeuTextures.ORDER_VALUE_ACTIVE
                 };
                 ItemBrowserState.Order[] orders = {
                                 ItemBrowserState.Order.ALPHABETICAL,
-                                ItemBrowserState.Order.PRICE,
-                                ItemBrowserState.Order.NEWEST
+                                ItemBrowserState.Order.RARITY,
+                                ItemBrowserState.Order.PRICE
                 };
                 List<int[]> boxes = BrowserGeometry.orderIcons(m, paneLeft, ORDER_ICON_COUNT);
                 for (int i = 0; i < boxes.size(); i++) {
@@ -544,8 +550,13 @@ public final class ItemBrowser {
                         graphics.fill(icon[0], icon[1], icon[0] + size, icon[1] + size, FG);
                         graphics.blit(selected ? active[i] : icons[i], icon[0], icon[1],
                                         icon[0] + size, icon[1] + size, 0f, 1f, 0f, 1f);
-                        graphics.blit(state.ascending() ? NeuTextures.ASCENDING_OVERLAY : NeuTextures.DESCENDING_OVERLAY,
-                                        icon[0], icon[1], icon[0] + size, icon[1] + size, 0f, 1f, 0f, 1f);
+                        if (selected) {
+                                // NEU's direction arrow — and it shows ONLY while this
+                                // button owns the order: relevance state has no arrow.
+                                graphics.blit(state.ascending() ? NeuTextures.ASCENDING_OVERLAY
+                                                : NeuTextures.DESCENDING_OVERLAY,
+                                                icon[0], icon[1], icon[0] + size, icon[1] + size, 0f, 1f, 0f, 1f);
+                        }
                         noteIconHover(i, icon[0], icon[1], size, mouseX, mouseY);
                         if (iconHoverKind == i && hoverSurfaced()) {
                                 orderTooltip(graphics, orders[i], mouseX, mouseY);
@@ -556,15 +567,20 @@ public final class ItemBrowser {
         private void drawFilterIcons(GuiGraphicsExtractor graphics, BrowserGeometry.Metrics m,
                         int mouseX, int mouseY) {
                 Identifier[] icons = {
-                                NeuTextures.FILTER_ALL, NeuTextures.FILTER_BUY, NeuTextures.FILTER_SELL
+                                NeuTextures.FILTER_ALL, NeuTextures.FILTER_WEAPONS, NeuTextures.FILTER_ARMOR,
+                                NeuTextures.FILTER_GENERAL, NeuTextures.FILTER_EARTH
                 };
                 Identifier[] active = {
-                                NeuTextures.FILTER_ALL_ACTIVE, NeuTextures.FILTER_BUY_ACTIVE, NeuTextures.FILTER_SELL_ACTIVE
+                                NeuTextures.FILTER_ALL_ACTIVE, NeuTextures.FILTER_WEAPONS_ACTIVE,
+                                NeuTextures.FILTER_ARMOR_ACTIVE, NeuTextures.FILTER_GENERAL_ACTIVE,
+                                NeuTextures.FILTER_EARTH_ACTIVE
                 };
                 ItemBrowserState.Filter[] filters = {
                                 ItemBrowserState.Filter.ALL,
-                                ItemBrowserState.Filter.BUY_FROM,
-                                ItemBrowserState.Filter.SELL_TO
+                                ItemBrowserState.Filter.WEAPONS,
+                                ItemBrowserState.Filter.ARMOR,
+                                ItemBrowserState.Filter.GENERAL,
+                                ItemBrowserState.Filter.EARTH
                 };
                 int orderBase = ORDER_ICON_COUNT;
                 List<int[]> boxes = BrowserGeometry.filterIcons(m, paneLeft, FILTER_ICON_COUNT);
@@ -605,7 +621,9 @@ public final class ItemBrowser {
 
         private void orderTooltip(GuiGraphicsExtractor graphics, ItemBrowserState.Order order,
                         int mouseX, int mouseY) {
-                String text = "Order " + order.label();
+                String text = order == ItemBrowserState.Order.NONE
+                                ? "Relevance"
+                                : "Order " + order.label();
                 graphics.setTooltipForNextFrame(Minecraft.getInstance().font,
                                 List.of(Component.literal(text).withStyle(style -> style.withColor(0xFFAAAAAA))),
                                 Optional.empty(), mouseX, mouseY);
@@ -613,7 +631,8 @@ public final class ItemBrowser {
 
         private void filterTooltip(GuiGraphicsExtractor graphics, ItemBrowserState.Filter filter,
                         int mouseX, int mouseY) {
-                String text = filter == ItemBrowserState.Filter.ALL ? "No Filter" : filter.label();
+                String text = filter == ItemBrowserState.Filter.ALL ? "No Filter"
+                                : "Filter " + filter.label();
                 graphics.setTooltipForNextFrame(Minecraft.getInstance().font,
                                 List.of(Component.literal(text).withStyle(style -> style.withColor(0xFFAAAAAA))),
                                 Optional.empty(), mouseX, mouseY);
@@ -930,14 +949,18 @@ public final class ItemBrowser {
                 if (!state.isCurrent(data.revision(), query, order, ascending, filter)) {
                         List<Variant> all = ItemVariantIndex.variants(data);
                         String needle = query.toLowerCase(Locale.ROOT);
-                        java.util.Comparator<Variant> comparator = order.comparator();
-                        java.util.Comparator<Variant> directed = ascending ? comparator : comparator.reversed();
+                        // NONE is relevance: the index's own order, untouched —
+                        // sorting with a no-op comparator would be identical but
+                        // wasteful, and a stable sort would still permute nothing.
                         List<Variant> filtered = all.stream()
                                         .filter(filter::accepts)
-                                        .filter(variant -> needle.isEmpty() || variant.searchText().contains(needle))
-                                        .sorted(directed)
-                                        .toList();
-                        state.replaceResults(filtered, data.revision(), query, order, ascending, filter);
+                                        .filter(variant -> needle.isEmpty() || variant.searchText().contains(needle));
+                        if (order != ItemBrowserState.Order.NONE) {
+                                java.util.Comparator<Variant> comparator = order.comparator();
+                                java.util.Comparator<Variant> directed = ascending ? comparator : comparator.reversed();
+                                filtered = filtered.sorted(directed);
+                        }
+                        state.replaceResults(filtered.toList(), data.revision(), query, order, ascending, filter);
                 }
                 // NEU's render-time page clamp: a shrinking result set or a resize
                 // pulls the page back onto the reachable range.
@@ -1043,29 +1066,61 @@ public final class ItemBrowser {
                 }
         }
 
+        /**
+         * The sort bar's click cycles, the behavior the buttons promise:
+         *
+         * <ul>
+         *   <li><b>Alphabetical</b> — relevance → A→Z → Z→A → relevance.
+         *       NEU's green arrow (pointing down) marks A→Z, the red one
+         *       (pointing up) marks Z→A, and relevance shows no arrow.</li>
+         *   <li><b>Rarity</b> — relevance → Common→Legendary →
+         *       Legendary→Common → relevance, through ZEA's rarity
+         *       engine.</li>
+         *   <li><b>Price</b> — relevance → highest price first → cheapest
+         *       first → relevance.</li>
+         *   <li><b>Category filters</b> — select the bucket; clicking the
+         *       active one (or All) returns to everything.</li>
+         * </ul>
+         */
         private void clickSortBar(BrowserGeometry.Metrics m, int mx, int my) {
                 ItemBrowserState.Order[] orders = {
                                 ItemBrowserState.Order.ALPHABETICAL,
-                                ItemBrowserState.Order.PRICE,
-                                ItemBrowserState.Order.NEWEST
+                                ItemBrowserState.Order.RARITY,
+                                ItemBrowserState.Order.PRICE
                 };
+                boolean[] opensAscending = {true, true, false};
                 for (int[] icon : BrowserGeometry.orderIcons(m, paneLeft, ORDER_ICON_COUNT)) {
                         if (BrowserGeometry.contains(icon[0], icon[1], icon[2], icon[2], mx, my)
                                         && icon[3] < orders.length) {
-                                state.setOrder(orders[icon[3]]);
+                                ItemBrowserState.Order clicked = orders[icon[3]];
+                                if (state.order() != clicked) {
+                                        // State 1: the button's primary direction.
+                                        state.setOrder(clicked);
+                                        state.setAscending(opensAscending[icon[3]]);
+                                } else if (state.ascending() == opensAscending[icon[3]]) {
+                                        // State 2: the opposite direction.
+                                        state.setAscending(!opensAscending[icon[3]]);
+                                } else {
+                                        // State 3: back to relevance, arrow gone.
+                                        state.setOrder(ItemBrowserState.Order.NONE);
+                                }
                                 playPressSound();
                                 return;
                         }
                 }
                 ItemBrowserState.Filter[] filters = {
                                 ItemBrowserState.Filter.ALL,
-                                ItemBrowserState.Filter.BUY_FROM,
-                                ItemBrowserState.Filter.SELL_TO
+                                ItemBrowserState.Filter.WEAPONS,
+                                ItemBrowserState.Filter.ARMOR,
+                                ItemBrowserState.Filter.GENERAL,
+                                ItemBrowserState.Filter.EARTH
                 };
                 for (int[] icon : BrowserGeometry.filterIcons(m, paneLeft, FILTER_ICON_COUNT)) {
                         if (BrowserGeometry.contains(icon[0], icon[1], icon[2], icon[2], mx, my)
                                         && icon[3] < filters.length) {
-                                state.setFilter(filters[icon[3]]);
+                                ItemBrowserState.Filter clicked = filters[icon[3]];
+                                state.setFilter(state.filter() == clicked
+                                                ? ItemBrowserState.Filter.ALL : clicked);
                                 playPressSound();
                                 return;
                         }

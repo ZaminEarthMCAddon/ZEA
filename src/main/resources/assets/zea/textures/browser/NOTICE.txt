@@ -4,18 +4,21 @@ Most of these files — search_bar.png, search_bar_gold.png,
 search_mode_button.png, quickcommand_background.png, settings.png,
 rightarrow.png, rightarrow_overlay.png, close.png, item_mask.png,
 item_pane_tab_arrow.png, ascending_overlay.png, descending_overlay.png,
-order_alphabetical.png, order_alphabetical_active.png, order_value.png,
-order_value_active.png, sort_all.png, sort_all_active.png — are copied
-unmodified from the NotEnoughUpdates repository
+order_alphabetical.png, order_alphabetical_active.png, order_rarity.png,
+order_rarity_active.png, order_value.png, order_value_active.png,
+sort_all.png, sort_all_active.png, sort_weapon.png,
+sort_weapon_active.png, sort_armor.png, sort_armor_active.png — are
+copied unmodified from the
+NotEnoughUpdates repository
 (https://github.com/NotEnoughUpdates/NotEnoughUpdates,
 assets/notenoughupdates/), copyright the NotEnoughUpdates contributors,
 distributed under the GNU Lesser General Public License v3.0. ZEA is
 LGPL-3.0 too, so the copied assets keep their license; this file credits
 them.
 
-The files prefixed zea_ — zea_order_age.png (+ _active),
-zea_filter_buy.png (+ _active), zea_filter_sell.png (+ _active) — are
-ZEA's own icons, drawn by scripts/gen_zea_icons.py in NEU's icon
-language (the same frame colors, the same gray inactive glyphs, the
-same gold active treatment), because NEU has no icon for sorting by
-observation age or filtering by shop direction.
+The files prefixed zea_ — zea_filter_general.png (+ _active) and
+zea_filter_earth.png (+ _active) — are ZEA's own icons, drawn by
+scripts/gen_browser_icons.py in NEU's icon language (the same frame
+colors, the same gray inactive glyphs, the same gold active treatment),
+because NEU has no icon for ZEA's general-goods bucket or for the
+server's own items.
