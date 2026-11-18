@@ -4918,3 +4918,77 @@ every row; the row sits between the stat block and the enchantment
 list everywhere it appeared. The pass scripts live in
 `/home/z/my-project/scripts/indicator-phase*.sh` (session scratch, not
 the repository); the shots in `zea/shots/` (ignored dev artifacts).
+
+## Session 25 — live side-by-side: ZEA browser vs NEU 1.8.9 (both booted headless)
+
+Both clients actually ran on this sandbox and were driven with real input;
+every claim below has a screenshot receipt.
+
+### The NEU 1.8.9 stack, built from scratch (reusable recipe)
+
+`/home/z/my-project/neu-run/` + `/home/z/my-project/scripts/neu-boot.sh`:
+Temurin JDK 8 (`/home/z/my-project/jdk8`), vanilla 1.8.9 client jar +
+libraries from piston-meta, Forge 11.15.1.2318-1.8.9 via the installer's
+`--extract` (universal jar) plus a `--installServer` run into a temp dir to
+harvest the forge/scala/launchwrapper libraries the vanilla json lacks,
+NEU 2.6.0 release jar in `mods/`, natives extracted to `neu-run/natives`,
+item repo pre-seeded from codeload (GitHub API rate limits) +
+`currentCommit.json`. Launch: launchwrapper + FMLTweaker with
+`-Djava.library.path` — the three headless traps: (1) AWT needs
+libXtst/libXi (apt-get download + unpack into gpu/), (2) Xvfb must start
+with `+extension RANDR` AND the `xrandr` BINARY on PATH (LWJGL2's XRandR
+class shells out to it; missing binary = ArrayIndexOutOfBounds in
+LinuxDisplay), (3) never set `Display.noinput` (kills all input) and
+singleplayer auto-pauses without window focus — `xdotool windowfocus`
+(XSetInputFocus, no WM needed) fixes it. NEU config seed
+`config/notenoughupdates/configNew.json` with
+`misc.onlyShowOnSkyblock: false` lets the overlay render off-Hypixel;
+clicking the search bar (or hovering the tab) opens the item pane.
+
+### ZEA run recipe updates
+
+The dev client's gameDir is the project ROOT (`zea/`), not `run/` —
+options.txt, config/ and market.json live at `zea/config/zea/market.json`.
+The dev server launches with the bundled-layout classpath
+(`-cp libraries/*:versions/26.3/server-26.3.jar net.minecraft.server.Main`).
+`run-client.sh` must pass `--width 1280 --height 800`; without them loom
+defaults to 854x480 and every click coordinate lands outside the window.
+Keyboard input needs a first click into the window (XTEST focus).
+GUI scale is 3 at this window size — NEU 1.8.9 picks the same scale, so
+the comparison is apples-to-apples. `scripts/browser-pass.sh` drives the
+whole browser sequence; `scripts/drive.py` now takes DISPLAY from the
+environment (NEU runs on :100, ZEA on :99).
+
+### The comparison (pixel-measured, not eyeballed)
+
+Tile plates: both `#646464`, 41 px wide on a 60 px stride — exact match.
+Nav element (Prev / Page pill / Next, bevel B1B1B1/323232), sort bar icon
+row with the gold-active ALL filter, bottom toolbar (gear + search +
+torch), search filtering (NEU "diamond" → 1/2, ZEA "pick" → filtered
+grid), tooltip action hints (yellow bold) — all match. The pane backdrop:
+NEU's release jar draws blur + `0xc8101010` together (decompiled: the dark
+rect sits inside the `bgBlurFactor > 0.5` branch, default 5), so ZEA's
+constant dark backdrop is faithful to real-GPU NEU; the headless blur FBO
+failing makes NEU look lighter in these shots only.
+
+### One fix: the info-pane title no longer slides off-screen
+
+NEU's TextInfoPane centers the title naively
+(`(leftSide + rightSide - titleLen) / 2`); market display names
+("Aqua Affinity Respiration III Diamond Helmet") are longer than Skyblock
+names, so ZEA's faithful port rendered them mostly outside the screen.
+`drawInfoPane` now routes the title through the same
+`drawStringCenteredScaledMaxWidth` treatment the nav pill label already
+uses — centered, scaled down to the pane's width, shadowed like NEU's
+white title. `drawScaledCentered` grew a shadow parameter; the pill and
+arrow labels keep their unshadowed bold black. Before/after:
+`download/screenshots/zea-3-detail-{before,after}-fix.png`.
+
+### Receipts
+
+`download/screenshots/` — ten shots plus `COMPARISON.md` (the measured
+table): ZEA pane page 1, search filter, detail before/after fix, and two
+enchant-indicator tooltips (`[🔮] [♻] [🛡]` gold/gray/white tiers verified
+by pixel scan — all-max gold, single-level gold, missing gray, Unbreaking I
+→ Common); NEU title screen, item pane (Page: 1/92), "diamond" filter, and
+item tooltip. Test suite green after the fix (154 test classes).
