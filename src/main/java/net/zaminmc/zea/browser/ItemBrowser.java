@@ -78,20 +78,21 @@ import java.util.Optional;
 public final class ItemBrowser {
         // NEU's default itemlist colours (config defaults, decoded from the
         // SpecialColour strings): foreground #646464 opaque, background the
-        // nearly-invisible alpha-6 blue. NEU's visible backdrop is
-        // blur(world) under the dark 0xc8101010; 26.3's only blur primitive
-        // (blurBeforeThisStratum) blurs the whole framebuffer once per frame
-        // and cannot blur one region, so the slate wash under the eased dark
-        // fill reproduces the blur's net product: the world shows through at
-        // a 0.19 coefficient (NEU's blurred world at 0.17) over a slate
-        // floor of rgb(23,24,28), NEU's rgb(24,24,34) once its blue tint
-        // composites in — never the pitch-black panel a bare 0xc8101010
-        // over a raw world paints.
+        // nearly-invisible alpha-6 blue.
+        //
+        // NEU's panel is ONE translucent dark rect — rgba(10,10,10,200) —
+        // over the raw world, and nothing else. On 26.3 vanilla already
+        // draws exactly that behind every in-game screen:
+        // Screen.extractBackground fills the full screen with the gradient
+        // 0xC0101010 → 0xD0101010 (alpha 192→208 of rgb(16,16,16)), which
+        // is NEU's 200-alpha panel transparency level to within a step of
+        // the gradient. Stacking ZEA's own dark fills on top of it is what
+        // made the pane read as an opaque purple-black slab — so the pane
+        // adds nothing but NEU's alpha-6 blue tint, and the world shows
+        // through at NEU's level.
         private static final int FG = 0xFF646464;
         private static final int FG_CUSTOM = 0xFF646464;
         private static final int PANE_TINT = 0x060000FF;
-        private static final int SLATE_WASH = 0x8C3C4054;
-        private static final int DARK_OVERLAY = 0x96101010;
         /** The page pill's bevel, NEU's Color(177,177,177) and Color(50,50,50). */
         private static final int PILL_LIGHT = 0xFFB1B1B1;
         private static final int PILL_DARK = 0xFF323232;
@@ -151,8 +152,9 @@ public final class ItemBrowser {
 
         /**
          * Draws the pane for this frame. Called from the container mixin's
-         * render tail, after ZEA's buttons — the pane draws over vanilla
-         * furniture on narrow screens by design.
+         * extractContents head — before the GUI's widgets, labels and
+         * slots extract — so the pane sits UNDER the GUI and the search
+         * bar, exactly NEU's itemlist layering.
          */
         public void render(GuiGraphicsExtractor graphics, AbstractContainerScreen<?> screen,
                         int mouseX, int mouseY) {
@@ -242,10 +244,17 @@ public final class ItemBrowser {
         }
 
         // ------------------------------------------------------------------
-        // Pane background — NEU's blur-plus-dark-plus-tint stack
+        // Pane background — NEU's own panel dark, vanilla-supplied
         // ------------------------------------------------------------------
 
-        /** The pane's background: the blur's net product, NEU's dark fill and tint. */
+        /**
+         * The pane's background: NEU's own — the vanilla in-game gradient
+         * beneath already supplies the panel's dark (NEU's 200-alpha
+         * near-black level), so the pane draws only NEU's nearly-invisible
+         * alpha-6 blue tint over it. Nothing else: the extra slate wash and
+         * dark fills that used to stack here are what made the pane opaque
+         * and purple.
+         */
         private void drawPaneBackground(GuiGraphicsExtractor graphics) {
                 BrowserGeometry.Metrics m = metrics;
                 if (m == null) {
@@ -255,8 +264,6 @@ public final class ItemBrowser {
                 int right = paneLeft + m.paneWidth - m.boxPadding + 5;
                 int top = Math.max(0, m.boxPadding - 5);
                 int bottom = Math.min(m.screenHeight, m.screenHeight - m.boxPadding + 5);
-                graphics.fill(left, top, right, bottom, SLATE_WASH);
-                graphics.fill(left, top, right, bottom, DARK_OVERLAY);
                 graphics.fill(left, top, right, bottom, PANE_TINT);
         }
 
@@ -637,8 +644,6 @@ public final class ItemBrowser {
                 int right = BrowserGeometry.infoPaneRight(m, infoFactor);
                 int top = Math.max(0, m.boxPadding - 5);
                 int bottom = Math.min(m.screenHeight, m.screenHeight - m.boxPadding + 5);
-                graphics.fill(left + m.boxPadding - 5, top, right - m.boxPadding + 5, bottom, SLATE_WASH);
-                graphics.fill(left + m.boxPadding - 5, top, right - m.boxPadding + 5, bottom, DARK_OVERLAY);
                 graphics.fill(left + m.boxPadding - 5, top, right - m.boxPadding + 5, bottom, PANE_TINT);
 
                 int contentLeft = left + m.boxPadding + 5;
