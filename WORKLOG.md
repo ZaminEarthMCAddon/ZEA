@@ -4992,3 +4992,59 @@ enchant-indicator tooltips (`[🔮] [♻] [🛡]` gold/gray/white tiers verified
 by pixel scan — all-max gold, single-level gold, missing gray, Unbreaking I
 → Common); NEU title screen, item pane (Page: 1/92), "diamond" filter, and
 item tooltip. Test suite green after the fix (154 test classes).
+
+## dev.84 — the pane's pushed scale and the seamless calculator (2026-11-18)
+
+The user's four screenshot complaints, reproduced on the real client and
+fixed against the real NEU 2.6.0 jar (booted headless, same 1280×800,
+same container scale 3, driven with XTEST, measured pixel-wise):
+
+### 1. The pane now draws at NEU's pushed gui scale
+
+Measuring the real NEU 2.6.0 run at container scale 3: item plates land
+at a ~30 px pixel pitch (~11 columns) while the container's slots sit at
+54 px — the pane renders through NEU's `Utils.pushGuiScale`, at roughly
+half the container's factor, while its search-bar band stays at the
+container's. ZEA drew the pane at the container's scale: stride 60 px,
+six sparse columns, the grid ending ~90 px short of the pane's edge —
+exactly the user's "the list did not appear all the way to the right /
+very off".
+
+`BrowserGeometry.paneScale(containerScale)` now models it: the pane
+keeps the container's scale up to 2 and stays at 2 beyond it. The
+geometry runs in pane units (the virtual pushed ScaledResolution) and
+`ItemBrowser.render` draws the whole pane through one pose scale
+(`unitToGui = paneScale / containerScale`), with the mouse converted the
+same way for hit tests (`paneMouse`). Measured after the fix: plates at
+an exact 40 px pitch (NEU's own reference screenshots at the same
+resolution read ~36–40), tiles at `rgb(100,100,100)` — NEU's foreground
+colour bit-for-bit, nav spanning the pane from x 890 (NEU: 891).
+
+### 2. The calculator result rides the text line, backdrop gone
+
+The user's "the '= x' text has its own background and is not seamless":
+NEU draws `text + " §e= §a" + result` as one string — no backdrop, no
+fallback box. ZEA's bar drew a `0xB0000000` plate behind the result plus
+NEC's floating marquee box. Both removed: the yellow equals and the
+green value now draw on the value's own line, the same baseline as the
+typed text (`drawResult` anchors on the displayed substring end, the
+same y as `drawValue`), and when the bar runs out of room the result
+stays undrawn like NEU's. Live shot: "2+2 = 4" seamless in the bar.
+
+### 3. Plain search words stay white
+
+The syntax colouring engaged on any tokenizable input, so a search
+query like "pick" rendered magenta. NEU's bar keeps plain queries white;
+the colouring is for calculations. `zea$highlight` now bails unless the
+input carries a digit or an operator.
+
+### Verification (real client, headless, XTEST-driven)
+
+`download/screenshots/zea-4-*.png`: the fixed pane (nav row visible
+after disabling the vanilla 26.3 movement tutorial toast, which parks
+over the pane's top strip until dismissed), the detail pane with the
+offer rows, the inline "2+2 = 4", `neu-260-reference-*.png` from the
+real NEU 2.6.0 client under the same conditions, and a side-by-side pane
+crop. Pixel receipts: tile pitch 40/40/40, plate colour exactly
+(100,100,100), nav extent 890–1217 vs NEU's 891–1239. Test suite green
+after the changes.

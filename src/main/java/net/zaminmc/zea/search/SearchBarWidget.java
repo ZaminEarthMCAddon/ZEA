@@ -33,11 +33,10 @@ import java.util.List;
  * keyboard machinery — caret movement, selection, clipboard, the held
  * key repeat, the focus rules the inventory depends on — stays vanilla's,
  * and the calculator coloring rides the same formatter it always did.
- * Only the drawing is NEU's. The calculator result overlay keeps its
- * placement after the visible text (the field scrolls long input and
- * vanilla exposes neither {@code displayPos} nor the drawn {@code textX},
- * hence the accessor), with NEC's floating box as the fallback when the
- * bar runs out of room.
+ * Only the drawing is NEU's. The calculator result rides the value's
+ * own line — {@code 2+2 = 4} with the yellow equals and the green value
+ * NEU colors — with no backdrop of its own, exactly like NEU's
+ * {@code text + " §e= §a" + result} single-string bar.
  *
  * <p>Focus arrives programmatically (click routing in the container
  * mixin) and Tab/arrows are refused like the chat search bar, so the
@@ -50,12 +49,8 @@ public final class SearchBarWidget extends EditBox {
 	private static final int CURSOR_COLOR = 0xFFFFFFFF;
 	private static final int SELECTION_COLOR = 0xFFC8C8C8;
 	private static final int SELECTED_TEXT_COLOR = 0xFF000000;
-	private static final int RESULT_BACKDROP = 0xB0000000;
-	private static final int FLOATING_BACKDROP = 0xEE000000;
 	private static final int RESULT_EQUALS_COLOR = 0xFFFFFF55;
 	private static final int RESULT_VALUE_COLOR = 0xFF55FF55;
-	/** The NEC result marquee period, in milliseconds. */
-	private static final long MARQUEE_PERIOD_MILLIS = 4000;
 
 	private final InventorySearch search;
 	private final Font font;
@@ -213,10 +208,11 @@ public final class SearchBarWidget extends EditBox {
 	}
 
 	/**
-	 * Draws the calculator result next to the typed text —
-	 * {@code 2+2 = 4} — or, when the bar has no room left after the
-	 * expression, in the floating box beneath it. Nothing is drawn
-	 * while the input is not a complete calculation.
+	 * Draws the calculator result on the value's own line —
+	 * {@code 2+2 = 4} — the yellow equals and the green value directly
+	 * after the typed text, no backdrop, NEU's single-string bar. When
+	 * the bar has no room left for the result, the result stays
+	 * undrawn: the expression owns the bar, as in NEU.
 	 */
 	private void drawResult(GuiGraphicsExtractor extractor) {
 		String input = getValue();
@@ -228,51 +224,18 @@ public final class SearchBarWidget extends EditBox {
 			return;
 		}
 		String equals = " = ";
-		int totalWidth = font.width(equals) + font.width(cachedResult);
+		int equalsWidth = font.width(equals);
 
 		// Where the visible text ends: the field scrolls long input,
 		// so the anchor is the displayed substring, not the value.
 		String displayed = zea$visibleText();
 		int textEndX = getX() + SearchBarLayout.TEXT_INSET + font.width(displayed);
-		if (textEndX + 2 + totalWidth < getX() + getWidth()) {
-			int textY = getY() + (getHeight() - font.lineHeight + 1) / 2;
-			int x = textEndX + 2;
-			extractor.fill(x - 2, getY(), x + totalWidth + 1, getY() + getHeight(), RESULT_BACKDROP);
-			extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
-			extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
+		if (textEndX + equalsWidth + font.width(cachedResult) > getX() + getWidth() - 2) {
 			return;
 		}
-		zea$drawFloatingResult(extractor, equals, totalWidth);
-	}
-
-	/**
-	 * NEC's fallback result box: a tooltip-dark plate under the bar
-	 * (above it when the screen ends first), right-aligned with the
-	 * bar, scrolling sideways on a slow sine marquee when the number
-	 * is wider than the box.
-	 */
-	private void zea$drawFloatingResult(GuiGraphicsExtractor extractor, String equals, int totalWidth) {
-		int boxWidth = Math.min(totalWidth + 6, getWidth());
-		int boxHeight = getHeight() + 2;
-		int boxY = getY() + getHeight() + 1;
-		if (boxY + boxHeight > extractor.guiHeight()) {
-			boxY = getY() - boxHeight - 1;
-		}
-		int boxX = Math.max(getX(), getX() + getWidth() - boxWidth);
-		int visible = boxWidth - 6;
-		int scroll = 0;
-		if (totalWidth > visible) {
-			double cycle = (System.currentTimeMillis() % MARQUEE_PERIOD_MILLIS)
-							/ (double) MARQUEE_PERIOD_MILLIS;
-			scroll = (int) ((totalWidth - visible) * (Math.sin(cycle * Math.PI * 2) + 1) / 2);
-		}
-		int textY = boxY + (boxHeight - font.lineHeight + 1) / 2;
-		extractor.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, FLOATING_BACKDROP);
-		extractor.enableScissor(boxX, boxY, boxX + boxWidth, boxY + boxHeight);
-		int x = boxX + 3 - scroll;
-		extractor.text(font, equals, x, textY, RESULT_EQUALS_COLOR, true);
-		extractor.text(font, cachedResult, x + font.width(equals), textY, RESULT_VALUE_COLOR, true);
-		extractor.disableScissor();
+		int textY = getY() + (getHeight() - font.lineHeight) / 2 + 1;
+		extractor.text(font, equals, textEndX, textY, RESULT_EQUALS_COLOR, true);
+		extractor.text(font, cachedResult, textEndX + equalsWidth, textY, RESULT_VALUE_COLOR, true);
 	}
 
 	private int getScreenWidth() {
@@ -292,6 +255,17 @@ public final class SearchBarWidget extends EditBox {
 	 */
 	private FormattedCharSequence zea$highlight(String text, int offset) {
 		if (!calculatorEnabled || search.mode() != InventorySearch.Mode.CALCULATOR || text.isEmpty()) {
+			return null;
+		}
+		// NEU's bar keeps plain search words white — the coloring is
+		// for calculations, so a query with no digit and no operator
+		// never enters the tokenizer.
+		boolean expression = false;
+		for (int i = 0; i < text.length() && !expression; i++) {
+			char c = text.charAt(i);
+			expression = (c >= '0' && c <= '9') || "+-*/^%!(".indexOf(c) >= 0;
+		}
+		if (!expression) {
 			return null;
 		}
 		String value = getValue();

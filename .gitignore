@@ -32,3 +32,9 @@ shots/
 /options.txt
 /servers.dat
 /servers.dat_old
+
+# client-run artifacts at the project root (the direct-launch game dir)
+/saves/
+/config/
+/usercache.json
+/usernamecache.json

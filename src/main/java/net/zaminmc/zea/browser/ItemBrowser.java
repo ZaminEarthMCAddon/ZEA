@@ -116,6 +116,12 @@ public final class ItemBrowser {
 	private float itemFactor = 1;
 	private float infoFactor = 0;
 	private int paneLeft;
+	/**
+	 * One pane unit expressed in container gui units — the pose scale
+	 * the pane draws through. NEU's pushed scale makes the pane's
+	 * pixels smaller than the container's; this is ZEA's equivalent.
+	 */
+	private float unitToGui = 1f;
 
 	// The detail's offer-row geometry for hit-testing and tooltips.
 	private final List<Row> detailRowsGeom = new ArrayList<>();
@@ -146,11 +152,25 @@ public final class ItemBrowser {
 			return;
 		}
 		Minecraft client = Minecraft.getInstance();
-		metrics = BrowserGeometry.metrics(screen.width, screen.height,
-				client.getWindow().getGuiScale(), ORDER_ICON_COUNT, FILTER_ICON_COUNT);
+		// NEU's pushed pane scale: the geometry runs in pane units —
+		// the screen rectangle as NEU's pushed ScaledResolution sees
+		// it — and everything draws through one pose scale, so the
+		// tiles keep NEU's pixel pitch instead of the container's.
+		float containerScale = client.getWindow().getGuiScale();
+		int paneScale = BrowserGeometry.paneScale(containerScale);
+		unitToGui = paneScale / containerScale;
+		metrics = BrowserGeometry.metrics(
+				Math.round(screen.width * containerScale / paneScale),
+				Math.round(screen.height * containerScale / paneScale),
+				paneScale, ORDER_ICON_COUNT, FILTER_ICON_COUNT);
 		refreshResults(market.data());
 		tickAnimations();
-		paneLeft = BrowserGeometry.paneLeft(screen.width, itemFactor);
+		paneLeft = BrowserGeometry.paneLeft(metrics.screenWidth, itemFactor);
+
+		// The mouse in pane units for the hit tests; the tooltip keeps
+		// the container-space coordinates it queues with.
+		int mx = Math.round(mouseX / unitToGui);
+		int my = Math.round(mouseY / unitToGui);
 
 		// NEU's openWhenSearching: a non-empty query opens the pane.
 		if (!normalizedQuery().isEmpty() && !state.isOpen()) {
@@ -158,22 +178,25 @@ public final class ItemBrowser {
 		}
 		// NEU's tab-open rule: while the pane is closed, hovering the
 		// protruding strip reopens it.
-		if (!state.isOpen() && BrowserGeometry.tabHover(screen.width,
-				Math.round(tabOffset.getValue()), mouseX, mouseY, screen.height)) {
+		if (!state.isOpen() && BrowserGeometry.tabHover(metrics.screenWidth,
+				Math.round(tabOffset.getValue()), mx, my, metrics.screenHeight)) {
 			state.open();
 		}
 
-		drawTab(graphics, screen, mouseX, mouseY);
+		graphics.pose().pushMatrix();
+		graphics.pose().scale(unitToGui, unitToGui);
+		drawTab(graphics, screen, mx, my);
 
 		if (itemFactor < 0.99f) {
 			drawPaneBackground(graphics);
-			drawNav(graphics, screen, mouseX, mouseY);
-			drawGrid(graphics, screen, mouseX, mouseY);
-			drawSortBar(graphics, screen, mouseX, mouseY);
+			drawNav(graphics, screen, mx, my);
+			drawGrid(graphics, screen, mx, my, mouseX, mouseY);
+			drawSortBar(graphics, screen, mx, my);
 		}
 		if (state.view() == ItemBrowserState.View.DETAIL && variantOf(state.selectedToken()) != null) {
-			drawInfoPane(graphics, screen, mouseX, mouseY);
+			drawInfoPane(graphics, screen, mx, my);
 		}
+		graphics.pose().popMatrix();
 	}
 
 	/** NEU's animation state machine: tab, pane and info pane chase their targets. */
@@ -332,7 +355,7 @@ public final class ItemBrowser {
 	 * tooltip on hover with NEU's action hints.
 	 */
 	private void drawGrid(GuiGraphicsExtractor graphics, AbstractContainerScreen<?> screen,
-			int mouseX, int mouseY) {
+			int mouseX, int mouseY, int guiMouseX, int guiMouseY) {
 		BrowserGeometry.Metrics m = metrics;
 		if (m == null) {
 			return;
@@ -365,7 +388,7 @@ public final class ItemBrowser {
 			drawVariantIcon(graphics, variant, x, y);
 			if (BrowserGeometry.contains(x - 1, y - 1, BrowserGeometry.ITEM_SIZE + 2,
 					BrowserGeometry.ITEM_SIZE + 2, mouseX, mouseY)) {
-				drawVariantTooltip(graphics, font, variant, mouseX, mouseY);
+				drawVariantTooltip(graphics, font, variant, guiMouseX, guiMouseY);
 			}
 		}
 		graphics.disableScissor();
@@ -884,8 +907,8 @@ public final class ItemBrowser {
 	 * command.
 	 */
 	public boolean click(AbstractContainerScreen<?> screen, double mouseX, double mouseY) {
-		int mx = (int) mouseX;
-		int my = (int) mouseY;
+		int mx = paneMouse(mouseX);
+		int my = paneMouse(mouseY);
 		BrowserGeometry.Metrics m = metrics;
 		if (m == null) {
 			return false;
@@ -920,6 +943,11 @@ public final class ItemBrowser {
 		}
 		clickSortBar(m, mx, my);
 		return true; // clicks inside the pane never reach slots
+	}
+
+	/** One container-gui coordinate in pane units — the render's inverse mapping. */
+	private int paneMouse(double gui) {
+		return Math.round((float) (gui / unitToGui));
 	}
 
 	/** The bold-text width seam the nav math needs. */
@@ -1019,8 +1047,8 @@ public final class ItemBrowser {
 	 * The return says whether the scroll was consumed.
 	 */
 	public boolean scroll(double mouseX, double mouseY, double delta) {
-		int mx = (int) mouseX;
-		int my = (int) mouseY;
+		int mx = paneMouse(mouseX);
+		int my = paneMouse(mouseY);
 		BrowserGeometry.Metrics m = metrics;
 		if (m == null) {
 			return false;
@@ -1043,8 +1071,8 @@ public final class ItemBrowser {
 		if (m == null) {
 			return false;
 		}
-		int mx = (int) mouseX;
-		int my = (int) mouseY;
+		int mx = paneMouse(mouseX);
+		int my = paneMouse(mouseY);
 		if (!state.isOpen()) {
 			return BrowserGeometry.tabHover(m.screenWidth,
 					Math.round(tabOffset.getValue()), mx, my, m.screenHeight);

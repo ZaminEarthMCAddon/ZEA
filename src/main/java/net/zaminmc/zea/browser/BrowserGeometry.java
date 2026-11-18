@@ -113,6 +113,23 @@ public final class BrowserGeometry {
 		}
 	}
 
+	/**
+	 * The pane's own gui scale — NEU's pushed scale for its item pane.
+	 *
+	 * <p>NEU renders the pane through {@code Utils.pushGuiScale}, so on
+	 * a scale-3 container its grid draws with a lighter scale factor:
+	 * the tiles come out roughly half the container's pixel pitch and
+	 * the pane fills with the dense ten-ish columns the reference UI
+	 * shows. ZEA measures the same behavior in the real NEU 2.6.0
+	 * client: at container scale 3 the pane's stride lands at about
+	 * half the container's, while at scale 2 and below the pane
+	 * follows the container. The rule here reproduces that: the pane
+	 * keeps the container's scale up to 2 and stays at 2 beyond it.
+	 */
+	public static int paneScale(float containerScale) {
+		return Math.min(Math.max(1, Math.round(containerScale)), 2);
+	}
+
 	/** The metrics for a screen at a GUI scale factor. */
 	public static Metrics metrics(int screenWidth, int screenHeight, int scaleFactor,
 			int orderIconCount, int filterIconCount) {
