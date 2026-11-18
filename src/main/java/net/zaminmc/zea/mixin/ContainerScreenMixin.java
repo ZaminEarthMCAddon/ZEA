@@ -555,12 +555,13 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                                 self.setFocused(null);
                         }
                 }
-                // The browser is the top layer: a click over it never
-                // reaches a slot. A tile click opens a variant's detail; an
-                // offer click selects it; a selection never issues a
-                // command.
+                // NEU's layering: the pane renders UNDER the GUI, so where a
+                // GUI slot sits under the cursor the slot wins the click —
+                // the browser takes clicks only where no slot is hovered.
+                // Its own controls (tiles, nav, sort bar, tab) never share a
+                // pixel with a slot's hit box, so they stay reachable.
                 ItemBrowser browser = ZeaClient.browser();
-                if (browser != null && ZeaClient.config() != null
+                if (browser != null && hoveredSlot == null && ZeaClient.config() != null
                                 && ZeaClient.config().inventoryShopBrowserEnabled()
                                 && !zea$isCreative(self)
                                 && browser.click(self, event.x(), event.y())) {
@@ -594,16 +595,17 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         }
 
         /**
-         * A wheel scroll over the browser panel scrolls the browser, and
-         * the event never reaches the GUI's own scrollables; anywhere
-         * else the wheel behaves exactly as vanilla.
+         * A wheel scroll over the browser scrolls it — but only where no
+         * GUI slot sits under the cursor, the same slot-wins rule the
+         * pane's clicks follow; anywhere else the wheel behaves exactly
+         * as vanilla.
          */
         @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
         private void zea$onScroll(double mouseX, double mouseY, double scrollX, double scrollY,
                         CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
                 ItemBrowser browser = ZeaClient.browser();
-                if (browser != null && ZeaClient.config() != null
+                if (browser != null && hoveredSlot == null && ZeaClient.config() != null
                                 && ZeaClient.config().inventoryShopBrowserEnabled()
                                 && !zea$isCreative(self)
                                 && browser.scroll(mouseX, mouseY, scrollY)) {
