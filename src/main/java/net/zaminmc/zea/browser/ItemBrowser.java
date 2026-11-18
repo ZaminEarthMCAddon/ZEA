@@ -265,7 +265,8 @@ public final class ItemBrowser {
 		String pageText = "Page: " + (Math.min(maxPages, state.page() + 1)) + "/" + maxPages;
 		Component pageComponent = Component.literal(pageText).withStyle(style -> style.withBold(true));
 		drawScaledCentered(graphics, font, pageComponent,
-				pill[0] + pill[2] / 2f, pill[1] + (pill[3] - 8) / 2f + 1, pill[2] - 10, 0xFF000000);
+				pill[0] + pill[2] / 2f, pill[1] + (pill[3] - 8) / 2f + 1, pill[2] - 10,
+				0xFF000000, false);
 	}
 
 	/**
@@ -273,13 +274,13 @@ public final class ItemBrowser {
 	 * on the point, scaled down when it would overflow the maximum width.
 	 */
 	private static void drawScaledCentered(GuiGraphicsExtractor graphics, Font font, Component text,
-			float centerX, float top, float maxLen, int color) {
+			float centerX, float top, float maxLen, int color, boolean shadow) {
 		int width = font.width(text);
 		float scale = width > maxLen ? maxLen / width : 1f;
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(centerX - width * scale / 2f, top);
 		graphics.pose().scale(scale, scale);
-		graphics.text(font, text, 0, 0, color, false);
+		graphics.text(font, text, 0, 0, color, shadow);
 		graphics.pose().popMatrix();
 	}
 
@@ -310,7 +311,8 @@ public final class ItemBrowser {
 		String label = mirrored ? "Prev" : "Next";
 		Component comp = Component.literal(label).withStyle(style -> style.withBold(true));
 		drawScaledCentered(graphics, font, comp,
-				x + w * 300 / 480f + pressed, y + h / 2f - 4 + pressed, w * 240 / 480f, 0xFF000000);
+				x + w * 300 / 480f + pressed, y + h / 2f - 4 + pressed, w * 240 / 480f,
+				0xFF000000, false);
 	}
 
 	/** Whether any mouse button is currently held — NEU's Mouse.isButtonDown probe. */
@@ -568,11 +570,17 @@ public final class ItemBrowser {
 		int contentLeft = left + m.boxPadding + 5;
 		int contentWidth = right - m.boxPadding - 5 - contentLeft;
 
-		// Title: NEU's TextInfoPane centers it white at the top.
+		// Title: NEU's TextInfoPane centers it white at the top. NEU
+		// centers naively, so a title wider than the pane slides off the
+		// screen — market display names ("Aqua Affinity Respiration III
+		// Diamond Helmet") run longer than NEU's item names ever do, so
+		// the title takes the pill label's NEU
+		// drawStringCenteredScaledMaxWidth treatment: centered, scaled
+		// down to the pane's width instead of clipped.
 		String title = variant.display();
-		int titleWidth = font.width(title);
-		graphics.text(font, title, contentLeft + (contentWidth - titleWidth) / 2,
-				m.boxPadding + 5, TEXT, true);
+		drawScaledCentered(graphics, font, Component.literal(title),
+				contentLeft + contentWidth / 2f, m.boxPadding + 5,
+				contentWidth, TEXT, true);
 
 		// Identity: the item's own stack and its enchantment summary.
 		VariantStacks.Resolved resolved = VariantStacks.of(variant.token());
