@@ -949,18 +949,20 @@ public final class ItemBrowser {
                 if (!state.isCurrent(data.revision(), query, order, ascending, filter)) {
                         List<Variant> all = ItemVariantIndex.variants(data);
                         String needle = query.toLowerCase(Locale.ROOT);
-                        // NONE is relevance: the index's own order, untouched —
-                        // sorting with a no-op comparator would be identical but
-                        // wasteful, and a stable sort would still permute nothing.
-                        List<Variant> filtered = all.stream()
+                        List<Variant> matches = all.stream()
                                         .filter(filter::accepts)
-                                        .filter(variant -> needle.isEmpty() || variant.searchText().contains(needle));
+                                        .filter(variant -> needle.isEmpty() || variant.searchText().contains(needle))
+                                        .toList();
+                        List<Variant> filtered = matches;
                         if (order != ItemBrowserState.Order.NONE) {
+                                // NONE is relevance: the index's own order, untouched —
+                                // sorting with a no-op comparator would be identical but
+                                // wasteful, and a stable sort would still permute nothing.
                                 java.util.Comparator<Variant> comparator = order.comparator();
                                 java.util.Comparator<Variant> directed = ascending ? comparator : comparator.reversed();
-                                filtered = filtered.sorted(directed);
+                                filtered = matches.stream().sorted(directed).toList();
                         }
-                        state.replaceResults(filtered.toList(), data.revision(), query, order, ascending, filter);
+                        state.replaceResults(filtered, data.revision(), query, order, ascending, filter);
                 }
                 // NEU's render-time page clamp: a shrinking result set or a resize
                 // pulls the page back onto the reachable range.
@@ -1092,18 +1094,7 @@ public final class ItemBrowser {
                 for (int[] icon : BrowserGeometry.orderIcons(m, paneLeft, ORDER_ICON_COUNT)) {
                         if (BrowserGeometry.contains(icon[0], icon[1], icon[2], icon[2], mx, my)
                                         && icon[3] < orders.length) {
-                                ItemBrowserState.Order clicked = orders[icon[3]];
-                                if (state.order() != clicked) {
-                                        // State 1: the button's primary direction.
-                                        state.setOrder(clicked);
-                                        state.setAscending(opensAscending[icon[3]]);
-                                } else if (state.ascending() == opensAscending[icon[3]]) {
-                                        // State 2: the opposite direction.
-                                        state.setAscending(!opensAscending[icon[3]]);
-                                } else {
-                                        // State 3: back to relevance, arrow gone.
-                                        state.setOrder(ItemBrowserState.Order.NONE);
-                                }
+                                state.cycleOrder(orders[icon[3]], opensAscending[icon[3]]);
                                 playPressSound();
                                 return;
                         }
@@ -1118,9 +1109,7 @@ public final class ItemBrowser {
                 for (int[] icon : BrowserGeometry.filterIcons(m, paneLeft, FILTER_ICON_COUNT)) {
                         if (BrowserGeometry.contains(icon[0], icon[1], icon[2], icon[2], mx, my)
                                         && icon[3] < filters.length) {
-                                ItemBrowserState.Filter clicked = filters[icon[3]];
-                                state.setFilter(state.filter() == clicked
-                                                ? ItemBrowserState.Filter.ALL : clicked);
+                                state.cycleFilter(filters[icon[3]]);
                                 playPressSound();
                                 return;
                         }

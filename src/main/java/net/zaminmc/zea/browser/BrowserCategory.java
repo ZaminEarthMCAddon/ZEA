@@ -49,20 +49,36 @@ public enum BrowserCategory {
         /** The marker the server embeds in a custom item's own data. */
         private static final String SERVER_MARKER = "earthmc";
 
-        /** The bucket a fingerprint token belongs to. */
-        public static BrowserCategory of(String token) {
-                if (token != null && token.toLowerCase(Locale.ROOT).contains(SERVER_MARKER)) {
-                        return EARTH;
-                }
-                VariantStacks.Resolved resolved = VariantStacks.of(token);
-                ItemCategory category = resolved.stack().isEmpty()
-                                ? ItemCategory.OTHER
-                                : ItemClassifier.classify(resolved.stack());
+        /**
+         * Whether the token itself carries the server's marker — an
+         * {@code earthmc} item id or an {@code earthmc} namespace inside
+         * the component patch. The check is a raw string scan, so it
+         * never resolves a stack and never needs bound components; a
+         * patch the client cannot decode still marks its item.
+         */
+        public static boolean isServerItem(String token) {
+                return token != null && token.toLowerCase(Locale.ROOT).contains(SERVER_MARKER);
+        }
+
+        /** The bucket an item category belongs to. */
+        public static BrowserCategory fromCategory(ItemCategory category) {
                 return switch (category) {
                         case SWORD, AXE, SPEAR, MACE, BOW, CROSSBOW, TRIDENT,
                                         PICKAXE, SHOVEL, HOE -> WEAPONS;
                         case HELMET, CHESTPLATE, LEGGINGS, BOOTS -> ARMOR;
                         default -> GENERAL;
                 };
+        }
+
+        /** The bucket a fingerprint token belongs to. */
+        public static BrowserCategory of(String token) {
+                if (isServerItem(token)) {
+                        return EARTH;
+                }
+                VariantStacks.Resolved resolved = VariantStacks.of(token);
+                ItemCategory category = resolved.stack().isEmpty()
+                                ? ItemCategory.OTHER
+                                : ItemClassifier.classify(resolved.stack());
+                return fromCategory(category);
         }
 }

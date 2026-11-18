@@ -70,7 +70,7 @@ public final class RarityEngine {
          * level (and with it the enchantment registry) is not available.
          */
         public static ItemRarity rarityOf(ItemStack stack) {
-                if (!enabled()) {
+                if (!isSystemEnabled()) {
                         return null;
                 }
                 MaterialTier.Evaluation material = MaterialTier.evaluate(stack);
@@ -134,8 +134,13 @@ public final class RarityEngine {
                 RARITY_CACHE.clear();
         }
 
-        /** Whether the rarity system (master switch) is on. */
-        private static boolean enabled() {
+        /**
+         * Whether the rarity system (master switch) is on. The engine's
+         * callers — sort orders among them — check this before paying for
+         * stack resolution: when the system is off nothing is ever rated,
+         * so resolving a stack to ask would be pure waste.
+         */
+        public static boolean isSystemEnabled() {
                 ZeaConfig cfg = ZeaClient.config();
                 return cfg != null && cfg.rarityEnabled();
         }

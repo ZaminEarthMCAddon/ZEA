@@ -100,10 +100,15 @@ public final class ItemBrowserState {
                 /**
                  * A variant's rarity rank through ZEA's rarity engine —
                  * {@link net.zaminmc.zea.rarity.ItemRarity#ordinal()} —
-                 * with unrated items (not tools or armor, or the system
-                 * off) ranked above every rated one so they sink last.
+                 * with unrated items ranked above every rated one so they
+                 * sink last. When the system is off nothing is ever rated:
+                 * every variant is unrated, and the stack is never even
+                 * resolved — a sort must not pay resolution for a no-op.
                  */
                 private static int rarityRank(ItemVariantIndex.Variant variant) {
+                        if (!net.zaminmc.zea.rarity.RarityEngine.isSystemEnabled()) {
+                                return Integer.MAX_VALUE;
+                        }
                         net.zaminmc.zea.rarity.ItemRarity rarity = net.zaminmc.zea.rarity.RarityEngine.rarityOf(
                                         VariantStacks.of(variant.token()).stack());
                         return rarity == null ? Integer.MAX_VALUE : rarity.ordinal();
@@ -261,6 +266,35 @@ public final class ItemBrowserState {
 
         public void setFilter(Filter filter) {
                 this.filter = filter;
+        }
+
+        /**
+         * The sort button's three-state cycle — the behavior the buttons
+         * promise: clicking a button that does not own the order starts
+         * it at its primary direction ({@code opensAscending}); clicking
+         * it again flips to the opposite direction; clicking it a third
+         * time returns to {@link Order#NONE}, NEU's relevance, where no
+         * arrow shows. Alphabetical opens A→Z (NEU's green arrow), price
+         * opens highest-first (the red one) — the caller passes the
+         * button's own opening direction.
+         */
+        public void cycleOrder(Order clicked, boolean opensAscending) {
+                if (order != clicked) {
+                        order = clicked;
+                        ascending = opensAscending;
+                } else if (ascending == opensAscending) {
+                        ascending = !opensAscending;
+                } else {
+                        order = Order.NONE;
+                }
+        }
+
+        /**
+         * Selects a category filter; clicking the already-active one
+         * returns to {@link Filter#ALL}, NEU's no-filter state.
+         */
+        public void cycleFilter(Filter clicked) {
+                filter = filter == clicked ? Filter.ALL : clicked;
         }
 
         /** The selected variant token, or null in grid view. */
