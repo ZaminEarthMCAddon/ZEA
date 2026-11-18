@@ -297,24 +297,58 @@ public final class ItemBrowser {
                 graphics.fill(pill[0], pill[1] + 1, pill[0] + pill[2], pill[1] + pill[3] - 1, FG);
                 String pageText = "Page: " + (Math.min(maxPages, state.page() + 1)) + "/" + maxPages;
                 Component pageComponent = Component.literal(pageText).withStyle(style -> style.withBold(true));
-                drawScaledCentered(graphics, font, pageComponent,
-                                pill[0] + pill[2] / 2f, pill[1] + (pill[3] - 8) / 2f + 1, pill[2] - 10,
+                // NEU's pill label: centered on the strip's middle, scaled
+                // down only when it would exceed the strip minus both buttons
+                // minus NEU's 10-unit reserve.
+                int navLeftEdge = prev[0];
+                int navRightEdge = next[0] + next[2];
+                drawCenteredScaledMaxWidth(graphics, font, pageComponent,
+                                (navLeftEdge + navRightEdge) / 2f, pill[1] + pill[3] / 2f,
+                                navRightEdge - navLeftEdge - 2 * prev[2] - 10,
                                 0xFF000000, false);
         }
 
         /**
-         * NEU's {@code drawStringCenteredScaledMaxWidth}: the label centered
-         * on the point, scaled down when it would overflow the maximum width.
+         * NEU's {@code drawStringScaled}: the string scaled by factor from a
+         * top-left point.
          */
-        private static void drawScaledCentered(GuiGraphicsExtractor graphics, Font font, Component text,
-                        float centerX, float top, float maxLen, int color, boolean shadow) {
-                int width = font.width(text);
-                float scale = width > maxLen ? maxLen / width : 1f;
+        private static void drawScaled(GuiGraphicsExtractor graphics, Font font, Component text,
+                        float left, float top, float factor, int color, boolean shadow) {
                 graphics.pose().pushMatrix();
-                graphics.pose().translate(centerX - width * scale / 2f, top);
-                graphics.pose().scale(scale, scale);
+                graphics.pose().translate(left, top);
+                graphics.pose().scale(factor, factor);
                 graphics.text(font, text, 0, 0, color, shadow);
                 graphics.pose().popMatrix();
+        }
+
+        /**
+         * NEU's {@code drawStringCenteredScaled}: the string scaled so its
+         * width equals the allowance — up as well as down — its span centered
+         * on the point, its 8-unit glyph box centered vertically. The nav
+         * buttons' labels use this, which is why NEU's Prev/Next text fills
+         * its side of the button instead of shrinking inside it.
+         */
+        private static void drawCenteredScaled(GuiGraphicsExtractor graphics, Font font, Component text,
+                        float centerX, float centerY, float len, int color, boolean shadow) {
+                int width = font.width(text);
+                float factor = len / width;
+                float fontHeight = 8 * factor;
+                drawScaled(graphics, font, text, centerX - len / 2f, centerY - fontHeight / 2f,
+                                factor, color, shadow);
+        }
+
+        /**
+         * NEU's {@code drawStringCenteredScaledMaxWidth}: centered, scaled
+         * down when it would overflow the maximum width, never up.
+         */
+        private static void drawCenteredScaledMaxWidth(GuiGraphicsExtractor graphics, Font font, Component text,
+                        float centerX, float centerY, float maxLen, int color, boolean shadow) {
+                int width = font.width(text);
+                float factor = Math.min(1f, maxLen / width);
+                float newLen = Math.min(width, maxLen);
+                float fontHeight = 8 * factor;
+                drawScaled(graphics, font, text, centerX - newLen / 2f, centerY - fontHeight / 2f,
+                                factor, color, shadow);
         }
 
         /**
@@ -343,8 +377,14 @@ public final class ItemBrowser {
                 Font font = Minecraft.getInstance().font;
                 String label = mirrored ? "Prev" : "Next";
                 Component comp = Component.literal(label).withStyle(style -> style.withBold(true));
-                drawScaledCentered(graphics, font, comp,
-                                x + w * 300 / 480f + pressed, y + h / 2f - 4 + pressed, w * 240 / 480f,
+                // NEU anchors each label at 62.5% of the button's width —
+                // from the left for Prev, from the right for Next — and
+                // scales it to fill 50% of the width.
+                float anchor = mirrored
+                                ? x + w * 300 / 480f + pressed
+                                : x + w - w * 300 / 480f + pressed;
+                drawCenteredScaled(graphics, font, comp,
+                                anchor, y + h / 2f + pressed, w * 240 / 480f,
                                 0xFF000000, false);
         }
 
@@ -612,8 +652,8 @@ public final class ItemBrowser {
                 // drawStringCenteredScaledMaxWidth treatment: centered, scaled
                 // down to the pane's width instead of clipped.
                 String title = variant.display();
-                drawScaledCentered(graphics, font, Component.literal(title),
-                                contentLeft + contentWidth / 2f, m.boxPadding + 5,
+                drawCenteredScaledMaxWidth(graphics, font, Component.literal(title),
+                                contentLeft + contentWidth / 2f, m.boxPadding + 9,
                                 contentWidth, TEXT, true);
 
                 // Identity: the item's own stack and its enchantment summary.
