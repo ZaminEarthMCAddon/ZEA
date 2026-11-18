@@ -4873,3 +4873,48 @@ codepoint set asserted equal to the registry's ZEA-font set with the
 texture present. `./gradlew build` green. In-game verification — the
 seventeen glyphs live in the client font, the three states, the tier
 colors at Unbreaking I/II/III — is this session's live checklist.
+
+### The live pass (Xvfb + EGL/lavapipe + quickPlay + RCON), and its receipts
+
+Booted the real 26.3 dev client headless — Xvfb, SDL forced onto EGL
+(`SDL_VIDEO_FORCE_EGL=1`, the missing env from session 19's recipe;
+without it the client dies after the GLX probe), renderer on lavapipe
+Vulkan, quickPlay auto-connect into the flat-world dev server, RCON for
+the `/give` probes (26.3 wants the **flat** enchantment component form
+`[minecraft:enchantments={"minecraft:unbreaking":1}]`; the
+`{levels:{}}` wrapper is rejected). The first-run accessibility
+onboarding still blocks the boot — the `onboardAccessibility:true`
+options seed did not suppress it; the Continue click at (640, 608)
+after the atlas load does. The survival inventory at this window runs
+GUI scale 2 exactly (slot pitch 36 px, panel left 466 top 236), so the
+hotbar slots were measured from the slot-border pixels, not assumed.
+
+Six probe items, hovered, read from screenshots (vision model for the
+glyphs, exact-pixel color scans for the tiers):
+
+- **Unbreaking I pickaxe** — `[🔮] [♻] [🛡]` gray, gray, **white**
+  (COMMON).
+- **Unbreaking II pickaxe** — gray, gray, **purple**: a 224-px cluster
+  of exactly 0xAA00AA at the shield's position.
+- **Unbreaking III pickaxe** — gray, gray, **gold** (0xFFAA00 cluster at
+  the third symbol). The spec's example, live.
+- **Efficiency V + Unbreaking III + Mending pickaxe** — `[🔮] [♻] [🛡]`
+  gray, gold, gold: Silk Touch missing-gray beside two max-level golds,
+  "Mining Speed: 34" above, "Efficiency V, Mending / Unbreaking III"
+  below, EPIC PICKAXE footer.
+- **Bow with Infinity** — `[∞] [🛡] [💥] [🏹]` gold, gray, gray, gray:
+  the vanilla-font ∞ beside three ZEA-font glyphs, and **no ♻** —
+  Mending hidden by the conflict, exactly as specified.
+- **Helmet Respiration III + Aqua Affinity** — `[⚓] [🫧] [♻] [🛡]`
+  gold, gold, gray, gray: the single-level Aqua Affinity and the maxed
+  Respiration both gold, the two missing grays behind.
+
+Every symbol rendered from a real glyph — the vision reads describe
+the ZEA bitmap doodles as distinct shapes (the 8×8 shield reads as a
+"heart", the crystal ball as a "dome", the recycle triangle as an
+"omega") and explicitly report **no tofu or empty boxes**; the old VS16
+box is gone with the variation selector. Brackets and single spaces on
+every row; the row sits between the stat block and the enchantment
+list everywhere it appeared. The pass scripts live in
+`/home/z/my-project/scripts/indicator-phase*.sh` (session scratch, not
+the repository); the shots in `zea/shots/` (ignored dev artifacts).
