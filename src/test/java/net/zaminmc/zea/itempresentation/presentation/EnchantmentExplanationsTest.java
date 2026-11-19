@@ -78,6 +78,31 @@ class EnchantmentExplanationsTest {
         }
 
         /**
+         * The armor, Fortune and spear prose lines the server attaches
+         * beside those enchantments are explanations too — the dev.101
+         * batch. Fortune's line carries the server's own "then normal"
+         * typo and matches verbatim; a repaired spelling is a different
+         * line and stays untouched.
+         */
+        @Test
+        void theArmorFortuneAndSpearProseLinesAreExplanations() {
+                for (String phrase : new String[] {
+                                "Reduces damage from most sources.",
+                                "Increases underwater breathing time.",
+                                "Increases underwater mining speed.",
+                                "Reduces fall damage.",
+                                "Increases underwater movement speed.",
+                                "The user lunges forward when using the spear.",
+                                "Some blocks drop more items then normal."}) {
+                        assertTrue(EnchantmentExplanations.isExplanation(phrase, List.of()),
+                                        phrase + " is a known explanation");
+                }
+                assertFalse(EnchantmentExplanations.isExplanation(
+                                "Some blocks drop more items than normal.", List.of()),
+                                "the corrected spelling is not the server's line");
+        }
+
+        /**
          * The two mining-tool prose lines the server attaches beside
          * Efficiency and Silk Touch are explanations too: whole-line
          * matches against the confirmed bank, never substring filters,

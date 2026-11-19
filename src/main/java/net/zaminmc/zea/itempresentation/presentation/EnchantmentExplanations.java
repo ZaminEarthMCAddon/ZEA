@@ -35,7 +35,13 @@ public final class EnchantmentExplanations {
          * The observed explanation strings, lowercased for
          * case-insensitive comparison. The bank is deliberately the
          * confirmed set — phrases are never invented for enchantments
-         * that were not seen carrying them.
+         * that were not seen carrying them. The armor, Fortune and
+         * spear entries arrived together with the dev.101 batch: the
+         * server's prose for the protection group, the water enchants,
+         * Feather Falling, Fortune (its typo "then normal" is verbatim
+         * server text — the whole-line matcher compares exactly) and
+         * the spear's lunge enchantment, whose prose no synced
+         * registry description ever carried.
          */
         private static final Set<String> KNOWN_EXPLANATIONS = Set.of(
                         "increases attack damage.",
@@ -49,7 +55,14 @@ public final class EnchantmentExplanations {
                         "increases arrow knockback strength.",
                         "bows shoot basic arrows without consuming them.",
                         "allows fragile blocks such as glass to be collected.",
-                        "increases mining speed.");
+                        "increases mining speed.",
+                        "reduces damage from most sources.",
+                        "increases underwater breathing time.",
+                        "increases underwater mining speed.",
+                        "reduces fall damage.",
+                        "increases underwater movement speed.",
+                        "the user lunges forward when using the spear.",
+                        "some blocks drop more items then normal.");
 
         private EnchantmentExplanations() {
         }
