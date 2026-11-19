@@ -22,19 +22,21 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The full-screen world map ({@code /zeamap} or its keybind): the EarthMC
- * map in the Item Browser's frame language — the gray plate, the light
- * reflective edge, the gold active state, no new palette — with the
- * subsystem's shared surface routine drawing everything behind the
- * chrome.
+ * The world map ({@code /zeamap} or its keybind): a wide, short framed
+ * window floating over the world, in the Item Browser's frame language —
+ * the light edge, the gray plate, the dark interior, gold for the active
+ * state, no new palette. The map's name sits in the frame's top band,
+ * centered on the border itself; the interior is the map viewport, and
+ * everything behind the window dims the way a screen does.
  *
  * <p>The camera rides the wheel: drag pans, the cursor anchors the zoom,
  * and zooming out past the whole-map fit point curls the flat map into
  * the globe ({@link GlobeTransition} — no mode switch, the same wheel
  * that zooms). F re-follows the player, W switches worlds, and the
  * search pill flies to a town by name through a real focused
- * {@link EditBox}, so the platform's text input (and its IME machinery)
- * works exactly like vanilla's fields.
+ * {@link EditBox} owned by the screen's container, so the platform's
+ * text input (and its IME machinery) engages exactly like vanilla's
+ * fields.
  *
  * <p>Input is isolated by being a plain {@link Screen}: while the map is
  * open, nothing underneath sees a key or a click. The camera of every
@@ -51,7 +53,7 @@ public final class WorldMapScreen extends Screen {
         private static final int GOLD_TEXT = 0xFFE8C14A;
         private static final int TEXT = 0xFFE0E0E8;
         private static final int MUTED = 0xFF909098;
-        private static final int PILL_BACKING = 0x901E1E1E;
+        private static final int BACKDROP = 0x66000000;
 
         /** GLFW-style scancodes the 26.3 key events carry. */
         private static final int KEY_F = 70;
@@ -65,11 +67,29 @@ public final class WorldMapScreen extends Screen {
         /** Keyboard zoom step: three keys to one wheel notch. */
         private static final double KEYBOARD_ZOOM_FACTOR = Math.pow(MapCameraInput.ZOOM_PER_NOTCH, 1.0 / 3.0);
 
-        /** The search pill's geometry (GUI pixels, right-anchored in the header). */
+        /** The window's maximum size in GUI pixels, and its margins. */
+        private static final int WINDOW_MAX_WIDTH = 360;
+        private static final int WINDOW_MAX_HEIGHT = 200;
+        private static final int WINDOW_MARGIN = 8;
+
+        /** The frame: a 1px light edge, a 1px gray ring, and the top band. */
+        private static final int FRAME = 2;
+        private static final int BAND_HEIGHT = 11;
+
+        /** The search pill's geometry (GUI pixels, inside the interior's top right). */
         private static final int PILL_HEIGHT = 14;
         private static final int PILL_WIDTH = 130;
-        private static final int PILL_RIGHT_MARGIN = 6;
-        private static final int PILL_TOP = 4;
+        private static final int PILL_MARGIN = 5;
+
+        /** The window's outer bounds and the map viewport inside them. */
+        private int winLeft;
+        private int winTop;
+        private int winRight;
+        private int winBottom;
+        private int mapLeft;
+        private int mapTop;
+        private int mapRight;
+        private int mapBottom;
 
         private final MapSubsystem map;
         private MapWorld viewedWorld;
@@ -102,11 +122,21 @@ public final class WorldMapScreen extends Screen {
         @Override
         protected void init() {
                 Font font = getFont();
-                searchField = new EditBox(font, 0, 0, PILL_WIDTH - 8, PILL_HEIGHT - 4,
+                EditBox field = new EditBox(font, 0, 0, PILL_WIDTH - 8, PILL_HEIGHT - 4,
                                                 Component.translatable("zea.map.search"));
-                searchField.setMaxLength(64);
-                searchField.setResponder(text -> searchMiss = null);
-                searchField.setVisible(false);
+                field.setMaxLength(64);
+                field.setResponder(text -> searchMiss = null);
+                field.setVisible(false);
+                searchField = field;
+                // The pill's field is a real child of the screen: the
+                // container owns the focus, so platform text input follows
+                // exactly the vanilla routing instead of a hand-rolled one.
+                addWidget(field);
+                if (searchOpen) {
+                        // A rebuild (resize) made a fresh field; re-point the
+                        // container's focus so typing survives it.
+                        setFocused(field);
+                }
         }
 
         @Override
@@ -123,8 +153,14 @@ public final class WorldMapScreen extends Screen {
                 MapConfig.WorldMap worldMap = map.worldMapConfig();
                 MapConfig.SharedDisplay shared = map.sharedDisplayConfig();
 
-                MapProjection projection = MapProjection.northUp(camera, width, height);
-                map.drawSurface(graphics, getFont(), projection, 0, 0, MapSubsystem.Surface.WORLD_MAP, dragging,
+                layoutWindow();
+                graphics.fill(0, 0, width, height, BACKDROP);
+                drawFrame(graphics);
+
+                MapProjection projection = MapProjection.northUp(camera, mapWidth(), mapHeight());
+                graphics.enableScissor(mapLeft, mapTop, mapRight, mapBottom);
+                map.drawSurface(graphics, getFont(), projection, mapLeft, mapTop, MapSubsystem.Surface.WORLD_MAP,
+                                                dragging,
                                                 new MapSubsystem.Layers(
                                                                         worldMap.showTownFills && shared.claimFillOpacityPercent > 0,
                                                                         worldMap.showTownOutlines && shared.claimOutlineOpacityPercent > 0,
@@ -133,69 +169,116 @@ public final class WorldMapScreen extends Screen {
                                                                         worldMap.showTownLabels,
                                                                         alpha(shared.claimFillOpacityPercent),
                                                                         alpha(shared.claimOutlineOpacityPercent)));
+                graphics.disableScissor();
 
                 drawChrome(graphics, mouseX, mouseY, projection, player != null);
         }
 
         // ------------------------------------------------------------------
-        // Chrome
+        // Frame and chrome
         // ------------------------------------------------------------------
+
+        /** The window's bounds: the wide, short band centered on the screen. */
+        private void layoutWindow() {
+                int w = Math.min(WINDOW_MAX_WIDTH, width - 2 * WINDOW_MARGIN);
+                int h = Math.min(WINDOW_MAX_HEIGHT, height - 2 * WINDOW_MARGIN);
+                winLeft = (width - w) / 2;
+                winTop = (height - h) / 2;
+                winRight = winLeft + w;
+                winBottom = winTop + h;
+                mapLeft = winLeft + FRAME;
+                mapRight = winRight - FRAME;
+                mapTop = winTop + FRAME + BAND_HEIGHT;
+                mapBottom = winBottom - FRAME;
+        }
+
+        private int mapWidth() {
+                return mapRight - mapLeft;
+        }
+
+        private int mapHeight() {
+                return mapBottom - mapTop;
+        }
+
+        /**
+         * The frame the Item Browser's sidebar buttons carry: the light
+         * edge outside, the gray plate inside it, the dark interior — and
+         * the top side grown into a band that carries the map's name,
+         * centered on the border itself.
+         */
+        private void drawFrame(GuiGraphicsExtractor graphics) {
+                // Interior and band share the dark plate; the band's gray
+                // sits on top of it.
+                graphics.fill(winLeft, winTop, winRight, winBottom, PLATE_DARK);
+                graphics.fill(winLeft + FRAME, winTop + FRAME, winRight - FRAME,
+                                                winTop + FRAME + BAND_HEIGHT, PLATE_GRAY);
+
+                // The light edge ring, outside the gray ring.
+                graphics.fill(winLeft - 1, winTop - 1, winRight + 1, winTop, PLATE_EDGE);
+                graphics.fill(winLeft - 1, winBottom, winRight + 1, winBottom + 1, PLATE_EDGE);
+                graphics.fill(winLeft - 1, winTop, winLeft, winBottom, PLATE_EDGE);
+                graphics.fill(winRight, winTop, winRight + 1, winBottom, PLATE_EDGE);
+                // The gray ring, between the interior and the edge.
+                graphics.fill(winLeft, winTop, winRight, winTop + 1, PLATE_GRAY);
+                graphics.fill(winLeft, winBottom - 1, winRight, winBottom, PLATE_GRAY);
+                graphics.fill(winLeft, winTop + 1, winLeft + 1, winBottom - 1, PLATE_GRAY);
+                graphics.fill(winRight - 1, winTop + 1, winRight, winBottom - 1, PLATE_GRAY);
+
+                // The name, centered on the band: gold while viewing a world
+                // the player is not standing in, plain otherwise.
+                Font font = getFont();
+                String world = viewedWorld.displayName;
+                boolean elsewhere = viewedWorld != map.playerWorld();
+                if (viewedWorld == map.playerWorld()) {
+                        world += " (you are here)";
+                }
+                int textX = (winLeft + winRight - font.width(world)) / 2;
+                int textY = winTop + FRAME + (BAND_HEIGHT - font.lineHeight) / 2 + 1;
+                drawLabel(graphics, font, world, textX, textY, elsewhere ? GOLD_TEXT : TEXT);
+        }
 
         private void drawChrome(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
                         MapProjection projection, boolean hasPlayer) {
                 Font font = getFont();
 
-                // The screen's edge trim: the browser pane's plate and light
-                // edge, one ring around the whole map.
-                graphics.fill(0, 0, width, 1, PLATE_GRAY);
-                graphics.fill(0, height - 1, width, height, PLATE_GRAY);
-                graphics.fill(0, 1, 1, height - 1, PLATE_GRAY);
-                graphics.fill(width - 1, 1, width, height - 1, PLATE_GRAY);
-
-                // Header, left: the world's name — gold while the screen
-                // views a world the player is not standing in, plain white
-                // otherwise — plus the follow state.
-                String world = viewedWorld.displayName;
-                boolean elsewhere = viewedWorld != map.playerWorld();
-                if (hasPlayer && viewedWorld == map.playerWorld()) {
-                        world += " (you are here)";
-                }
-                drawLabel(graphics, font, world, 8, 7, elsewhere ? GOLD_TEXT : TEXT);
-
                 // Header, right: freshness, then the search pill.
                 if (map.showFreshnessConfig()) {
                         String freshness = map.freshnessText(viewedWorld, System.currentTimeMillis());
                         int right = pillLeft() - 8;
-                        graphics.text(font, freshness, right - font.width(freshness), 7, MUTED);
+                        graphics.text(font, freshness, right - font.width(freshness), pillTop() + 3, MUTED);
                 }
                 drawSearchPill(graphics, font, mouseX, mouseY);
 
-                // Footer: the controls hint at the left, the follow state and
-                // the cursor's coordinates at the right.
+                // Footer: the controls hint at the left, the cursor's world
+                // coordinates at the right.
                 String follow = "F: " + (followPlayer ? "following" : "follow");
-                int followWidth = font.width(follow);
-                graphics.text(font, follow, 8, height - font.lineHeight - 4, followPlayer ? GOLD_TEXT : MUTED);
+                graphics.text(font, follow, mapLeft + 4, mapBottom - font.lineHeight - 3,
+                                                followPlayer ? GOLD_TEXT : MUTED);
                 String worldSwitch = "W: " + viewedWorld.other().displayName;
-                graphics.text(font, worldSwitch, 8 + followWidth + 14, height - font.lineHeight - 4, MUTED);
-                double worldX = projection.worldX(mouseX, mouseY);
-                double worldZ = projection.worldZ(mouseX, mouseY);
+                graphics.text(font, worldSwitch, mapLeft + 4 + font.width(follow) + 14,
+                                                mapBottom - font.lineHeight - 3, MUTED);
+                double localX = mouseX - mapLeft;
+                double localY = mouseY - mapTop;
+                double worldX = projection.worldX(localX, localY);
+                double worldZ = projection.worldZ(localX, localY);
                 String cursor = String.format(Locale.ROOT, "%,d %,d",
                                                 (int) Math.floor(worldX), (int) Math.floor(worldZ));
                 int cursorWidth = font.width(cursor);
-                graphics.text(font, cursor, width - cursorWidth - 8, height - font.lineHeight - 4, TEXT);
-                graphics.text(font, "Esc: close", width - cursorWidth - 8 - font.width("Esc: close") - 14,
-                                                height - font.lineHeight - 4, MUTED);
+                graphics.text(font, cursor, mapRight - cursorWidth - 4, mapBottom - font.lineHeight - 3, TEXT);
+                String esc = "Esc: close";
+                graphics.text(font, esc, mapRight - cursorWidth - 4 - font.width(esc) - 14,
+                                                mapBottom - font.lineHeight - 3, MUTED);
 
                 // A search miss fades for a few seconds under the pill.
                 if (searchMiss != null && System.currentTimeMillis() - searchMissAtMs < 3_500L) {
-                        graphics.text(font, searchMiss, pillLeft(), PILL_TOP + PILL_HEIGHT + 2, GOLD_TEXT);
+                        graphics.text(font, searchMiss, pillLeft(), pillTop() + PILL_HEIGHT + 2, GOLD_TEXT);
                 }
         }
 
         private void drawSearchPill(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
                 int left = pillLeft();
-                int top = PILL_TOP;
-                int right = width - PILL_RIGHT_MARGIN;
+                int top = pillTop();
+                int right = mapRight - PILL_MARGIN;
                 int bottom = top + PILL_HEIGHT;
                 boolean hovered = mouseX >= left && mouseX < right && mouseY >= top && mouseY < bottom;
                 // The plate: gray when live, the gold plate while the search
@@ -224,7 +307,11 @@ public final class WorldMapScreen extends Screen {
         }
 
         private int pillLeft() {
-                return width - PILL_RIGHT_MARGIN - PILL_WIDTH;
+                return mapRight - PILL_MARGIN - PILL_WIDTH;
+        }
+
+        private int pillTop() {
+                return mapTop + PILL_MARGIN;
         }
 
         // ------------------------------------------------------------------
@@ -238,8 +325,11 @@ public final class WorldMapScreen extends Screen {
                 searchOpen = true;
                 searchField.setVisible(true);
                 searchField.setValue("");
-                searchField.setFocused(true);
                 searchField.setEditable(true);
+                // Focus through the screen's container: the container points
+                // at the field and the field's focus follows, which is the
+                // vanilla order platform text input engages in.
+                setFocused(searchField);
         }
 
         private void closeSearch() {
@@ -247,7 +337,7 @@ public final class WorldMapScreen extends Screen {
                         return;
                 }
                 searchOpen = false;
-                searchField.setFocused(false);
+                setFocused(null);
                 searchField.setVisible(false);
         }
 
@@ -268,7 +358,7 @@ public final class WorldMapScreen extends Screen {
                         return;
                 }
                 // A comfortable regional zoom: the town plus its neighbors.
-                double targetPpb = Math.clamp(width / 1200.0,
+                double targetPpb = Math.clamp(mapWidth() / 1200.0,
                                                 MapCamera.MIN_PIXELS_PER_BLOCK, MapCamera.MAX_PIXELS_PER_BLOCK);
                 camera = map.worldCamera(viewedWorld, hit.centerX(), hit.centerZ())
                                                 .centeredOn(hit.centerX(), hit.centerZ());
@@ -308,15 +398,22 @@ public final class WorldMapScreen extends Screen {
         @Override
         public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
                 int left = pillLeft();
-                int top = PILL_TOP;
-                boolean inPill = event.x() >= left && event.x() < width - PILL_RIGHT_MARGIN
+                int top = pillTop();
+                boolean inPill = event.x() >= left && event.x() < mapRight - PILL_MARGIN
                                                 && event.y() >= top && event.y() < top + PILL_HEIGHT;
                 if (inPill) {
                         openSearch();
                         return true;
                 }
+                boolean inWindow = event.x() >= winLeft - 1 && event.x() < winRight + 1
+                                                && event.y() >= winTop - 1 && event.y() < winBottom + 1;
                 if (searchOpen) {
                         closeSearch();
+                        if (!inWindow) {
+                                return true;
+                        }
+                }
+                if (!inWindow) {
                         return true;
                 }
                 dragging = true;
@@ -352,9 +449,12 @@ public final class WorldMapScreen extends Screen {
                 if (searchOpen) {
                         return true;
                 }
-                if (camera != null && verticalAmount != 0) {
+                boolean inWindow = mouseX >= mapLeft && mouseX < mapRight
+                                                && mouseY >= mapTop && mouseY < mapBottom;
+                if (camera != null && verticalAmount != 0 && inWindow) {
                         double factor = verticalAmount > 0 ? MapCameraInput.ZOOM_PER_NOTCH : 1.0 / MapCameraInput.ZOOM_PER_NOTCH;
-                        camera = MapCameraInput.zoomAtCursor(camera, width, height, 0.0, mouseX, mouseY, factor);
+                        camera = MapCameraInput.zoomAtCursor(camera, mapWidth(), mapHeight(), 0.0,
+                                                        mouseX - mapLeft, mouseY - mapTop, factor);
                         map.storeWorldCamera(camera);
                 }
                 return true;
@@ -362,7 +462,7 @@ public final class WorldMapScreen extends Screen {
 
         @Override
         public boolean keyPressed(KeyEvent event) {
-                if (searchOpen && searchField != null) {
+                if (searchOpen) {
                         if (event.isEscape()) {
                                 closeSearch();
                                 return true;
@@ -371,7 +471,9 @@ public final class WorldMapScreen extends Screen {
                                 flyToSearch();
                                 return true;
                         }
-                        if (searchField.keyPressed(event)) {
+                        // Everything else the field consumes first through
+                        // the container; whatever it declines stays here.
+                        if (searchField != null && searchField.keyPressed(event)) {
                                 return true;
                         }
                         return true;
@@ -415,7 +517,8 @@ public final class WorldMapScreen extends Screen {
                 if (camera == null) {
                         return;
                 }
-                camera = MapCameraInput.zoomAtCursor(camera, width, height, 0.0, width / 2.0, height / 2.0, factor);
+                camera = MapCameraInput.zoomAtCursor(camera, mapWidth(), mapHeight(), 0.0,
+                                                mapWidth() / 2.0, mapHeight() / 2.0, factor);
                 map.storeWorldCamera(camera);
         }
 

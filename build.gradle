@@ -9,6 +9,20 @@ base {
         archivesName = project.archives_base_name
 }
 
+loom {
+        runs {
+                // The dev client: a fixed window so scripted drives and
+                // screenshots are reproducible, and enough heap for worldgen
+                // alongside the tooling of a small sandbox.
+                client {
+                        client()
+                        name "ZEA Client"
+                        vmArgs "-Xmx2560M"
+                        programArgs "--width", "1280", "--height", "800"
+                }
+        }
+}
+
 repositories {
         // MoulConfig (configuration framework) is published on the NEU maven.
         maven {

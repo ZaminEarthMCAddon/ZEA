@@ -1,0 +1,49 @@
+// Mirror init script: Maven Central is rate-limited from this sandbox (429s).
+// Redirect ONLY central to the Aliyun public proxy. Mojang's artifacts must
+// keep hitting libraries.minecraft.net; NEU/Terraformers/fabric maven stay
+// untouched (they host artifacts central does not have).
+import org.gradle.api.initialization.resolve.RepositoriesMode
+
+allprojects {
+    buildscript {
+        repositories {
+            // Specialized repositories keep their own endpoints.
+            maven { url 'https://maven.fabricmc.net/' }
+            maven { url 'https://maven.notenoughupdates.org/releases/' }
+            maven { url 'https://maven.terraformersmc.com/releases/' }
+            maven { url 'https://libraries.minecraft.net/' }
+            maven { url 'https://maven.neoforged.net/releases' }
+            // Aliyun proxy in front of Maven Central.
+            maven {
+                name 'CentralMirror'
+                url 'https://maven.aliyun.com/repository/public'
+            }
+            mavenCentral()
+        }
+    }
+    repositories {
+        maven { url 'https://maven.fabricmc.net/' }
+        maven { url 'https://maven.notenoughupdates.org/releases/' }
+        maven { url 'https://maven.terraformersmc.com/releases/' }
+        maven { url 'https://libraries.minecraft.net/' }
+        maven { url 'https://maven.neoforged.net/releases' }
+        maven {
+            name 'CentralMirror'
+            url 'https://maven.aliyun.com/repository/public'
+        }
+        mavenCentral()
+    }
+}
+
+settingsEvaluated { settings ->
+    settings.pluginManagement {
+        repositories {
+            maven { url 'https://maven.fabricmc.net/' }
+            gradlePluginPortal()
+            maven {
+                name 'CentralMirror'
+                url 'https://maven.aliyun.com/repository/public'
+            }
+        }
+    }
+}
