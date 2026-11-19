@@ -863,6 +863,15 @@ public final class MapSubsystem {
                 double halfH = world.worldHeight / 2.0;
                 double surfaceHalfW = projection.surfaceWidth() / 2.0;
                 double surfaceHalfH = projection.surfaceHeight() / 2.0;
+
+                // Placement first, then draw: bigger territories claim their
+                // anchor, later flags that would overlap an occupied rect are
+                // culled — a dense cluster (Europe) culls its small members
+                // instead of piling flags on one spot, and they reappear as
+                // zoom separates the anchors.
+                record Placement(CountryMosaic.Aggregate aggregate, double sx, double sy) {
+                }
+                List<Placement> visible = new ArrayList<>();
                 for (CountryMosaic.Aggregate aggregate : list) {
                         double[] flagPos = CountryMosaic.flagWorldPos(aggregate);
                         double sx;
@@ -885,15 +894,43 @@ public final class MapSubsystem {
                                                         || sx > projection.surfaceWidth() + 20 || sy > projection.surfaceHeight() + 20) {
                                 continue;
                         }
-                        CountryRegistry.Country country = countryRegistry.country(aggregate.countryId());
-                        String iso = country == null ? aggregate.countryId() : country.iso();
-                        if (aggregate.cellCount() < 3) {
-                                // The compact marker: a dot with the ISO code.
-                                graphics.fill((int) sx - 2, (int) sy - 2, (int) sx + 2, (int) sy + 2,
-                                                                aggregate.argb());
-                                graphics.text(font, iso, (int) sx + 4, (int) sy - font.lineHeight / 2, 0xFFE0E0E0);
+                        visible.add(new Placement(aggregate, sx, sy));
+                }
+                List<long[]> placed = new ArrayList<>();
+                visible.sort(java.util.Comparator.comparingInt(
+                                                (Placement place) -> place.aggregate().cellCount()).reversed());
+                for (Placement place : visible) {
+                        long x0 = Math.round(place.sx()) - 9;
+                        long y0 = Math.round(place.sy()) - 6;
+                        long x1 = Math.round(place.sx()) + 9;
+                        long y1 = Math.round(place.sy()) + 16;
+                        boolean collision = false;
+                        for (long[] occupied : placed) {
+                                if (x0 < occupied[2] && x1 > occupied[0] && y0 < occupied[3] && y1 > occupied[1]) {
+                                        collision = true;
+                                        break;
+                                }
+                        }
+                        if (collision) {
                                 continue;
                         }
+                        placed.add(new long[] {x0, y0, x1, y1});
+                        drawCountryFlag(graphics, font, place.aggregate(), place.sx(), place.sy());
+                }
+        }
+
+        /** Draws one aggregate's flag or compact marker at its screen anchor. */
+        private void drawCountryFlag(GuiGraphicsExtractor graphics, Font font,
+                        CountryMosaic.Aggregate aggregate, double sx, double sy) {
+                CountryRegistry.Country country = countryRegistry.country(aggregate.countryId());
+                String iso = country == null ? aggregate.countryId() : country.iso();
+                if (aggregate.cellCount() < 3) {
+                        // The compact marker: a dot with the ISO code.
+                        graphics.fill((int) sx - 2, (int) sy - 2, (int) sx + 2, (int) sy + 2,
+                                                        aggregate.argb());
+                        graphics.text(font, iso, (int) sx + 4, (int) sy - font.lineHeight / 2, 0xFFE0E0E0);
+                        return;
+                }
                         int flagW = 15;
                         int flagH = 9;
                         int x0 = (int) Math.round(sx - flagW / 2.0);
@@ -905,12 +942,11 @@ public final class MapSubsystem {
                                 int bandY1 = y0 + (band + 1) * flagH / bands;
                                 graphics.fill(x0, bandY0, x0 + flagW, bandY1, colors.get(band));
                         }
-                        graphics.fill(x0, y0, x0 + flagW, y0 + 1, 0xFF1E1E1E);
-                        graphics.fill(x0, y0 + flagH - 1, x0 + flagW, y0 + flagH, 0xFF1E1E1E);
-                        graphics.fill(x0, y0 + 1, x0 + 1, y0 + flagH - 1, 0xFF1E1E1E);
-                        graphics.fill(x0 + flagW - 1, y0 + 1, x0 + flagW, y0 + flagH - 1, 0xFF1E1E1E);
-                        graphics.text(font, iso, x0, y0 + flagH + 1, 0xFFE0E0E0);
-                }
+                graphics.fill(x0, y0, x0 + flagW, y0 + 1, 0xFF1E1E1E);
+                graphics.fill(x0, y0 + flagH - 1, x0 + flagW, y0 + flagH, 0xFF1E1E1E);
+                graphics.fill(x0, y0 + 1, x0 + 1, y0 + flagH - 1, 0xFF1E1E1E);
+                graphics.fill(x0 + flagW - 1, y0 + 1, x0 + flagW, y0 + flagH - 1, 0xFF1E1E1E);
+                graphics.text(font, iso, x0, y0 + flagH + 1, 0xFFE0E0E0);
         }
 
         /** Shifts a planner cell from globe-center offsets to screen pixels. */
