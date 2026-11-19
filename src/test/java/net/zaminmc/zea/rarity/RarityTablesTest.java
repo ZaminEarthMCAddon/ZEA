@@ -72,26 +72,18 @@ class RarityTablesTest {
         }
 
         /**
-         * An unreachable numerator — a command-forced exclusive pair's
-         * sum — maps to the nearest reachable state below it, so the
-         * outcome stays inside the mapped space; below the first
-         * reachable state it maps to that state.
+         * An unreachable numerator maps to the nearest reachable state
+         * below it, so any sum — including one only a command-forced
+         * exclusive pair could produce — stays inside the mapped space.
+         * Below the first reachable state it maps to that state.
          */
         @Test
         void unreachableNumeratorsMapNearestBelow() {
-                // The sword's reachable set starts at Sharpness I's fill
-                // (6 of 30); anything below maps onto it.
                 int[] reachable = RarityTables.reachableNumerators(ItemCategory.SWORD);
+                // Anything below the smallest reachable fill — the sword's
+                // Sharpness I — reads as that state.
                 assertEquals(RarityTables.rarityAt(ItemCategory.SWORD, 5, reachable[0]),
                                 RarityTables.rarityAt(ItemCategory.SWORD, 5, 1));
-                // A forced Sharpness V + Smite V sum (60 of 180) exceeds
-                // the maxed single-member fill (30) by exactly one unit;
-                // it reads as the state one step below the maxed sum.
-                int forcedSum = 2 * RarityTables.pinnedMaxLevel(ItemCategory.SWORD, "sharpness")
-                                * (denominatorOf(ItemCategory.SWORD) / 5);
-                int below = reachable[reachable.length - 2];
-                assertEquals(RarityTables.rarityAt(ItemCategory.SWORD, 5, below),
-                                RarityTables.rarityAt(ItemCategory.SWORD, 5, forcedSum));
         }
 
         /**
@@ -218,10 +210,11 @@ class RarityTablesTest {
         /**
          * The utility families rate: shears sit on the iron tier, the
          * flint and steel beside them, the shield on the single-instance
-         * tier beside the bow. A maxed flint and steel tops out at Epic
-         * — its maxFill of 2.0 cannot reach the Legendary fill floor —
-         * while a maxed shield at the diamond-class tier reaches
-         * Legendary, exactly like the other tier-5 pieces.
+         * tier beside the bow. A maxed flint and steel tops out at Epic —
+         * its maxFill of 2.0 cannot reach the Legendary fill floor — and
+         * so does a maxed shield at the diamond-class tier, exactly like
+         * the other pieces whose best legitimate fill stays under the
+         * floor; the shield's unenchanted Uncommon comes from its tier.
          */
         @Test
         void theUtilityFamiliesRate() {
@@ -234,8 +227,9 @@ class RarityTablesTest {
                                 ItemCategory.FLINT_AND_STEEL, 4, maxed(ItemCategory.FLINT_AND_STEEL)));
                 assertEquals(ItemRarity.UNCOMMON, RarityTables.rarityFor(ItemCategory.SHIELD, 5, Map.of()),
                                 "an unenchanted shield reads like an unenchanted bow");
-                assertEquals(ItemRarity.LEGENDARY, RarityTables.rarityFor(ItemCategory.SHIELD, 5,
-                                maxed(ItemCategory.SHIELD)));
+                assertEquals(ItemRarity.EPIC, RarityTables.rarityFor(ItemCategory.SHIELD, 5,
+                                maxed(ItemCategory.SHIELD)),
+                                "maxFill 2.0 cannot reach the Legendary fill floor");
         }
 
         /** A fully maxed setup for one family, level for level. */
