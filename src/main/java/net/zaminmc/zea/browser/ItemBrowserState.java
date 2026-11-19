@@ -181,8 +181,14 @@ public final class ItemBrowserState {
         }
 
         private View view = View.GRID;
-        /** Whether the pane shows at all; the close button hides it, the edge tab reopens it. */
-        private boolean open = true;
+        /**
+         * Whether the pane shows at all. It starts closed — NEU's
+         * {@code itemPaneOpen = false}: the pane never greets a screen
+         * wide open, it slides in when the search asks for it or the
+         * edge tab is hovered, and the close-panes keybind slides it
+         * back out. The close button hides it; the edge tab reopens it.
+         */
+        private boolean open = false;
         private int page;
         /** The grid's current order — relevance until a sort button is clicked. */
         private Order order = Order.NONE;

@@ -70,7 +70,12 @@ import java.util.Optional;
  * <p>The search bar ZEA already draws drives the filter — the pane reads
  * the same session query the slot matching reads, one search system, and
  * a non-empty query opens the pane the way NEU's
- * {@code openWhenSearching} does. Rendering reads caches only: the
+ * {@code openWhenSearching} does. The pane itself starts closed, NEU's
+ * {@code itemPaneOpen = false}: it never greets a screen wide open. It
+ * slides in when the search asks for it or the edge tab is hovered, and
+ * it slides back out when a genuinely new screen binds without an
+ * active search (NEU's overlay-reset rule) or the close-panes keybind
+ * fires. Rendering reads caches only: the
  * variant results rebuild when the market revision, the search query,
  * the order, its direction or the filter changes; nothing here touches
  * disk, the network or the world.
@@ -146,8 +151,30 @@ public final class ItemBrowser {
         private long iconHoverStart = -1;
         private int iconHoverKind = -1;
 
+        /** The screen the pane last bound to — a different instance is a genuinely new screen. */
+        private @Nullable AbstractContainerScreen<?> boundScreen;
+
         public ItemBrowserState state() {
                 return state;
+        }
+
+        /**
+         * Binds the pane to a screen instance — NEU's overlay-reset
+         * rule: a genuinely new screen (not a re-init of the same
+         * instance, which a resize or a recipe-book toggle performs)
+         * closes the pane unless a search is already asking for it, so
+         * the pane never greets a screen wide open; it waits behind its
+         * edge tab. Called after the search session binds, so the query
+         * this rule reads is the new screen's own.
+         */
+        public void bindScreen(AbstractContainerScreen<?> screen) {
+                if (boundScreen == screen) {
+                        return;
+                }
+                boundScreen = screen;
+                if (normalizedQuery().isEmpty()) {
+                        state.close();
+                }
         }
 
         /**

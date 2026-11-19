@@ -178,6 +178,12 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                 }
                 ItemBrowser browser = ZeaClient.browser();
                 if (browser != null) {
+                        // The search session binds before the pane reads
+                        // it, so the screen-open reset below judges "is a
+                        // search active" by the new screen's own query —
+                        // never by the previous screen's leftover.
+                        ZeaClient.search().bind(self);
+                        browser.bindScreen(self);
                         browser.render(graphics, self, mouseX, mouseY);
                 }
         }
@@ -441,6 +447,19 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                 if (zea$buttonsActive(buttons) && ZeaKeys.EDIT_BUTTONS.matches(event)) {
                         Minecraft minecraft = Minecraft.getInstance();
                         minecraft.gui.setScreen(new ButtonEditorScreen(self, buttons));
+                        cir.setReturnValue(true);
+                        return;
+                }
+                // NEU's close-panes binding: the grid pane slides away —
+                // the detail pane with it — and only the reopen tab stays.
+                // The search bar keeps its query; clearing it is the bar's
+                // own right-click.
+                ZeaConfig browserConfig = ZeaClient.config();
+                if (browser != null && browserConfig != null
+                                && browserConfig.inventoryShopBrowserEnabled()
+                                && !zea$isCreative(self)
+                                && ZeaKeys.CLOSE_PANES.matches(event)) {
+                        browser.state().close();
                         cir.setReturnValue(true);
                         return;
                 }

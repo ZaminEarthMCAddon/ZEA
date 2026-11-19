@@ -58,7 +58,18 @@ public final class ZeaKeys {
         public static final KeyMapping OPEN_MAP = new KeyMapping(
                         "zea.key.open_map", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY);
 
-        private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS, LOCK_SLOT, OPEN_MAP);
+        /**
+         * Closes the shop index's panes while a container screen is open —
+         * NEU's close-panes binding: the grid pane slides away, the
+         * detail pane with it, leaving only the reopen tab. Unbound by
+         * default — the tab and a fresh screen close the pane too.
+         */
+        public static final KeyMapping CLOSE_PANES = new KeyMapping(
+                        "zea.key.close_panes", InputConstants.Type.KEYBOARD,
+                        InputConstants.UNKNOWN.getValue(), CATEGORY);
+
+        private static final List<KeyMapping> ALL = List.of(SEARCH_CHAT, EDIT_BUTTONS, LOCK_SLOT,
+                        OPEN_MAP, CLOSE_PANES);
 
         private ZeaKeys() {
         }

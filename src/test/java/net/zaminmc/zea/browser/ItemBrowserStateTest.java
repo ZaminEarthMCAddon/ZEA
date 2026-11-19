@@ -187,6 +187,29 @@ class ItemBrowserStateTest {
                 assertTrue(state.ascending() == false, "Legendary→Common");
                 state.cycleOrder(ItemBrowserState.Order.RARITY, true);
                 assertEquals(ItemBrowserState.Order.NONE, state.order());
+
+        }
+
+        /**
+         * The pane starts closed — NEU's {@code itemPaneOpen = false}:
+         * the sidebar never greets a screen wide open. Opening, closing
+         * and reopening round-trip, and closing takes the detail view
+         * with it.
+         */
+        @Test
+        void thePaneStartsClosedAndRoundTrips() {
+                ItemBrowserState state = new ItemBrowserState();
+                assertTrue(state.isOpen() == false, "NEU starts with the pane closed");
+                state.open();
+                assertTrue(state.isOpen());
+                state.openDetail("some-token");
+                assertEquals(ItemBrowserState.View.DETAIL, state.view());
+                state.close();
+                assertTrue(state.isOpen() == false, "the close hides the pane");
+                assertEquals(ItemBrowserState.View.GRID, state.view(),
+                                "closing takes the detail view with it");
+                state.open();
+                assertTrue(state.isOpen(), "the edge tab reopens it");
         }
 
         @Test
@@ -257,6 +280,7 @@ class ItemBrowserStateTest {
         @Test
         void closeHidesThePaneAndOpenBringsItBack() {
                 ItemBrowserState state = new ItemBrowserState();
+                state.open();
                 assertTrue(state.isOpen());
                 state.openDetail("token");
                 state.close();
