@@ -58,9 +58,12 @@ public final class MapHttp {
 	}
 
 	public MapHttp(Executor executor, Duration timeout) {
+		// The HttpClient keeps its own internal executor for response
+		// processing: pointing it at the caller's pool while send() blocks
+		// a pool thread deadlocked both — two threads, every one of them
+		// parked inside send(), nothing left to deliver the responses.
 		this.http = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(10))
-				.executor(executor)
 				.build();
 		this.timeout = timeout;
 	}
