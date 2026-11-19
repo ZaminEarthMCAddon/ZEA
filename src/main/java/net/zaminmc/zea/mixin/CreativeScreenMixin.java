@@ -28,6 +28,10 @@ public abstract class CreativeScreenMixin {
         @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"), cancellable = true)
         private void zea$rarityTooltip(ItemStack stack,
                         CallbackInfoReturnable<List<Component>> cir) {
+                net.zaminmc.zea.config.ZeaConfig config = net.zaminmc.zea.ZeaClient.config();
+                if (config != null && config.hideServerItemMetaEnabled()) {
+                        net.zaminmc.zea.misc.ServerItemMeta.filter(cir.getReturnValue());
+                }
                 List<Component> lines = RarityTooltipEditor.edit(cir.getReturnValue(), stack);
                 MarketTooltipEditor.edit(lines, stack);
                 cir.setReturnValue(lines);

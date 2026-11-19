@@ -382,6 +382,10 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         @Inject(method = "getTooltipFromContainerItem", at = @At("TAIL"), cancellable = true)
         private void zea$rarityTooltip(ItemStack stack,
                                         CallbackInfoReturnable<List<Component>> cir) {
+                ZeaConfig config = ZeaClient.config();
+                if (config != null && config.hideServerItemMetaEnabled()) {
+                        net.zaminmc.zea.misc.ServerItemMeta.filter(cir.getReturnValue());
+                }
                 List<Component> lines = RarityTooltipEditor.edit(cir.getReturnValue(), stack);
                 SlotLocks locks = ZeaClient.slotLocks();
                 if (locks != null && hoveredSlot != null && hoveredSlot.getItem() == stack) {

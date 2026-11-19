@@ -716,6 +716,15 @@ public final class ZeaConfig extends Config {
                 @ConfigEditorBoolean
                 @ConfigOrder(1)
                 public boolean scrollableTooltips = true;
+
+                @ConfigOption(name = "Hide server item meta", desc = "Hide the server's Historical "
+                                + "information block on forged items — the Forged by, Origin and Date "
+                                + "lines. Every line of the record is recognized by its exact text or "
+                                + "prefix and removed; a tooltip without the block is untouched line "
+                                + "for line.")
+                @ConfigEditorBoolean
+                @ConfigOrder(2)
+                public boolean hideServerItemMeta = true;
         }
 
         private int configVersion = CURRENT_VERSION;
@@ -1154,6 +1163,11 @@ public final class ZeaConfig extends Config {
         /** Whether maximum-level enchantments carry the chroma animation. */
         public boolean rarityChromaEnabled() {
                 return rarityEnabled() && rarity.enchantmentDisplay.chroma;
+        }
+
+        /** Whether forged items' Historical information block is hidden. */
+        public boolean hideServerItemMetaEnabled() {
+                return miscellaneous != null && miscellaneous.hideServerItemMeta;
         }
 
         /** Whether overflowing tooltips scroll with the mouse wheel. */
