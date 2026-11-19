@@ -10,66 +10,62 @@ import net.zaminmc.zea.map.model.MapWorld;
  *
  * <h2>The surface family</h2>
  *
- * <p>A world point {@code (x, z)} has fixed geographic coordinates,
- * defined once per world from its verified extent (Minecraft north is
- * −z, so latitude is positive northward):
+ * <p>At curvature {@code t} the camera-centered world offset
+ * {@code (x − centerX, z − centerZ)} maps to geographic angles:
  *
  * <pre>
- *   lon = (x / halfWidth)  · π      — ±π at the west/east border
- *   lat = (−z / halfHeight) · π/2   — +π/2 at the north border
+ *   lon = ((x − centerX) / halfWidth)  · π      — ±π across the world
+ *   lat = (−(z − centerZ) / halfHeight) · π/2   — +π/2 north of center
  * </pre>
  *
- * <p>The surface wraps that geographic rectangle onto a sphere whose
- * angular span grows with the curvature while its radius shrinks. At
- * curvature {@code t} the longitude half-span is {@code Ω(t) = π·t}, the
- * latitude half-span is {@code Φ(t) = π/2·t}, and the surface radius is
- * {@code R(t) = R_globe / t} in GUI pixels. A point's screen offset from
- * the globe's center is the orthographic projection of its sphere point
- * (north pole up, longitude 0 toward the viewer):
+ * <p>(Minecraft north is −z, so latitude is positive northward.) Those
+ * angles wrap onto a sphere of radius {@code R(t) = R_globe / t} in GUI
+ * pixels — the angular span grows with {@code t} while the radius
+ * shrinks, and the orthographic projection (north pole up, the camera's
+ * own position at the sphere's front) gives the screen offset:
  *
  * <pre>
  *   X = R·cos(lat)·sin(lon)      sx = X
  *   Y = R·sin(lat)               sy = −Y
- *   Z = R·cos(lat)·cos(lon)      (depth, for limb culling)
+ *   Z = R·cos(lat)·cos(lon)      (depth: positive = front hemisphere)
  * </pre>
  *
  * <p>Continuity is exact, not fitted. As {@code t → 0}, {@code R → ∞}
  * while the angular span vanishes at the same rate, and the offset tends
- * to the linear flat map
- * {@code sx ≈ x · π·R_globe / halfWidth} — a plane. At {@code t = 1} the
- * spans close the full sphere: the map's west/east borders meet at the
- * antimeridian and the borders lie on the far side, culled by depth.
- * Between the two the surface curves like a page curling into a ball —
- * EarthMC's own zoom-out behaves the same way.
+ * to the linear flat map {@code sx ≈ (x − centerX) · π·R_globe/halfWidth}
+ * — the plane the flat path already renders, to the last bit ({@link
+ * #flatScale}). At {@code t = 1} the spans close the full sphere: the
+ * world's west/east borders meet at the antimeridian (behind the
+ * viewer, culled by depth) and the poles seal. Between the two the
+ * surface curves like a page curling into a ball.
+ *
+ * <h2>The latitude glide</h2>
+ *
+ * <p>The family wraps {@code lat ∈ [−π/2, +π/2]} at full curvature only
+ * when the camera sits on the equator; a camera parked near a world edge
+ * would push the plate past the pole and fold the sphere over itself.
+ * The effective camera center therefore glides toward the equator as
+ * {@code t → 1}, inside the band {@code |centerZ| ≤ halfHeight·(1−t)/t}
+ * — continuous, and the stored camera never moves, so zooming back in
+ * restores the exact flat position. Longitude needs no glide: the plate
+ * spans exactly {@code 2π} at any {@code centerX}, so panning keeps
+ * spinning the finished globe.
  *
  * <h2>Scale phases</h2>
  *
  * <p>The camera stays the single zoom scalar ({@code pixelsPerBlock});
  * the curvature is derived from it, so the transition rides the existing
- * wheel zoom:
- *
- * <ol>
- * <li><b>Flat</b> — {@code ppb ≥ fit}: the ordinary flat map, exact and
- *     unchanged; the whole world fits at {@code ppb = fit}.</li>
- * <li><b>Transition</b> — zooming out below the fit point bends the
- *     surface: {@code t} climbs from 0 to 1 over {@link #PHASE_SPAN}
- *     e-foldings of zoom-out. The apparent size stays near-constant while
- *     the map curls.</li>
- * <li><b>Globe</b> — {@code t = 1}: further zoom-out shrinks the globe's
- *     apparent radius by the same e-fold factor. The globe is a real
- *     sphere: its far side culls, its poles close, its antimeridian
- *     seals.</li>
- * </ol>
- *
- * <p>Reversing the zoom retraces the same phases with no hysteresis
- * needed: every value here is a pure function of {@code ppb}, so the
- * surface cannot oscillate at the threshold.
+ * wheel zoom: flat while {@code ppb ≥ fit}; the curl across {@link
+ * #PHASE_SPAN} e-foldings below the fit point; then the finished globe
+ * recedes by the remaining zoom-out. Every value is a pure function of
+ * {@code ppb}, so reversing the zoom retraces the same path with no
+ * hysteresis.
  *
  * <p>Pure type: no Minecraft classes, everything pinned by tests. The
- * clamped curvature used by the math is deliberately distinct from the
- * raw phase value callers use for decisions (which renderer path, limb
- * culling) — a raw phase of 0 means "definitely flat" even though the
- * math path clamps its own copy to a floor to keep the radius finite.
+ * clamped curvature the math uses is deliberately distinct from the raw
+ * phase callers branch on — a raw phase of 0 means "definitely flat"
+ * even though the math clamps its own copy to a floor to keep the
+ * radius finite.
  */
 public final class GlobeTransition {
 
@@ -152,12 +148,15 @@ public final class GlobeTransition {
         }
 
         /**
-         * One point of the family. The curvature is clamped to the math
-         * floor inside; callers that branch on flatness use their raw
-         * phase, never this method's internals.
+         * One point of the family, relative to the camera's center. The
+         * curvature is clamped to the math floor inside; callers that
+         * branch on flatness use their raw phase, never this method's
+         * internals.
          *
          * @param worldX    world X in blocks
          * @param worldZ    world Z in blocks
+         * @param centerX   the camera's center X (faces the viewer)
+         * @param centerZ   the camera's center Z, glided toward the equator
          * @param curvature raw transition phase in [0, 1]
          * @param radius    the globe radius in GUI pixels (at full curvature)
          * @param halfWidthBlocks  the world's half width in blocks
@@ -166,11 +165,14 @@ public final class GlobeTransition {
          *         {@code y()} down, {@code z()} the orthographic depth
          *         (positive = front hemisphere)
          */
-        public static SpherePoint project(double worldX, double worldZ, double curvature,
-                        double radius, double halfWidthBlocks, double halfHeightBlocks) {
+        public static SpherePoint project(double worldX, double worldZ,
+                        double centerX, double centerZ,
+                        double curvature, double radius,
+                        double halfWidthBlocks, double halfHeightBlocks) {
                 double t = Math.clamp(curvature, CURVATURE_EPSILON, 1.0);
-                double lon = (worldX / halfWidthBlocks) * Math.PI * t;
-                double lat = (-worldZ / halfHeightBlocks) * Math.PI / 2.0 * t;
+                double lon = ((worldX - centerX) / halfWidthBlocks) * Math.PI * t;
+                double lat = (-(worldZ - glidedCenterZ(centerZ, t, halfHeightBlocks))
+                                                / halfHeightBlocks) * Math.PI / 2.0 * t;
                 double r = radius / t;
                 double cosLat = Math.cos(lat);
                 return new SpherePoint(
@@ -185,12 +187,25 @@ public final class GlobeTransition {
         }
 
         /**
-         * Inverse for the front hemisphere: a screen offset from the
-         * globe's center back to geographic angles. Returns {@code null}
-         * when the offset lies off the sphere — nothing to pick there.
+         * The latitude glide: the camera's effective center Z, clamped so
+         * the plate's latitude span stays inside the sphere at curvature
+         * {@code t}. At {@code t = 1} the band closes on the equator; at
+         * small {@code t} it admits any stored position.
          */
-        public static SphereAngle unproject(double screenX, double screenY, double curvature,
-                        double radius, double halfWidthBlocks, double halfHeightBlocks) {
+        public static double glidedCenterZ(double centerZ, double t, double halfHeightBlocks) {
+                double band = halfHeightBlocks * (1.0 - t) / t;
+                return Math.clamp(centerZ, -band, band);
+        }
+
+        /**
+         * Inverse for the front hemisphere: a screen offset from the
+         * globe's center back to world blocks. Returns {@code null} when
+         * the offset lies off the sphere — nothing to pick there.
+         */
+        public static SphereAngle unproject(double screenX, double screenY,
+                        double centerX, double centerZ,
+                        double curvature, double radius,
+                        double halfWidthBlocks, double halfHeightBlocks) {
                 double t = Math.clamp(curvature, CURVATURE_EPSILON, 1.0);
                 double r = radius / t;
                 double rho2 = screenX * screenX + screenY * screenY;
@@ -202,8 +217,10 @@ public final class GlobeTransition {
                 // X = r·cosLat·sin(lon), Z = r·cosLat·cos(lon).
                 double lon = Math.atan2(screenX, cosLat * r);
                 double lat = Math.asin(Math.clamp(-screenY / r, -1.0, 1.0));
-                return new SphereAngle(lon / (Math.PI * t) * halfWidthBlocks,
-                                                -lat / (Math.PI / 2.0 * t) * halfHeightBlocks);
+                double glided = glidedCenterZ(centerZ, t, halfHeightBlocks);
+                return new SphereAngle(
+                                                centerX + lon / (Math.PI * t) * halfWidthBlocks,
+                                                glided - lat / (Math.PI / 2.0 * t) * halfHeightBlocks);
         }
 
         /**

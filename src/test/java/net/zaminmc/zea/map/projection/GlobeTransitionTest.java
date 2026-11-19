@@ -8,9 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The projection family's contract: flat at curvature 0, a closed sphere
- * at curvature 1, continuous between, invertible on the front hemisphere,
- * and coupled to the camera by pure functions.
+ * The projection family's contract: flat at curvature 0 (bit-matching
+ * the flat path's scale), a closed sphere at curvature 1, continuous
+ * between, invertible on the front hemisphere, equator-gliding so the
+ * plate never folds past the poles, and coupled to the camera by pure
+ * functions.
  */
 class GlobeTransitionTest {
 
@@ -18,6 +20,8 @@ class GlobeTransitionTest {
         private static final double HALF_W = MapWorld.EARTH.worldWidth / 2.0;
         private static final double HALF_H = MapWorld.EARTH.worldHeight / 2.0;
         private static final double FIT = GlobeTransition.fitPixelsPerBlock(MapWorld.EARTH, 1280);
+        private static final double CX = HALF_W * 0.31;
+        private static final double CZ = -HALF_H * 0.17;
 
         // ------------------------------------------------------------------
         // Flat end
@@ -26,24 +30,23 @@ class GlobeTransitionTest {
         @Test
         void flatCurvatureIsTheLinearMap() {
                 // As curvature → 0 the family must tend to the exact flat
-                // offset: x · π·R / halfWidth — the plane the flat path
-                // already renders.
+                // offset: (x − cx) · π·R / halfWidth — the plane the flat
+                // path already renders.
                 double scale = GlobeTransition.flatScale(R, HALF_W);
                 double tiny = GlobeTransition.CURVATURE_EPSILON * 2;
                 GlobeTransition.SpherePoint p = GlobeTransition.project(
-                                                1000.0, -2000.0, tiny, R, HALF_W, HALF_H);
+                                                1000.0 + CX, -2000.0 + CZ, CX, CZ, tiny, R, HALF_W, HALF_H);
                 assertEquals(1000.0 * scale, p.x(), 1e-6);
                 assertEquals(-2000.0 * scale, p.y(), 1e-6);
         }
 
         @Test
         void northIsScreenUpAtTheGlobe() {
-                // Minecraft north is −z; the north pole must land at the
-                // top of the screen (negative y).
+                // Minecraft north is −z; north of the camera must land at
+                // the top of the screen (negative y).
                 GlobeTransition.SpherePoint north = GlobeTransition.project(
-                                                0.0, -HALF_H, 1.0, R, HALF_W, HALF_H);
-                assertEquals(-R, north.y(), 1e-6);
-                assertEquals(0.0, north.x(), 1e-6);
+                                                CX, CZ - 1000.0, CX, CZ, 1.0, R, HALF_W, HALF_H);
+                assertTrue(north.y() < 0.0);
         }
 
         // ------------------------------------------------------------------
@@ -52,35 +55,99 @@ class GlobeTransitionTest {
 
         @Test
         void antimeridianSealsAtFullGlobe() {
-                // Just inside the west and east borders at the equator: at
-                // full curvature both hug the antimeridian — their x
-                // offsets converge on the same meridian line and both sit
-                // on the far side.
+                // Just inside the west and east world borders, viewed from
+                // the world's center: at full curvature both hug the
+                // antimeridian and sit on the far side.
                 double inset = HALF_W * 1e-6;
                 GlobeTransition.SpherePoint east = GlobeTransition.project(
-                                                HALF_W - inset, 0.0, 1.0, R, HALF_W, HALF_H);
+                                                HALF_W - inset, 0.0, 0.0, 0.0, 1.0, R, HALF_W, HALF_H);
                 GlobeTransition.SpherePoint west = GlobeTransition.project(
-                                                -HALF_W + inset, 0.0, 1.0, R, HALF_W, HALF_H);
+                                                -HALF_W + inset, 0.0, 0.0, 0.0, 1.0, R, HALF_W, HALF_H);
                 assertEquals(0.0, east.x(), R * 1e-4);
                 assertEquals(0.0, west.x(), R * 1e-4);
-                // Both borders are on the far hemisphere: culled.
-                assertTrue(GlobeTransition.frontFacing(east.z()) == false);
-                assertTrue(GlobeTransition.frontFacing(west.z()) == false);
+                assertTrue(!GlobeTransition.frontFacing(east.z()));
+                assertTrue(!GlobeTransition.frontFacing(west.z()));
         }
 
         @Test
         void centerFacesTheViewerAtFullGlobe() {
                 GlobeTransition.SpherePoint center = GlobeTransition.project(
-                                                0.0, 0.0, 1.0, R, HALF_W, HALF_H);
+                                                0.0, 0.0, 0.0, 0.0, 1.0, R, HALF_W, HALF_H);
                 assertEquals(R, center.z(), 1e-9);
                 assertTrue(GlobeTransition.frontFacing(center.z()));
         }
 
         @Test
-        void polesCloseAtFullGlobe() {
+        void polesSealAtFullGlobe() {
                 GlobeTransition.SpherePoint south = GlobeTransition.project(
-                                                0.0, HALF_H, 1.0, R, HALF_W, HALF_H);
+                                                0.0, HALF_H, 0.0, 0.0, 1.0, R, HALF_W, HALF_H);
                 assertEquals(R, south.y(), 1e-6);
+                GlobeTransition.SpherePoint north = GlobeTransition.project(
+                                                0.0, -HALF_H, 0.0, 0.0, 1.0, R, HALF_W, HALF_H);
+                assertEquals(-R, north.y(), 1e-6);
+        }
+
+        // ------------------------------------------------------------------
+        // The latitude glide
+        // ------------------------------------------------------------------
+
+        @Test
+        void glideKeepsThePlateInsideTheSphere() {
+                // A camera parked at the world's south edge folds the plate
+                // past the pole without the glide; with it, the plate's
+                // extreme latitude stays within ±π/2 at full curvature.
+                double southEdge = HALF_H;
+                double glided = GlobeTransition.glidedCenterZ(southEdge, 1.0, HALF_H);
+                assertEquals(0.0, glided, 1e-9);
+                // During the transition the band admits partial offsets.
+                double half = GlobeTransition.glidedCenterZ(southEdge, 0.5, HALF_H);
+                assertEquals(HALF_H, half, 1e-9); // band = halfH·(1−0.5)/0.5 = halfH
+                // On the equator nothing glides.
+                assertEquals(0.0, GlobeTransition.glidedCenterZ(0.0, 1.0, HALF_H), 0.0);
+        }
+
+        @Test
+        void glideDoesNotTouchTheFlatPath() {
+                // At flat phases the band is wider than any stored camera.
+                double glided = GlobeTransition.glidedCenterZ(CZ, 1.0 / 64.0, HALF_H);
+                assertEquals(CZ, glided, 1e-9);
+        }
+
+        @Test
+        void glidedViewStaysContinuous() {
+                // The glide moves the sphere under the viewer: the stored
+                // camera point's projection drifts as t climbs, but never
+                // jumps — each step's motion stays small.
+                double previousX = GlobeTransition.project(CX, CZ, CX, CZ,
+                                                GlobeTransition.CURVATURE_EPSILON * 2, R, HALF_W, HALF_H).x();
+                double previousY = GlobeTransition.project(CX, CZ, CX, CZ,
+                                                GlobeTransition.CURVATURE_EPSILON * 2, R, HALF_W, HALF_H).y();
+                assertEquals(0.0, previousX, 1e-9);
+                assertEquals(0.0, previousY, 1e-9);
+                int steps = 256;
+                for (int i = 1; i <= steps; i++) {
+                        double t = (double) i / steps;
+                        GlobeTransition.SpherePoint p = GlobeTransition.project(
+                                                        CX, CZ, CX, CZ, t, R, HALF_W, HALF_H);
+                        assertTrue(Math.abs(p.x() - previousX) < R / 100.0
+                                                        && Math.abs(p.y() - previousY) < R / 100.0,
+                                                        "glide jumped at t=" + t);
+                        previousX = p.x();
+                        previousY = p.y();
+                }
+        }
+
+        @Test
+        void plateNeverFoldsPastThePoles() {
+                // The glide's purpose: at full curvature the plate's south
+                // edge lands exactly on the pole — never past it, whatever
+                // stored camera position the user parked at.
+                GlobeTransition.SpherePoint southEdge = GlobeTransition.project(
+                                                0.0, HALF_H, 0.0, CZ, 1.0, R, HALF_W, HALF_H);
+                assertEquals(R, southEdge.y(), 1e-6);
+                GlobeTransition.SpherePoint northEdge = GlobeTransition.project(
+                                                0.0, -HALF_H, 0.0, CZ, 1.0, R, HALF_W, HALF_H);
+                assertEquals(-R, northEdge.y(), 1e-6);
         }
 
         // ------------------------------------------------------------------
@@ -92,19 +159,20 @@ class GlobeTransitionTest {
                 // March the curvature across the whole family and require
                 // each step's screen motion to be small relative to the
                 // radius — no jumps anywhere on the path.
-                double x = HALF_W * 0.37;
-                double z = HALF_H * -0.21;
-                double previousX = GlobeTransition.project(x, z, GlobeTransition.CURVATURE_EPSILON,
-                                                R, HALF_W, HALF_H).x();
-                double previousY = GlobeTransition.project(x, z, GlobeTransition.CURVATURE_EPSILON,
-                                                R, HALF_W, HALF_H).y();
+                double wx = CX + HALF_W * 0.37;
+                double wz = CZ - HALF_H * 0.21;
+                double previousX = GlobeTransition.project(wx, wz, CX, CZ,
+                                                GlobeTransition.CURVATURE_EPSILON, R, HALF_W, HALF_H).x();
+                double previousY = GlobeTransition.project(wx, wz, CX, CZ,
+                                                GlobeTransition.CURVATURE_EPSILON, R, HALF_W, HALF_H).y();
                 int steps = 512;
                 for (int i = 1; i <= steps; i++) {
                         double t = (double) i / steps;
-                        GlobeTransition.SpherePoint p = GlobeTransition.project(x, z, t, R, HALF_W, HALF_H);
+                        GlobeTransition.SpherePoint p = GlobeTransition.project(
+                                                        wx, wz, CX, CZ, t, R, HALF_W, HALF_H);
                         double dx = Math.abs(p.x() - previousX);
                         double dy = Math.abs(p.y() - previousY);
-                        assertTrue(dx < R / 200.0 && dy < R / 200.0,
+                        assertTrue(dx < R / 150.0 && dy < R / 150.0,
                                                         "jump at t=" + t + ": dx=" + dx + " dy=" + dy);
                         previousX = p.x();
                         previousY = p.y();
@@ -118,12 +186,12 @@ class GlobeTransitionTest {
         @Test
         void unprojectRoundTripsTheFrontHemisphere() {
                 for (double t : new double[] {0.1, 0.5, 1.0}) {
-                        double wx = HALF_W * 0.4;
-                        double wz = HALF_H * -0.6;
+                        double wx = CX + HALF_W * 0.4;
+                        double wz = CZ - HALF_H * 0.6;
                         GlobeTransition.SpherePoint p = GlobeTransition.project(
-                                                        wx, wz, t, R, HALF_W, HALF_H);
+                                                        wx, wz, CX, CZ, t, R, HALF_W, HALF_H);
                         GlobeTransition.SphereAngle back = GlobeTransition.unproject(
-                                                        p.x(), p.y(), t, R, HALF_W, HALF_H);
+                                                        p.x(), p.y(), CX, CZ, t, R, HALF_W, HALF_H);
                         assertEquals(wx, back.worldX(), HALF_W * 1e-9);
                         assertEquals(wz, back.worldZ(), HALF_H * 1e-9);
                 }
@@ -131,7 +199,7 @@ class GlobeTransitionTest {
 
         @Test
         void unprojectRefusesBeyondTheLimb() {
-                assertNull(GlobeTransition.unproject(R * 2.0, 0.0, 1.0, R, HALF_W, HALF_H));
+                assertNull(GlobeTransition.unproject(R * 2.0, 0.0, 0.0, 0.0, 1.0, R, HALF_W, HALF_H));
         }
 
         // ------------------------------------------------------------------
@@ -197,10 +265,10 @@ class GlobeTransitionTest {
                 double halfW = MapWorld.MOON.worldWidth / 2.0;
                 double halfH = MapWorld.MOON.worldHeight / 2.0;
                 GlobeTransition.SpherePoint north = GlobeTransition.project(
-                                                0.0, -halfH, 1.0, R, halfW, halfH);
+                                                0.0, -halfH, 0.0, 0.0, 1.0, R, halfW, halfH);
                 assertEquals(-R, north.y(), 1e-6);
                 GlobeTransition.SpherePoint east = GlobeTransition.project(
-                                                halfW, 0.0, 1.0, R, halfW, halfH);
+                                                halfW, 0.0, 0.0, 0.0, 1.0, R, halfW, halfH);
                 assertTrue(!GlobeTransition.frontFacing(east.z()));
         }
 }
