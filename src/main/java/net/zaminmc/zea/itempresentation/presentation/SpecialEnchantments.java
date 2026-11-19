@@ -41,8 +41,9 @@ import java.util.Optional;
  * <p>Every candidate carries one of three states:
  *
  * <ul>
- *   <li>{@code APPLIED} — the enchantment is on the item; its symbol
- *       shows in the rarity color its applied level maps to.</li>
+ *   <li>{@code APPLIED} — the enchantment is on the item; its glyph
+ *       wears its own meaningful color and its brackets the rarity
+ *       color its applied level maps to.</li>
  *   <li>{@code MISSING} — the item supports it, nothing conflicts, and
  *       the enchantment is absent; its symbol shows in neutral gray —
  *       a potential upgrade, never a defect.</li>
@@ -52,16 +53,31 @@ import java.util.Optional;
  *       siblings); its symbol does not show at all.</li>
  * </ul>
  *
- * <p><b>Colors.</b> There is no enchantment palette. An applied
- * indicator reuses {@link ItemRarity}'s existing hierarchy — the same
+ * <p><b>Colors.</b> Every part carries a deliberate color. The
+ * <em>brackets</em> are the progression signal: an applied indicator's
+ * brackets reuse {@link ItemRarity}'s existing hierarchy — the same
  * tiers and RGB values the rarity footer and the tier ladder already
  * show — through one general rule: the maximum legitimate level always
  * maps to Legendary gold, the lowest level to Common, and the levels
  * between spread proportionally across the tiers in between (nearest
  * tier, halves up). A single-level enchantment's only level is its
- * maximum, so it shows gold. The spec's own example — Unbreaking,
- * maximum III — lands on Common, Epic, Legendary, exactly what the
- * rule produces. Missing indicators take the legacy neutral gray.
+ * maximum, so its brackets show gold. The spec's own example —
+ * Unbreaking, maximum III — lands on Common, Epic, Legendary, exactly
+ * what the rule produces. Missing indicators take the legacy neutral
+ * gray.
+ *
+ * <p>The <em>glyph</em> never borrows the rarity color: every registry
+ * entry carries its own meaningful color, chosen for what the
+ * enchantment does — Unbreaking's shield wears shield blue, Mending's
+ * recycle loops XP green, Fire Aspect burns flame red, Riptide dives
+ * tide aqua, Frost Walker freezes ice pale. The colors are fixed
+ * constants, not a generated palette, and each item class's profile
+ * row keeps its members visually distinct (the bow row's violet, green,
+ * blue, ember and amber never collide). A missing glyph stays gray so
+ * the applied/missing distinction survives — the meaningful color is
+ * what the enchantment <em>is</em>, the gray is the upgrade it could
+ * still become. An indicator whose registry path is unknown to this
+ * build falls back to the legacy single-color rendering.
  *
  * <p>Applicability and conflicts come from the game's own enchantment
  * definitions — {@link Enchantment#isSupportedItem} and {@link
@@ -113,30 +129,48 @@ public final class SpecialEnchantments {
 
         private static Map<String, Entry> buildRegistry() {
                 Map<String, Entry> registry = new LinkedHashMap<>();
-                register(registry, "infinity", "∞", FontSource.VANILLA, "Arrows are not consumed");
-                register(registry, "mending", "♻", FontSource.ZEA, "Repairs with gathered XP");
-                register(registry, "silk_touch", "🔮", FontSource.ZEA, "Blocks drop themselves");
-                register(registry, "unbreaking", "🛡", FontSource.VANILLA, "Durability loss often avoided");
-                register(registry, "fire_aspect", "🔥", FontSource.VANILLA, "Sets targets on fire");
-                register(registry, "punch", "🏹", FontSource.VANILLA, "Arrows knock targets back");
-                register(registry, "knockback", "☄", FontSource.VANILLA, "Melee hits knock targets back");
-                register(registry, "flame", "💥", FontSource.ZEA, "Arrows set targets on fire");
-                register(registry, "channeling", "⚡", FontSource.VANILLA, "Summons lightning in storms");
-                register(registry, "riptide", "🔱", FontSource.VANILLA, "Launches you with the trident");
-                register(registry, "multishot", "🔱", FontSource.VANILLA, "Fires three arrows at once");
-                register(registry, "piercing", "🎯", FontSource.ZEA, "Arrows pierce through entities");
-                register(registry, "wind_burst", "💨", FontSource.ZEA, "Launches you on smash hit");
-                register(registry, "aqua_affinity", "⚓", FontSource.VANILLA, "Full mining speed underwater");
-                register(registry, "respiration", "🫧", FontSource.ZEA, "Longer underwater breathing");
-                register(registry, "soul_speed", "🏃", FontSource.ZEA, "Speeds you up on soul blocks");
-                register(registry, "swift_sneak", "👣", FontSource.ZEA, "Faster sneaking");
-                register(registry, "frost_walker", "❄", FontSource.VANILLA, "Freezes water underfoot");
+                register(registry, "infinity", "∞", FontSource.VANILLA, "Arrows are not consumed",
+                                0xAA55FF, "violet — the unending quiver");
+                register(registry, "mending", "♻", FontSource.ZEA, "Repairs with gathered XP",
+                                0x55FF55, "XP green");
+                register(registry, "silk_touch", "🔮", FontSource.ZEA, "Blocks drop themselves",
+                                0xFF55FF, "arcane magenta");
+                register(registry, "unbreaking", "🛡", FontSource.VANILLA, "Durability loss often avoided",
+                                0x5555FF, "shield blue");
+                register(registry, "fire_aspect", "🔥", FontSource.VANILLA, "Sets targets on fire",
+                                0xFF5555, "flame red");
+                register(registry, "punch", "🏹", FontSource.VANILLA, "Arrows knock targets back",
+                                0xFFAA55, "bowstring amber");
+                register(registry, "knockback", "☄", FontSource.VANILLA, "Melee hits knock targets back",
+                                0xFFFF55, "impact yellow");
+                register(registry, "flame", "💥", FontSource.ZEA, "Arrows set targets on fire",
+                                0xFF6633, "ember orange");
+                register(registry, "channeling", "⚡", FontSource.VANILLA, "Summons lightning in storms",
+                                0xCCDDFF, "storm pale");
+                register(registry, "riptide", "🔱", FontSource.VANILLA, "Launches you with the trident",
+                                0x55FFFF, "tide aqua");
+                register(registry, "multishot", "🔱", FontSource.VANILLA, "Fires three arrows at once",
+                                0x66BFFF, "spread sky blue");
+                register(registry, "piercing", "🎯", FontSource.ZEA, "Arrows pierce through entities",
+                                0xCC5555, "bolt crimson");
+                register(registry, "wind_burst", "💨", FontSource.ZEA, "Launches you on smash hit",
+                                0xEEEEEE, "gust white");
+                register(registry, "aqua_affinity", "⚓", FontSource.VANILLA, "Full mining speed underwater",
+                                0x5599CC, "harbor steel blue");
+                register(registry, "respiration", "🫧", FontSource.ZEA, "Longer underwater breathing",
+                                0x7FDBDB, "bubble cyan");
+                register(registry, "soul_speed", "🏃", FontSource.ZEA, "Speeds you up on soul blocks",
+                                0x40D0C0, "soul teal");
+                register(registry, "swift_sneak", "👣", FontSource.ZEA, "Faster sneaking",
+                                0x8877AA, "shadow violet");
+                register(registry, "frost_walker", "❄", FontSource.VANILLA, "Freezes water underfoot",
+                                0x99DDFF, "ice pale blue");
                 return Map.copyOf(registry);
         }
 
         private static void register(Map<String, Entry> registry, String path, String symbol,
-                        FontSource font, String effect) {
-                registry.put(path, new Entry(path, symbol, font, effect));
+                        FontSource font, String effect, int glyphColor, String colorName) {
+                registry.put(path, new Entry(path, symbol, font, effect, glyphColor, colorName));
         }
 
         /**
@@ -159,7 +193,9 @@ public final class SpecialEnchantments {
                 return entry == null ? null : entry.font();
         }
 
-        private record Entry(String path, String symbol, FontSource font, String effect) {
+        /** The registry's entry: symbol, font, effect summary and the glyph's own color. */
+        private record Entry(String path, String symbol, FontSource font, String effect,
+                        int glyphColor, String colorName) {
         }
 
         /** One indicator's computed state and presentation data. */
@@ -318,22 +354,44 @@ public final class SpecialEnchantments {
         }
 
         /**
-         * One indicator as {@code [symbol]}: brackets and symbol in one
-         * color, the symbol in the font that has its glyph, and the
-         * hover text on the whole part so it works on the brackets too.
+         * The glyph color registered for {@code path}, or {@code null}
+         * when the path is outside the registry — the test seam for the
+         * meaningful-color rule.
+         */
+        static Integer glyphColorOf(String path) {
+                Entry entry = REGISTRY.get(path);
+                return entry == null ? null : entry.glyphColor();
+        }
+
+        /**
+         * One indicator as {@code [symbol]}: the brackets carry the
+         * progression color — the level's rarity tier for an applied
+         * indicator, the legacy neutral gray for a missing one — while
+         * the glyph wears its own meaningful color, the one its registry
+         * entry pins (shield blue for Unbreaking, XP green for Mending).
+         * A missing glyph stays gray so the applied/missing distinction
+         * reads in color, not only in hover text; a path unknown to this
+         * build falls back to the legacy single-color rendering. The
+         * symbol renders in the font that has its glyph, and the hover
+         * text sits on the whole part so it works on the brackets too.
          */
         private static MutableComponent bracketed(Indicator indicator) {
-                TextColor color = indicator.state() == State.APPLIED
+                boolean applied = indicator.state() == State.APPLIED;
+                TextColor bracketColor = applied
                                 ? TextColor.fromRgb(tierFor(indicator.level(), indicator.maxLevel()).rgb())
                                 : TextColor.fromLegacyFormat(ChatFormatting.GRAY);
+                Integer glyph = glyphColorOf(indicator.path());
+                TextColor glyphColor = applied
+                                ? (glyph == null ? bracketColor : TextColor.fromRgb(glyph))
+                                : TextColor.fromLegacyFormat(ChatFormatting.GRAY);
                 MutableComponent part = Component.empty();
-                part.append(Component.literal("[").withColor(color));
-                MutableComponent glyph = Component.literal(indicator.symbol()).withColor(color);
+                part.append(Component.literal("[").withColor(bracketColor));
+                MutableComponent glyphPiece = Component.literal(indicator.symbol()).withColor(glyphColor);
                 if (fontOf(indicator.path()) == FontSource.ZEA) {
-                        glyph.withStyle(style -> style.withFont(FONT));
+                        glyphPiece.withStyle(style -> style.withFont(FONT));
                 }
-                part.append(glyph);
-                part.append(Component.literal("]").withColor(color));
+                part.append(glyphPiece);
+                part.append(Component.literal("]").withColor(bracketColor));
                 part.withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(
                                 Component.literal(hoverText(indicator)))));
                 return part;

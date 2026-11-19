@@ -273,11 +273,14 @@ class SpecialEnchantmentsTest {
 	}
 
 	/**
-	 * An applied Unbreaking III is gold on every part — brackets,
-	 * symbol, brackets — and the gold is the rarity system's own.
+	 * An applied Unbreaking III renders with the color split the
+	 * registry pins: the brackets take the level's rarity tier gold,
+	 * the shield glyph wears its own shield blue — never the rarity
+	 * color, which would paint every symbol the same and wash the
+	 * meaning out of the row.
 	 */
 	@Test
-	void appliedMaximumLevelIsLegendaryGoldOnAllParts() {
+	void appliedMaximumLevelKeepsTierBracketsAndItsOwnGlyphColor() {
 		Component row = SpecialEnchantments.row(List.of(
 				new SpecialEnchantments.Indicator("unbreaking", "🛡", "Unbreaking III", 3, 3,
 						SpecialEnchantments.State.APPLIED, "Durability loss often avoided"))).get(0);
@@ -285,22 +288,42 @@ class SpecialEnchantmentsTest {
 		assertEquals("[", part.getSiblings().get(0).getString());
 		assertEquals("🛡", part.getSiblings().get(1).getString());
 		assertEquals("]", part.getSiblings().get(2).getString());
-		for (Component piece : part.getSiblings()) {
-			assertEquals(TextColor.fromRgb(ItemRarity.LEGENDARY.rgb()),
-					piece.getStyle().getColor());
-		}
+		assertEquals(TextColor.fromRgb(ItemRarity.LEGENDARY.rgb()),
+				part.getSiblings().get(0).getStyle().getColor());
+		assertEquals(TextColor.fromRgb(ItemRarity.LEGENDARY.rgb()),
+				part.getSiblings().get(2).getStyle().getColor());
+		assertEquals(TextColor.fromRgb(0x5555FF),
+				part.getSiblings().get(1).getStyle().getColor(),
+				"the unbreaking shield glyph wears shield blue");
 	}
 
-	/** Lower applied levels take progressively lower tiers — Unbreaking II is Epic purple. */
+	/** Lower applied levels take progressively lower bracket tiers — Unbreaking II is Epic purple. */
 	@Test
 	void appliedIntermediateLevelTakesItsTierColor() {
 		Component row = SpecialEnchantments.row(List.of(
 				new SpecialEnchantments.Indicator("unbreaking", "🛡", "Unbreaking II", 2, 3,
 						SpecialEnchantments.State.APPLIED, "Durability loss often avoided"))).get(0);
-		for (Component piece : row.getSiblings().get(0).getSiblings()) {
-			assertEquals(TextColor.fromRgb(ItemRarity.EPIC.rgb()),
-					piece.getStyle().getColor());
+		assertEquals(TextColor.fromRgb(ItemRarity.EPIC.rgb()),
+				row.getSiblings().get(0).getSiblings().get(0).getStyle().getColor(),
+				"the brackets follow the level's tier");
+		assertEquals(TextColor.fromRgb(0x5555FF),
+				row.getSiblings().get(0).getSiblings().get(1).getStyle().getColor(),
+				"the glyph's meaningful color does not move with the tier");
+	}
+
+	/** The registry pins a distinct meaningful color for every entry. */
+	@Test
+	void everyRegistryGlyphHasItsOwnColor() {
+		for (String path : new String[] {
+				"infinity", "mending", "silk_touch", "unbreaking", "fire_aspect", "punch",
+				"knockback", "flame", "channeling", "riptide", "multishot", "piercing",
+				"wind_burst", "aqua_affinity", "respiration", "soul_speed", "swift_sneak",
+				"frost_walker"}) {
+			assertNotNull(SpecialEnchantments.glyphColorOf(path), path + " carries a glyph color");
+			assertNotNull(SpecialEnchantments.symbolOf(path), path + " carries a symbol");
 		}
+		assertEquals(SpecialEnchantments.glyphColorOf("unbreaking"), Integer.valueOf(0x5555FF),
+				"the user's anchor: the unbreaking shield is blue");
 	}
 
 	/** Missing-but-applicable is the legacy neutral gray. */
