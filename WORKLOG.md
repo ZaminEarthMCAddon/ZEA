@@ -5048,3 +5048,50 @@ real NEU 2.6.0 client under the same conditions, and a side-by-side pane
 crop. Pixel receipts: tile pitch 40/40/40, plate colour exactly
 (100,100,100), nav extent 890–1217 vs NEU's 891–1239. Test suite green
 after the changes.
+
+## dev.88 — the browser's sort bar is NEU's, the pane sits under the GUI
+
+### 1. The panel background was ZEA's invention
+
+The "#1B1C28" look was `SLATE_WASH` (`0x8C3C4054`, slate blue at 55%)
+stacked on a weakened dark overlay — layers NEU never draws. Vanilla
+26.3's in-game screen gradient (`0xC0101010` → `0xD0101010`) is already
+NEU's panel color; the pane now adds only NEU's alpha-6 blue tint.
+
+### 2. The pane renders at extractContents head, the GUI wins clicks
+
+ZEA's browser extracted at the TAIL — after widgets, labels, slots,
+carried item and tooltip, so it drew on top of everything. It now
+extracts at the HEAD of `AbstractContainerScreen.extractContents`
+(26.3's pipeline), the exact NEU layering: the GUI's slots cover the
+pane where they overlap, and the search bar — a real widget — rides
+above it. Clicks and the wheel follow the same rule: a hovered slot
+wins, the browser takes the rest.
+
+### 3. The sort bar is NEU's three orders and five buckets
+
+The buy/sell direction filters are gone. The left group is NEU's three
+sort buttons — alphabetical, rarity (through `RarityEngine`, no stack
+resolution when the system is off), price — each cycling relevance →
+primary → opposite → relevance with NEU's green ascending / red
+descending arrow on the owning button only; relevance shows no arrow.
+The right group is the five category buckets: all, weapons and tools
+(NEU's own sort_weapon), armor (NEU's sort_armor), general goods and
+server items — the last two drawn in NEU's icon language
+(`gen_browser_icons.py`: a beacon with a glowing core, a computed
+circle globe), selected through the `earthmc` marker in the variant's
+own custom data. The market's variants land in buckets through the
+existing `ItemClassifier` — live shop items from the curated
+observations, not a recipe index.
+
+### Verification (real client, headless, xdotool-driven)
+
+`download/verify2/` + `download/verify3/`: the full interaction matrix
+against the seeded market (6 shops, 52 observations, every bucket
+populated) — the three alphabetical states (no arrow / green down /
+red up), rarity and price directions, the four category grids each
+showing only its bucket, "dia" search and the inline "2+2 = 4", and at
+container scale 3 the pane sitting under the inventory GUI with the
+search bar above it. 1446 unit tests green. Boot pipeline: Xvfb +
+SDL-forced EGL (user-space glvnd/Mesa extraction), direct java launch
+with `--quickPlaySingleplayer`, xdotool input.

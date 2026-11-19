@@ -26,26 +26,31 @@ SHADOW = (0x21, 0x20, 0x2C, 255)
 OUTLINE = (0x15, 0x15, 0x17, 255)
 BODY = (0x62, 0x62, 0x64, 255)
 ACCENT = (0x48, 0x48, 0x4A, 255)
-EYE = (0x9A, 0x9A, 0x9C, 255)
+LAND = (0x93, 0x93, 0x96, 255)
+EYE = (0xD9, 0xD9, 0xDC, 255)
 GOLD = (0xE3, 0xB4, 0x14, 255)
 GOLD_DARK = (0x3B, 0x2C, 0x09, 255)
 GOLD_ACCENT = (0xAB, 0x87, 0x0F, 255)
 OCEAN_ACTIVE = (0x36, 0x36, 0x7C, 255)
+OCEAN_RIM = (0x22, 0x22, 0x52, 255)
 LAND_ACTIVE = (0x5F, 0x7F, 0x37, 255)
 
-# Glyph codes: '#' outline, 'g' body, 'a' accent, 'b' secondary body.
-# '.' and ' ' are transparent.
+# Glyph codes: '#' outline, 'g' body, 'L' land, 'A' accent, 'E' the
+# beacon's bright core. '.' and ' ' are transparent.
 
+# The beacon: a small tower with a bright glowing core on a stepped
+# pedestal - the vanilla beacon's own silhouette, one bright E to read
+# at a glance.
 BEACON = """
 ................
-................
-....#######.....
-...#ggggggg#....
-...#ggaAagg#....
-...#ggaAagg#....
-...#ggggggg#....
-..##ggggggg##...
-..#gggggggggg#..
+....########....
+...#gggggggg#...
+...#gAAAAAAg#...
+...#gAEEEEAg#...
+...#gAEEEEAg#...
+...#gAAAAAAg#...
+...#gggggggg#...
+..##gggggggg##..
 ..#gggggggggg#..
 .#gggggggggggg#.
 .#gggggggggggg#.
@@ -55,40 +60,38 @@ BEACON = """
 ................
 """
 
-GLOBE = """
-................
-................
-....########....
-...#gggggggg#...
-..#gaa#ggggab#..
-..#gaa#ggggab#..
-.#ggga#gggggab#.
-.#gga#gggggaab#.
-.#ggggggg##gaa#.
-.#gggggg###aaa#.
-..#gggga#agg#...
-..#gg#gggggg#...
-...#gggggggg#...
-....########....
-................
-................
-"""
+# The globe: computed as a real circle - rim, two chunky landmasses,
+# ocean - so the shape reads instantly instead of dissolving into
+# speckle at 16 px.
+GLOBE_ROWS = []
+for _y in range(16):
+    row = []
+    for _x in range(16):
+        d = ((_x - 7.5) ** 2 + (_y - 7.5) ** 2) ** 0.5
+        if d > 6.35:
+            row.append(".")
+        elif d >= 5.45:
+            row.append("#")
+        elif (2 <= _x <= 7 and 3 <= _y <= 7) or (9 <= _x <= 12 and 9 <= _y <= 12):
+            row.append("L")
+        else:
+            row.append("g")
+    GLOBE_ROWS.append("".join(row))
+GLOBE = "\n" + "\n".join(GLOBE_ROWS) + "\n"
 
 # The globe's active variant keeps the earth identity colors, the
 # order_rarity_active gem precedent: ocean blue, land green.
 GLOBE_ACTIVE_COLORS = {
     "g": OCEAN_ACTIVE,
-    "a": LAND_ACTIVE,
-    "A": LAND_ACTIVE,
-    "b": LAND_ACTIVE,
+    "L": LAND_ACTIVE,
+    "#": OCEAN_RIM,
 }
 
 BEACON_ACTIVE_COLORS = {
     "g": GOLD_DARK,
-    "a": GOLD_ACCENT,
-    "b": GOLD_ACCENT,
+    "A": GOLD_ACCENT,
+    "E": GOLD,
 }
-
 
 def rows_of(map_text):
     rows = [r for r in map_text.split("\n") if r.strip()]
@@ -144,9 +147,9 @@ def emit(name, map_text, body_colors, active_colors):
     print("wrote", name, "+ active")
 
 
-BEACON_INACTIVE = {"#": OUTLINE, "g": BODY, "a": EYE, "A": EYE, "b": ACCENT}
-BEACON_ACTIVE = {"#": GOLD_DARK, "g": GOLD_DARK, "a": GOLD_ACCENT, "A": GOLD_ACCENT, "b": GOLD_ACCENT}
-GLOBE_INACTIVE = {"#": OUTLINE, "g": BODY, "a": ACCENT, "A": ACCENT, "b": ACCENT}
+BEACON_INACTIVE = {"#": OUTLINE, "g": BODY, "A": ACCENT, "E": EYE}
+BEACON_ACTIVE = {"#": GOLD_DARK, "g": GOLD_DARK, "A": GOLD_ACCENT, "E": GOLD}
+GLOBE_INACTIVE = {"#": OUTLINE, "g": BODY, "L": LAND}
 
 emit("zea_filter_general", BEACON, BEACON_INACTIVE, BEACON_ACTIVE)
 emit("zea_filter_earth", GLOBE, GLOBE_INACTIVE, GLOBE_ACTIVE_COLORS)
