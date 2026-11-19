@@ -20,6 +20,8 @@ import net.zaminmc.zea.map.model.MapWorld;
 import net.zaminmc.zea.map.model.PlayerMarker;
 import net.zaminmc.zea.map.model.TileId;
 import net.zaminmc.zea.map.model.TownClaim;
+import net.zaminmc.zea.map.geo.CountryMosaic;
+import net.zaminmc.zea.map.geo.CountryRegistry;
 import net.zaminmc.zea.map.projection.GlobeTransition;
 import net.zaminmc.zea.map.projection.MapProjection;
 import net.zaminmc.zea.map.render.globe.GlobeMeshElement;
@@ -41,6 +43,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.Set;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +117,14 @@ public final class MapSubsystem {
         private final TileFrameDriver<NativeImage> worldMapDriver;
         /** Serves the curved phases: the zoom-0 layer the globe mesh samples. */
         private final TileFrameDriver<NativeImage> globeDriver;
+        /** The country-association registry (deterministic, bundled dataset). */
+        private final CountryRegistry countryRegistry;
+        /** The published country aggregates per world; built off the render thread. */
+        private volatile Map<MapWorld, List<CountryMosaic.Aggregate>> aggregates = Map.of();
+        /** One aggregation rebuild at a time; changes during one coalesce into another. */
+        private final java.util.concurrent.atomic.AtomicBoolean aggregating =
+                                        new java.util.concurrent.atomic.AtomicBoolean(false);
+        private volatile boolean aggregationRescheduled;
         private final ClaimOverlay claimOverlay = new ClaimOverlay();
         private final PlayerOverlay playerOverlay = new PlayerOverlay();
 
@@ -155,6 +166,21 @@ public final class MapSubsystem {
                                         new TileUploads<>(), textures, textures, fetcher::request);
                 this.globeDriver = new TileFrameDriver<>(tiles, new TileRenderer(tiles),
                                         new TileUploads<>(), textures, textures, fetcher::request);
+                this.countryRegistry = loadCountryRegistry();
+        }
+
+        /** The bundled country dataset; a broken or missing file leaves an empty registry. */
+        private static CountryRegistry loadCountryRegistry() {
+                try (var stream = MapSubsystem.class.getResourceAsStream("/assets/zea/map/countries.json")) {
+                        if (stream == null) {
+                                ZeaClient.LOGGER.warn("The country dataset is missing; the global view aggregates nothing");
+                                return CountryRegistry.parse("{\"version\":1,\"countries\":[]}");
+                        }
+                        return CountryRegistry.parse(new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+                } catch (Exception failure) {
+                        ZeaClient.LOGGER.warn("The country dataset failed to parse: {}", failure.toString());
+                        return CountryRegistry.parse("{\"version\":1,\"countries\":[]}");
+                }
         }
 
         // ------------------------------------------------------------------
@@ -249,6 +275,7 @@ public final class MapSubsystem {
                                 }
                                 markerDocuments.put(world, document);
                                 claims.publish(world, document.towns());
+                                scheduleAggregation();
                         }));
                 }
         }
@@ -299,6 +326,62 @@ public final class MapSubsystem {
                         budget--;
                 }
                 return budget;
+        }
+
+        // ------------------------------------------------------------------
+        // Country aggregation
+        // ------------------------------------------------------------------
+
+        /**
+         * Schedules one mosaic rebuild off the render thread. A change
+         * that lands while a rebuild runs coalesces into one follow-up —
+         * the snapshot never blocks a refresh, and the draw never sees a
+         * half-built map.
+         */
+        private void scheduleAggregation() {
+                if (!aggregating.compareAndSet(false, true)) {
+                        aggregationRescheduled = true;
+                        return;
+                }
+                executor.submit(() -> {
+                        try {
+                                Map<MapWorld, List<CountryMosaic.Aggregate>> built = new EnumMap<>(MapWorld.class);
+                                for (MapWorld world : MapWorld.values()) {
+                                        built.put(world, CountryMosaic.build(claims.claims(world), countryRegistry));
+                                }
+                                Minecraft.getInstance().execute(() -> aggregates = Map.copyOf(built));
+                        } catch (Exception failure) {
+                                ZeaClient.LOGGER.warn("Country aggregation failed: {}", failure.toString());
+                        } finally {
+                                aggregating.set(false);
+                                if (aggregationRescheduled) {
+                                        aggregationRescheduled = false;
+                                        scheduleAggregation();
+                                }
+                        }
+                });
+        }
+
+        /** The country aggregates of a world, or an empty list before the first rebuild. */
+        public List<CountryMosaic.Aggregate> aggregatesOf(MapWorld world) {
+                List<CountryMosaic.Aggregate> list = aggregates.get(world);
+                return list == null ? List.of() : list;
+        }
+
+        /** The association registry, for the report and the corrections UI. */
+        public CountryRegistry countryRegistry() {
+                return countryRegistry;
+        }
+
+        /**
+         * The global-LOD gate: the mosaic and flags draw when the map
+         * shows more than a few viewports of the world — past that the
+         * towns themselves resolve and the country layer fades out. A
+         * pure function of the zoom, so it cannot flicker.
+         */
+        public static boolean globalZoom(MapWorld world, double pixelsPerBlock, int surfaceWidth) {
+                double fit = GlobeTransition.fitPixelsPerBlock(world, surfaceWidth);
+                return pixelsPerBlock < fit * 4.0;
         }
 
         // ------------------------------------------------------------------
@@ -474,7 +557,7 @@ public final class MapSubsystem {
                 double fit = GlobeTransition.fitPixelsPerBlock(camera.world(), projection.surfaceWidth());
                 double curvature = GlobeTransition.curvatureOf(camera.pixelsPerBlock(), fit);
                 if (surface == Surface.WORLD_MAP && curvature > 0.0) {
-                        drawCurvedSurface(graphics, projection, originX, originY, curvature, fit);
+                        drawCurvedSurface(graphics, font, projection, originX, originY, curvature, fit);
                         surfaceDrawn();
                         return;
                 }
@@ -499,6 +582,16 @@ public final class MapSubsystem {
                 // within one stratum, so claims and players must travel in
                 // their own to draw over the imagery.
                 graphics.nextStratum();
+                boolean global = globalZoom(camera.world(), camera.pixelsPerBlock(), projection.surfaceWidth());
+                if (global) {
+                        // The global LOD: country territory and flags replace
+                        // the per-town layers — no six thousand claim rects at
+                        // the fit scale.
+                        drawCountryLayerFlat(graphics, projection, centerX, centerY);
+                        drawCountryFlags(graphics, font, projection, centerX, centerY, camera.world(), null, 0.0, 0.0);
+                        surfaceDrawn();
+                        return;
+                }
                 if (layers.claimFills() || layers.claimOutlines()) {
                         List<ClaimOverlay.Rect> rects = claimOverlay.plan(claimsOf(projection.world()), projection,
                                                 layers.claimFills(), layers.claimOutlines(), layers.fillAlpha(), layers.outlineAlpha(), 1.0);
@@ -565,7 +658,7 @@ public final class MapSubsystem {
          * the render state \u2014 water disc, world plate, imagery cells \u2014 and
          * every quad clips to the active scissor.
          */
-        private void drawCurvedSurface(GuiGraphicsExtractor graphics, MapProjection projection,
+        private void drawCurvedSurface(GuiGraphicsExtractor graphics, Font font, MapProjection projection,
                         int originX, int originY, double curvature, double fit) {
                 MapCamera camera = projection.camera();
                 MapWorld world = camera.world();
@@ -621,6 +714,193 @@ public final class MapSubsystem {
                         ((GuiGraphicsExtractorAccessor) (Object) graphics).zea$guiRenderState()
                                                         .addGuiElement(GlobeMeshElement.textured(
                                                                         entry.getValue(), setup, scissor));
+                }
+
+                // The country layer rides its own stratum above the imagery
+                // (colored fills sort before textured quads in one stratum).
+                graphics.nextStratum();
+                drawCountryLayerCurved(graphics, projection, centerX, centerY, curvature, fit);
+                drawCountryFlags(graphics, font, projection, centerX, centerY, world,
+                                                new double[] {camera.centerX(), camera.centerZ()},
+                                                radius, curvature);
+        }
+
+        /**
+         * The country mosaic on the flat path: each visible cell of the
+         * camera's mip fills as a world-aligned rect in the projection's
+         * rotated frame — the same geometry route the claim fills take.
+         */
+        private void drawCountryLayerFlat(GuiGraphicsExtractor graphics, MapProjection projection,
+                        float centerX, float centerY) {
+                List<CountryMosaic.Aggregate> list = aggregatesOf(projection.world());
+                if (list.isEmpty()) {
+                        return;
+                }
+                double ppb = projection.camera().pixelsPerBlock();
+                int mip = CountryMosaic.mipFor(ppb, 3.0);
+                int cellBlocks = CountryMosaic.CELL << mip;
+                int fillAlpha = 0xB0;
+                for (CountryMosaic.Aggregate aggregate : list) {
+                        int argb = (fillAlpha << 24) | (aggregate.argb() & 0xFFFFFF);
+                        Set<Long> cells = aggregate.cells(mip);
+                        for (long packed : cells) {
+                                int cx = CountryMosaic.unpackX(packed);
+                                int cz = CountryMosaic.unpackZ(packed);
+                                double wx0 = (double) cx * cellBlocks;
+                                double wz0 = (double) cz * cellBlocks;
+                                double wx1 = wx0 + cellBlocks;
+                                double wz1 = wz0 + cellBlocks;
+                                double sx0 = projection.screenX(wx0, wz0);
+                                double sx1 = projection.screenX(wx1, wz1);
+                                double sy0 = projection.screenY(wx0, wz0);
+                                double sy1 = projection.screenY(wx0, wz1);
+                                double x = Math.min(sx0, sx1) + centerX - projection.surfaceWidth() / 2.0;
+                                double y = Math.min(sy0, sy1) + centerY - projection.surfaceHeight() / 2.0;
+                                double w = Math.abs(sx1 - sx0);
+                                double h = Math.abs(sy1 - sy0);
+                                if (x + w < 0 || y + h < 0
+                                                                || x > projection.surfaceWidth() || y > projection.surfaceHeight()) {
+                                        continue;
+                                }
+                                graphics.fill((int) Math.floor(x), (int) Math.floor(y),
+                                                                (int) Math.ceil(x + w), (int) Math.ceil(y + h), argb);
+                        }
+                }
+        }
+
+        /**
+         * The country mosaic on the curved path: each visible cell's four
+         * world corners project through the family and submit as colored
+         * quads, culled by the same limb rule the imagery cells use.
+         */
+        private void drawCountryLayerCurved(GuiGraphicsExtractor graphics, MapProjection projection,
+                        float centerX, float centerY, double curvature, double fit) {
+                MapCamera camera = projection.camera();
+                MapWorld world = camera.world();
+                List<CountryMosaic.Aggregate> list = aggregatesOf(world);
+                if (list.isEmpty()) {
+                        return;
+                }
+                double recede = GlobeTransition.globeScaleOf(camera.pixelsPerBlock(), fit);
+                double radius = GlobeTransition.globeRadius(projection.surfaceWidth(), projection.surfaceHeight())
+                                        * recede;
+                double halfW = world.worldWidth / 2.0;
+                double halfH = world.worldHeight / 2.0;
+                int mip = CountryMosaic.mipFor(fit * recede, 3.0);
+                int cellBlocks = CountryMosaic.CELL << mip;
+                int fillAlpha = 0xB0;
+                double cullRadius = Math.hypot(projection.surfaceWidth() / 2.0, projection.surfaceHeight() / 2.0) + 64.0;
+                List<GlobeMeshElement.Quad> quads = new ArrayList<>();
+                for (CountryMosaic.Aggregate aggregate : list) {
+                        int argb = (fillAlpha << 24) | (aggregate.argb() & 0xFFFFFF);
+                        for (long packed : aggregate.cells(mip)) {
+                                int cx = CountryMosaic.unpackX(packed);
+                                int cz = CountryMosaic.unpackZ(packed);
+                                double wx0 = (double) cx * cellBlocks;
+                                double wz0 = (double) cz * cellBlocks;
+                                double wx1 = wx0 + cellBlocks;
+                                double wz1 = wz0 + cellBlocks;
+                                // Center projection first: one trig family per
+                                // cell rejects the far side cheaply.
+                                GlobeTransition.SpherePoint c = GlobeTransition.project(
+                                                                wx0 + cellBlocks / 2.0, wz0 + cellBlocks / 2.0,
+                                                                camera.centerX(), camera.centerZ(),
+                                                                curvature, radius, halfW, halfH);
+                                if (c.z() < 0.0 || Math.hypot(c.x(), c.y()) > cullRadius) {
+                                        continue;
+                                }
+                                GlobeTransition.SpherePoint tl = GlobeTransition.project(
+                                                                wx0, wz0, camera.centerX(), camera.centerZ(),
+                                                                curvature, radius, halfW, halfH);
+                                GlobeTransition.SpherePoint bl = GlobeTransition.project(
+                                                                wx0, wz1, camera.centerX(), camera.centerZ(),
+                                                                curvature, radius, halfW, halfH);
+                                GlobeTransition.SpherePoint br = GlobeTransition.project(
+                                                                wx1, wz1, camera.centerX(), camera.centerZ(),
+                                                                curvature, radius, halfW, halfH);
+                                GlobeTransition.SpherePoint tr = GlobeTransition.project(
+                                                                wx1, wz0, camera.centerX(), camera.centerZ(),
+                                                                curvature, radius, halfW, halfH);
+                                if (tl.z() < 0.0 && bl.z() < 0.0 && br.z() < 0.0 && tr.z() < 0.0) {
+                                        continue;
+                                }
+                                quads.add(new GlobeMeshElement.Quad(
+                                                                new double[] {centerX + tl.x(), centerX + bl.x(), centerX + br.x(), centerX + tr.x()},
+                                                                new double[] {centerY + tl.y(), centerY + bl.y(), centerY + br.y(), centerY + tr.y()},
+                                                                0.0, 0.0, 1.0, 1.0, argb));
+                        }
+                }
+                if (!quads.isEmpty()) {
+                        ScreenRectangle scissor = currentScissor(graphics);
+                        ((GuiGraphicsExtractorAccessor) (Object) graphics).zea$guiRenderState()
+                                                        .addGuiElement(GlobeMeshElement.colored(quads, scissor));
+                }
+        }
+
+        /**
+         * One flag per country aggregate, at the territory's anchor cell:
+         * a fixed-size procedural stripe flag with the ISO code under it —
+         * never stretched across the territory, never repeated per town.
+         * Small territories draw the compact dot marker instead.
+         */
+        private void drawCountryFlags(GuiGraphicsExtractor graphics, Font font, MapProjection projection,
+                        float centerX, float centerY, MapWorld world,
+                        @Nullable double[] curvedCamera, double curvedRadius, double curvature) {
+                List<CountryMosaic.Aggregate> list = aggregatesOf(world);
+                if (list.isEmpty()) {
+                        return;
+                }
+                double halfW = world.worldWidth / 2.0;
+                double halfH = world.worldHeight / 2.0;
+                double surfaceHalfW = projection.surfaceWidth() / 2.0;
+                double surfaceHalfH = projection.surfaceHeight() / 2.0;
+                for (CountryMosaic.Aggregate aggregate : list) {
+                        double[] flagPos = CountryMosaic.flagWorldPos(aggregate);
+                        double sx;
+                        double sy;
+                        if (curvedCamera != null) {
+                                GlobeTransition.SpherePoint p = GlobeTransition.project(
+                                                                flagPos[0], flagPos[1],
+                                                                curvedCamera[0], curvedCamera[1],
+                                                                curvature, curvedRadius, halfW, halfH);
+                                if (p.z() < 0.0) {
+                                        continue;
+                                }
+                                sx = centerX + p.x();
+                                sy = centerY + p.y();
+                        } else {
+                                sx = centerX + (projection.screenX(flagPos[0], flagPos[1]) - surfaceHalfW);
+                                sy = centerY + (projection.screenY(flagPos[0], flagPos[1]) - surfaceHalfH);
+                        }
+                        if (sx < -20 || sy < -20
+                                                        || sx > projection.surfaceWidth() + 20 || sy > projection.surfaceHeight() + 20) {
+                                continue;
+                        }
+                        CountryRegistry.Country country = countryRegistry.country(aggregate.countryId());
+                        String iso = country == null ? aggregate.countryId() : country.iso();
+                        if (aggregate.cellCount() < 3) {
+                                // The compact marker: a dot with the ISO code.
+                                graphics.fill((int) sx - 2, (int) sy - 2, (int) sx + 2, (int) sy + 2,
+                                                                aggregate.argb());
+                                graphics.text(font, iso, (int) sx + 4, (int) sy - font.lineHeight / 2, 0xFFE0E0E0);
+                                continue;
+                        }
+                        int flagW = 15;
+                        int flagH = 9;
+                        int x0 = (int) Math.round(sx - flagW / 2.0);
+                        int y0 = (int) Math.round(sy - flagH / 2.0);
+                        List<Integer> colors = country == null ? List.of(aggregate.argb()) : country.flagColors();
+                        int bands = colors.size();
+                        for (int band = 0; band < bands; band++) {
+                                int bandY0 = y0 + band * flagH / bands;
+                                int bandY1 = y0 + (band + 1) * flagH / bands;
+                                graphics.fill(x0, bandY0, x0 + flagW, bandY1, colors.get(band));
+                        }
+                        graphics.fill(x0, y0, x0 + flagW, y0 + 1, 0xFF1E1E1E);
+                        graphics.fill(x0, y0 + flagH - 1, x0 + flagW, y0 + flagH, 0xFF1E1E1E);
+                        graphics.fill(x0, y0 + 1, x0 + 1, y0 + flagH - 1, 0xFF1E1E1E);
+                        graphics.fill(x0 + flagW - 1, y0 + 1, x0 + flagW, y0 + flagH - 1, 0xFF1E1E1E);
+                        graphics.text(font, iso, x0, y0 + flagH + 1, 0xFFE0E0E0);
                 }
         }
 
