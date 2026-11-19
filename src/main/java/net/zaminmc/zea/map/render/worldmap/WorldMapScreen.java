@@ -1,5 +1,6 @@
 package net.zaminmc.zea.map.render.worldmap;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -55,14 +56,14 @@ public final class WorldMapScreen extends Screen {
         private static final int MUTED = 0xFF909098;
         private static final int BACKDROP = 0x66000000;
 
-        /** GLFW-style scancodes the 26.3 key events carry. */
-        private static final int KEY_F = 70;
-        private static final int KEY_W = 87;
-        private static final int KEY_PLUS = 334;
-        private static final int KEY_MINUS = 333;
-        private static final int KEY_EQUAL = 61;
-        private static final int KEY_ENTER = 257;
-        private static final int KEY_KP_ENTER = 335;
+        /** The key events' SDL scancodes, named through InputConstants. */
+        private static final int KEY_F = InputConstants.KEY_F;
+        private static final int KEY_W = InputConstants.KEY_W;
+        private static final int KEY_PLUS = InputConstants.KEY_EQUALS;
+        private static final int KEY_MINUS = InputConstants.KEY_MINUS;
+        private static final int KEY_EQUAL = InputConstants.KEY_EQUALS;
+        private static final int KEY_ENTER = InputConstants.KEY_RETURN;
+        private static final int KEY_KP_ENTER = InputConstants.KEY_NUMPADENTER;
 
         /** Keyboard zoom step: three keys to one wheel notch. */
         private static final double KEYBOARD_ZOOM_FACTOR = Math.pow(MapCameraInput.ZOOM_PER_NOTCH, 1.0 / 3.0);
