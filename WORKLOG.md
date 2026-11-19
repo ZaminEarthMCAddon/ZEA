@@ -5095,3 +5095,62 @@ container scale 3 the pane sitting under the inventory GUI with the
 search bar above it. 1446 unit tests green. Boot pipeline: Xvfb +
 SDL-forced EGL (user-space glvnd/Mesa extraction), direct java launch
 with `--quickPlaySingleplayer`, xdotool input.
+
+## Pass: the world map window, the search's platform text input, and the first live end-to-end verification (dev.94–dev.102)
+
+### 1. The screen leaves fullscreen for a wide, short framed window
+
+The rebuilt world map is no longer fullscreen chrome. It is a wide,
+short window (360×200 GUI pixels, shrinking inside small viewports)
+floating over a dimmed world, framed in the Item Browser's language —
+the light edge ring, the gray plate, the dark interior — with the
+viewed world's name seated in the frame's top band, centered on the
+border itself, gold while viewing a world the player is not standing
+in. The search pill, freshness readout, follow/world-switch hints and
+the cursor's world coordinates live inside the interior; the map
+surface clips to the interior so tiles and the curved path never spill
+past the frame. The camera, wheel zoom and drag pan are viewport-local
+to the window.
+
+### 2. The search's text input goes through the vanilla focus chain
+
+The pill's EditBox joins the screen's container (`addWidget`) and the
+pill opens through `setFocused(searchField)`, so platform text input
+engages the way vanilla fields do (`EditBox.setFocused` →
+`Minecraft.onTextInputFocusChange` → `SDL_StartTextInput`). Key checks
+name their keys through `InputConstants` — the 26.3 events carry SDL
+scancodes, and the hand-picked GLFW-era numbers made Enter, F and W
+unmatchable. Verified live: typing into the pill lands characters in
+the field; Enter submits and the miss path reports honestly.
+
+### 3. The HTTP client stops sharing the pool it blocks
+
+Every fetch timed out because `HttpClient.newBuilder().executor(...)`
+pointed at the same two-thread pool the callers parked inside
+`send()` — no thread was left to deliver a response. The client keeps
+its internal executor now; the callers' pool only parks sends. A
+claims failure warns once per world instead of staying silent.
+
+### 4. The zoom floor reaches the sphere from a smaller viewport
+
+The window's interior puts the whole-map fit scale near 1/179 GUI
+px/block; the old 1/1024 floor allowed barely one e-fold below it. The
+floor drops to 1/4096 so the transition can finish and the receded
+globe fits the window.
+
+### 5. The country flags claim their anchors greedily
+
+Dense clusters (Europe) piled flags on one spot. Bigger territories
+place first; a flag whose rect would overlap an occupied one is culled
+and reappears as zoom separates the anchors.
+
+### Verification (real client, headless, EGL on Xvfb, scripted drives)
+
+Boot-to-title screenshots, the map window design, the search pill
+typing "london" with platform text input, the flat fit view with live
+Terra Nostra imagery ("Claims 7s ago · Players 8s ago"), the continuous
+wheel-driven curl into a fully formed receded globe and back, the
+country flags riding the sphere, and the regional country-cell layer —
+all captured and reviewed; the reviewed frames live under
+`docs/verification/`. The dev client gains a fixed-size run window and
+auto-join for reproducible drives.
