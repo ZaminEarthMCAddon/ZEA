@@ -5154,3 +5154,67 @@ country flags riding the sphere, and the regional country-cell layer —
 all captured and reviewed; the reviewed frames live under
 `docs/verification/`. The dev client gains a fixed-size run window and
 auto-join for reproducible drives.
+
+## dev.101–dev.105 — the bug-report batch: the explanation bank, the meta block, the glyph colors, the mapped rarities, the pane that finally closes (2026-11-19)
+
+Five reports from the live item-tooling session, each fixed in its
+own commit.
+
+### 1. The explanation prose grew with the server's enchantments
+
+The phrase bank held only the confirmed combat and mining lines, so
+the armor group's prose ("Reduces damage from most sources."), the
+water enchants', Feather Falling's, Depth Strider's, Fortune's
+("Some blocks drop more items then normal." — the server's own typo,
+matched verbatim) and the spear lunge's line ("The user lunges
+forward when using the spear.", which no synced registry description
+ever carried) survived every tooltip pass. The bank grows by exactly
+those seven observed lines.
+
+### 2. The forged-item provenance block hides behind one switch
+
+"Historical information / Forged by / Origin / Date" rides through
+every tooltip pass. The new Miscellaneous switch removes every line
+of the record — header by exact trimmed text, fields by prefix,
+case-insensitive and padding-tolerant — and collapses the blanks the
+removal doubles; a tooltip without the block is untouched line for
+line.
+
+### 3. The glyph carries its own color, the brackets the tier
+
+Every applied symbol wore its level's rarity tier, so a row read as
+one flat color. The brackets keep the tier (the progression signal),
+and each registry entry pins its own meaningful color — Unbreaking's
+shield is shield blue, Mending's loops XP green, Fire Aspect burns
+flame red — eighteen constants, distinct within every profile row.
+Missing glyphs stay gray so applied and missing still read apart.
+
+### 4. Rarity is mapped out, not calculated
+
+The old engine derived its enchantment budget from the live registry,
+and EarthMC syncs custom enchantments into it — budgets wobbled with
+the server's shipment of the day and the floating-point thresholds
+turned the wobble into unexpected tiers. `scripts/gen_rarity_table.py`
+transcribes the vanilla 26.3 data extracted from the client jar,
+enumerates every legitimate level combination per item family in
+exact integer arithmetic, applies the reference rule once, and
+freezes the rarity ordinal for every (family, material tier, fill
+numerator) combination into `RarityTables`. The runtime sums the
+pinned universe, binary-searches and reads — unknown paths (the
+server's customs) contribute nothing, a command-forced exclusive pair
+maps to the nearest reachable state below its sum, and no division,
+threshold compare or registry read happens at hover time. The mapped
+space widens to the families the formulas never reached: shears and
+the flint and steel on the iron tier, the shield beside the bow.
+Every table cell is re-derived through `RarityCalculator` in the
+tests, so the data cannot drift from the rule silently.
+
+### 5. The shop index pane finally closes
+
+The close existed in the state machine and nowhere else — the pane
+greets every container screen wide open. NEU's rules port piece for
+piece: the pane starts closed behind its edge tab, a genuinely new
+screen closes it unless a search is already active (bound after the
+search session so the rule reads the new screen's own query), and
+NEU's close-panes keybind arrives as `zea.key.close_panes`,
+unbound by default, taking the detail pane away with the grid.
