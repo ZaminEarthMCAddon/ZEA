@@ -251,6 +251,7 @@ public final class SpecialEnchantments {
                         case CHESTPLATE -> List.of("mending", "unbreaking");
                         case LEGGINGS -> List.of("swift_sneak", "mending", "unbreaking");
                         case BOOTS -> List.of("soul_speed", "frost_walker", "mending", "unbreaking");
+                        case SHEARS, FLINT_AND_STEEL, SHIELD -> List.of("mending", "unbreaking");
                         case OTHER -> List.of();
                 };
         }

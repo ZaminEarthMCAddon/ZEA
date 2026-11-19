@@ -1,32 +1,46 @@
 package net.zaminmc.zea.rarity;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
+import net.zaminmc.zea.itempresentation.recognition.ItemCategory;
+import net.zaminmc.zea.itempresentation.recognition.ItemClassifier;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The rarity engine — the single facade rendering and tooltips ask. Pure
- * calculation lives in {@link RarityCalculator} (material + enchantment
- * model), {@link MaterialTier} (what an item is made of), {@link
- * EnchantBudget} (what progression is possible for its class) and
- * {@link MissingUpgrades} (meaningful remaining upgrades); this class
- * wires them to the live config and the level's registry, and owns the
- * caches.
+ * The rarity engine — the single facade rendering and tooltips ask. The
+ * rarity itself is a table lookup: {@link RarityTables} maps out every
+ * reachable (family, material tier, enchantment state) outcome offline
+ * from the vanilla 26.3 data, and this class wires the live stack to
+ * those tables — the family from {@link net.zaminmc.zea.itempresentation.recognition.ItemClassifier},
+ * the material tier from {@link MaterialTier}, the enchantment levels
+ * from the stack's own component — and owns the cache. Pure calculation
+ * support lives beside it: {@link RarityCalculator} (the readable
+ * reference rule the tables were generated from), {@link MaterialTier}
+ * (what an item is made of) and {@link MissingUpgrades} (meaningful
+ * remaining upgrades).
+ *
+ * <p><b>Why a lookup and not a formula.</b> The previous engine derived
+ * its enchantment budget from the live registry, and EarthMC syncs
+ * custom enchantments into that registry — every budget computed on
+ * such a world wobbled with whatever the server shipped that day, and
+ * the floating-point progress thresholds turned the wobble into
+ * unexpected tiers. The mapped engine reads only the pinned vanilla
+ * universe: a server's custom enchantments contribute nothing to the
+ * fill numerator, an enchantment the family cannot carry was never in
+ * the table, and the outcome for every legitimate state was enumerated
+ * and frozen — nothing is calculated at hover time that can surprise.
  *
  * <p><b>Caching.</b> Rarity is cached per (item, enchantments) component
  * pair — the component instance is stable while a stack is unchanged, so
  * hovering or re-rendering the same slot is a map hit, and editing the
  * item on an anvil lands a new component and a fresh computation. The
  * cache is bounded; a flush costs one re-computation per visible item.
- * Enchantment budgets live in {@link EnchantBudget} and are cleared when
- * a level closes, since the enchantment registry is data-driven per
- * world.
+ * Unlike the formula it replaced, the lookup needs no level and no
+ * registry — it answers identically in and out of a world.
  *
  * <p>Everything here runs on the client thread — rendering and tooltip
  * extraction do — so plain maps suffice.
@@ -66,11 +80,19 @@ public final class RarityEngine {
 
         /**
          * The rarity of {@code stack}, or {@code null} when the system is
-         * off, the item is not a supported tool or armor piece, or the
-         * level (and with it the enchantment registry) is not available.
+         * off or the item is outside the rated families. The outcome is a
+         * table lookup — the mapped {@link RarityTables} universe, read at
+         * the stack's material tier and its enchantments' fill numerator —
+         * and needs no level and no registry: a server's custom
+         * enchantments never enter the tables, so the outcome cannot
+         * wobble with them.
          */
         public static ItemRarity rarityOf(ItemStack stack) {
                 if (!isSystemEnabled()) {
+                        return null;
+                }
+                ItemCategory category = ItemClassifier.classify(stack);
+                if (category == ItemCategory.OTHER) {
                         return null;
                 }
                 MaterialTier.Evaluation material = MaterialTier.evaluate(stack);
@@ -85,15 +107,28 @@ public final class RarityEngine {
                 if (cached != null) {
                         return cached;
                 }
-                double fill = fillOf(enchantments, stack);
-                EnchantBudget budget = EnchantBudget.of(stack.getItem(), registryLookup());
-                double maxFill = budget.maxFill();
-                ItemRarity rarity = RarityCalculator.calculate(material.tier(), fill, maxFill);
+                ItemRarity rarity = RarityTables.rarityFor(category, material.tier(),
+                                levelsOf(enchantments));
                 if (RARITY_CACHE.size() >= RARITY_CACHE_BOUND) {
                         RARITY_CACHE.clear();
                 }
                 RARITY_CACHE.put(key, rarity);
                 return rarity;
+        }
+
+        /**
+         * The stack's present enchantment levels as registry paths — the
+         * shape the mapped tables read. The paths are the enchantments'
+         * own registry keys, so resource packs and translations cannot
+         * change classification.
+         */
+        private static Map<String, Integer> levelsOf(ItemEnchantments enchantments) {
+                Map<String, Integer> levels = new HashMap<>();
+                for (var holder : enchantments.keySet()) {
+                        holder.unwrapKey().ifPresent(key ->
+                                        levels.put(key.identifier().getPath(), enchantments.getLevel(holder)));
+                }
+                return levels;
         }
 
         /**
@@ -143,48 +178,6 @@ public final class RarityEngine {
         public static boolean isSystemEnabled() {
                 ZeaConfig cfg = ZeaClient.config();
                 return cfg != null && cfg.rarityEnabled();
-        }
-
-        /**
-         * The summed {@code level/maxLevel} fill of the stack's
-         * compatible, non-neutral enchantments. Unsupported or neutral
-         * entries contribute nothing — a stack can carry an enchantment
-         * its class does not accept (commands), and that must not score.
-         *
-         * <p><b>Client independence.</b> The sum iterates the budget's
-         * canonically ordered list (registry-key order, see {@link
-         * EnchantBudget}) and reads each level through {@code getLevel}
-         * — never the component's own entry set. {@code ItemEnchantments}
-         * is backed by an identity-hashed open-addressing map, so its
-         * iteration order differs between JVMs; summing over it could
-         * round the floating-point total differently on different
-         * clients. Summing over the sorted budget list makes the fill —
-         * and with it the rarity — bit-for-bit identical for every
-         * player seeing the same item in the same world.
-         */
-        private static double fillOf(ItemEnchantments enchantments, ItemStack stack) {
-                if (enchantments.isEmpty()) {
-                        return 0.0;
-                }
-                EnchantBudget budget = EnchantBudget.of(stack.getItem(), registryLookup());
-                double fill = 0.0;
-                for (EnchantBudget.Compatible compatible : budget.compatible()) {
-                        int level = enchantments.getLevel(compatible.enchantment());
-                        if (level > 0 && !EnchantPolicy.isNeutral(compatible.enchantment())) {
-                                fill += compatible.fillAt(level);
-                        }
-                }
-                return fill;
-        }
-
-        /**
-         * The level's registry access, or {@code null} outside a level —
-         * the enchantment registry is data-driven, so no level means no
-         * enchantment data and no rarity.
-         */
-        private static HolderLookup.Provider registryLookup() {
-                Minecraft minecraft = Minecraft.getInstance();
-                return minecraft == null || minecraft.level == null ? null : minecraft.level.registryAccess();
         }
 
         /**

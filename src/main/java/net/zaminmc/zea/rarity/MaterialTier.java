@@ -48,6 +48,11 @@ import java.util.Optional;
  *       unenchanted bow reads Uncommon like an unenchanted diamond
  *       sword, and a fully-maxed bow reaches Legendary, exactly as the
  *       rarity model's established rules dictate for tier-5 gear.</li>
+ *   <li><b>Utilities</b> (shears, flint and steel, shield — the
+ *       dev.103 widening): shears and the flint and steel have no
+ *       material ladder but are iron-class by their crafting, so they
+ *       sit at tier 4; the shield is a single-instance piece like the
+ *       weapons and takes the same tier-5 fallback.</li>
  * </ul>
  *
  * <p>Tiers run 0..6 on the tool and armor ladders. The user-facing meaning
@@ -62,6 +67,14 @@ public final class MaterialTier {
 
         /** The diamond-class tier the dedicated weapon classes evaluate to. */
         static final int WEAPON_TIER = 5;
+
+        /**
+         * The iron-class tier the utility tools evaluate to. Shears
+         * (238 durability, iron-craftable) and the flint and steel have
+         * no material ladder of their own; the iron tier is the tier
+         * their crafting says they are.
+         */
+        static final int UTILITY_TIER = 4;
 
         /** Armor progression, lowest to highest; turtle sits with diamond. */
         private static final Map<ResourceKey<EquipmentAsset>, Integer> ARMOR_TIERS = Map.ofEntries(
@@ -123,6 +136,17 @@ public final class MaterialTier {
                 // for single-instance endgame weapons.
                 if (item instanceof BowItem || item instanceof CrossbowItem
                                 || item instanceof TridentItem || item instanceof MaceItem) {
+                        return new Evaluation(Kind.WEAPON, WEAPON_TIER);
+                }
+                // The utility families have no material ladder either:
+                // shears and the flint and steel are iron-class tools by
+                // their crafting, and the shield is a single-instance
+                // piece like the weapons.
+                if (item instanceof net.minecraft.world.item.ShearsItem
+                                || item instanceof net.minecraft.world.item.FlintAndSteelItem) {
+                        return new Evaluation(Kind.TOOL, UTILITY_TIER);
+                }
+                if (item instanceof net.minecraft.world.item.ShieldItem) {
                         return new Evaluation(Kind.WEAPON, WEAPON_TIER);
                 }
                 if (holder.is(ItemTags.HEAD_ARMOR) || holder.is(ItemTags.CHEST_ARMOR)

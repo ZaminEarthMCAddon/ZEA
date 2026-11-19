@@ -126,6 +126,15 @@ public final class ItemClassifier {
                 if (itemClass == ItemClass.MACE) {
                         return ItemCategory.MACE;
                 }
+                if (itemClass == ItemClass.SHEARS) {
+                        return ItemCategory.SHEARS;
+                }
+                if (itemClass == ItemClass.FLINT_AND_STEEL) {
+                        return ItemCategory.FLINT_AND_STEEL;
+                }
+                if (itemClass == ItemClass.SHIELD) {
+                        return ItemCategory.SHIELD;
+                }
                 if (sword) {
                         return ItemCategory.SWORD;
                 }
@@ -203,11 +212,20 @@ public final class ItemClassifier {
                 if (item instanceof MaceItem) {
                         return ItemClass.MACE;
                 }
+                if (item instanceof net.minecraft.world.item.ShearsItem) {
+                        return ItemClass.SHEARS;
+                }
+                if (item instanceof net.minecraft.world.item.FlintAndSteelItem) {
+                        return ItemClass.FLINT_AND_STEEL;
+                }
+                if (item instanceof net.minecraft.world.item.ShieldItem) {
+                        return ItemClass.SHIELD;
+                }
                 return ItemClass.PLAIN;
         }
 
         /** The dedicated-item-subclass signal used by the pure seam. */
         enum ItemClass {
-                PLAIN, BOW, CROSSBOW, TRIDENT, MACE
+                PLAIN, BOW, CROSSBOW, TRIDENT, MACE, SHEARS, FLINT_AND_STEEL, SHIELD
         }
 }

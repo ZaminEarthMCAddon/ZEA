@@ -14,15 +14,16 @@ package net.zaminmc.zea.itempresentation.recognition;
  * net.minecraft.world.item.MaceItem}, …). Never from the item's display
  * name.
  *
- * <p>The supported set is exactly the spec's equipment allowlist: the
+ * <p>The supported set is the spec's equipment allowlist, widened in
+ * the dev.103 batch to cover every item the rarity system rates: the
  * four tool families (pickaxe, axe, shovel, hoe — all material
  * variants), the six weapon families (sword, spear, mace, bow,
- * crossbow, trident) and the four armor slots. Everything else —
- * blocks, materials, food, potions, books, shields, elytra, horse
- * armor, spawn eggs, utility items — is {@link #OTHER} and keeps its
- * vanilla tooltip byte-for-byte. The category exists so the rest of the
- * pipeline can short-circuit cleanly instead of carrying a {@code null}
- * around.
+ * crossbow, trident), the three utility families (shears, flint and
+ * steel, shield) and the four armor slots. Everything else — blocks,
+ * materials, food, potions, books, elytra, horse armor, spawn eggs —
+ * is {@link #OTHER} and keeps its vanilla tooltip byte-for-byte. The
+ * category exists so the rest of the pipeline can short-circuit
+ * cleanly instead of carrying a {@code null} around.
  */
 public enum ItemCategory {
         /** Melee cutting weapon: {@code #minecraft:swords}. Sweeping applies. */
@@ -45,6 +46,12 @@ public enum ItemCategory {
         SHOVEL,
         /** Crop-and-leaf tool: {@code #minecraft:hoes}. */
         HOE,
+        /** Utility cutting tool: {@link net.minecraft.world.item.ShearsItem}. */
+        SHEARS,
+        /** Utility fire starter: {@link net.minecraft.world.item.FlintAndSteelItem}. */
+        FLINT_AND_STEEL,
+        /** Worn blocking shield: {@link net.minecraft.world.item.ShieldItem}. */
+        SHIELD,
         /** Head-slot armor: {@code #minecraft:head_armor}. */
         HELMET,
         /** Chest-slot armor: {@code #minecraft:chest_armor}. */
@@ -75,7 +82,7 @@ public enum ItemCategory {
         /** Whether this category mines blocks when used. */
         public boolean isMiningTool() {
                 return switch (this) {
-                        case PICKAXE, SHOVEL, HOE, AXE -> true;
+                        case PICKAXE, SHOVEL, HOE, AXE, SHEARS -> true;
                         default -> false;
                 };
         }

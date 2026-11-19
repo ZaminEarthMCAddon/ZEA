@@ -607,10 +607,13 @@ public final class ZeaConfig extends Config {
          * enchantment progression.
          */
         public static final class Rarity {
-                @ConfigOption(name = "Item rarity", desc = "Rate supported tools and armor "
-                                + "(swords, pickaxes, axes, shovels, hoes, armor pieces) as Common, "
-                                + "Uncommon, Epic or Legendary from the material and the enchantment "
-                                + "setup. Turning this off disables every rarity visual.")
+                @ConfigOption(name = "Item rarity", desc = "Rate supported equipment — the tool, "
+                                + "weapon, utility (shears, flint and steel, shield) and armor "
+                                + "families — as Common, Uncommon, Epic or Legendary. Every "
+                                + "possible outcome is mapped out from the vanilla data and "
+                                + "applied as a lookup, so a server's custom enchantments can "
+                                + "never shift a rating. Turning this off disables every rarity "
+                                + "visual.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
                 public boolean enabled = true;
