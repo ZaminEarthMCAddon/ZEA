@@ -32,7 +32,6 @@ import net.zaminmc.zea.config.ZeaPaths;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
 import net.zaminmc.zea.map.MapSubsystem;
-import net.zaminmc.zea.map.render.minimap.MinimapHud;
 import net.zaminmc.zea.map.cache.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
@@ -41,7 +40,6 @@ import net.zaminmc.zea.market.sync.RepoSync;
 import net.zaminmc.zea.market.sync.SharedShops;
 import net.zaminmc.zea.hud.HudCommands;
 import net.zaminmc.zea.hud.HudSubsystem;
-import net.zaminmc.zea.map.MapEngine;
 import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.nav.ShopDestinationHud;
@@ -85,7 +83,7 @@ public final class ZeaClient implements ClientModInitializer {
         private static SlotLocks slotLocks;
         private static ZeaConfig config;
         private static HudSubsystem hud;
-        private static MapEngine mapEngine;
+        private static MapHudRenderer mapHudRenderer;
         private static RepoSync repoSync;
         private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
@@ -99,7 +97,6 @@ public final class ZeaClient implements ClientModInitializer {
         private static ShopDestinationTracker destinationTracker;
         private static ItemBrowser browser;
         private static MapSubsystem map;
-        private static MinimapHud minimapHud;
 
         public static ClientLifecycle lifecycle() {
                 return lifecycle;
@@ -181,11 +178,6 @@ public final class ZeaClient implements ClientModInitializer {
                 return hud;
         }
 
-        /** The map rendering engine behind the map HUD elements. */
-        public static MapEngine mapEngine() {
-                return mapEngine;
-        }
-
         @Override
         public void onInitializeClient() {
                 LOGGER.info("ZEA loading");
@@ -231,22 +223,21 @@ public final class ZeaClient implements ClientModInitializer {
                 // elements: the element specs seed their factory size from the
                 // map config, position and scale belong to the manager (the
                 // on-screen pixel state MapConfig deliberately does not carry).
-                mapEngine = new MapEngine(Minecraft.getInstance().getTextureManager(), config.map);
-                hud = new HudSubsystem(paths.hudSettings());
+                        hud = new HudSubsystem(paths.hudSettings());
                 hud.register(
                                 new net.zaminmc.zea.hud.HudElementSpec(
                                                 Identifier.fromNamespaceAndPath("zea", "hud/minimap"),
                                                 "Minimap",
                                                 config.map.minimap.size, config.map.minimap.size,
                                                 net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 8, true),
-                                new MapHudRenderer(MapHudRenderer.Kind.MINIMAP, () -> mapEngine));
+                                mapHudRenderer = new MapHudRenderer(MapHudRenderer.Kind.MINIMAP));
                 hud.register(
                                 new net.zaminmc.zea.hud.HudElementSpec(
                                                 Identifier.fromNamespaceAndPath("zea", "hud/map"),
                                                 "Map overlay",
                                                 config.map.minimap.size * 2, config.map.minimap.size * 2,
                                                 net.zaminmc.zea.hud.HudAnchor.BOTTOM_RIGHT, 8, 8, false),
-                                new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY, () -> mapEngine));
+                                new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY));
                 hud.register(
                                 new net.zaminmc.zea.hud.HudElementSpec(
                                                 Identifier.fromNamespaceAndPath("zea", "hud/destination"),
@@ -254,8 +245,7 @@ public final class ZeaClient implements ClientModInitializer {
                                                 180, 14,
                                                 net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 28, false),
                                 new ShopDestinationHud());
-                ClientTickEvents.END_CLIENT_TICK.register(client -> mapEngine.tick());
-                repoExecutor = newIoExecutor("ZEA-Repo");
+                        repoExecutor = newIoExecutor("ZEA-Repo");
                 // The shared dataset sync: fetch and parse on the repo
                 // executor, merge on the client thread into the market
                 // index. The last accepted snapshot loads right now, on
@@ -304,9 +294,6 @@ public final class ZeaClient implements ClientModInitializer {
                                                                                 TooltipScroller.reset();
                                                                 });
                 map = new MapSubsystem(config, lifecycle);
-                minimapHud = new MinimapHud(map);
-                HudElementRegistry.addLast(
-                                Identifier.fromNamespaceAndPath("zea", "minimap"), minimapHud);
                 ClientTickEvents.END_CLIENT_TICK.register(client -> {
                         map.tick(client);
                         spawnCommands.tick(
@@ -418,7 +405,9 @@ public final class ZeaClient implements ClientModInitializer {
         private static void shutdownBackgroundWork() {
                 try {
                         chat.shutdownHistory();
-                        minimapHud.close();
+                        if (mapHudRenderer != null) {
+                                mapHudRenderer.close();
+                        }
                         map.shutdown();
                 } finally {
                         market.flushNow();
@@ -430,9 +419,6 @@ public final class ZeaClient implements ClientModInitializer {
                         shareExecutor.shutdown();
                         if (hud != null) {
                                 hud.shutdown();
-                        }
-                        if (mapEngine != null) {
-                                mapEngine.shutdown();
                         }
                         if (repoExecutor != null) {
                                 repoExecutor.shutdown();
