@@ -259,6 +259,9 @@ public final class MapSubsystem {
                 return !("minecraft".equals(namespace) && ("the_nether".equals(path) || "the_end".equals(path)));
         }
 
+        /** Worlds whose last claims failure has already been warned about. */
+        private final java.util.Set<MapWorld> claimsFetchWarned = java.util.EnumSet.noneOf(MapWorld.class);
+
         private void refreshClaims(long now, Minecraft client) {
                 for (MapWorld world : worldsNeedingClaims()) {
                         Freshness freshness = squaremap.claimsFreshness(world);
@@ -269,10 +272,16 @@ public final class MapSubsystem {
                         squaremap.fetchMarkers(world, previous).whenComplete((document, failure) -> client.execute(() -> {
                                 if (failure != null) {
                                         // Freshness already records the failure and the status
-                                        // line shows the stale age; keep the log quiet.
-                                        ZeaClient.LOGGER.debug("Claims refresh for {} failed: {}", world, failure.toString());
+                                        // line shows the stale age; one warn per world until a
+                                        // fetch succeeds, debug afterwards.
+                                        if (claimsFetchWarned.add(world)) {
+                                                ZeaClient.LOGGER.warn("Claims refresh for {} failed: {}", world, failure.toString());
+                                        } else {
+                                                ZeaClient.LOGGER.debug("Claims refresh for {} failed: {}", world, failure.toString());
+                                        }
                                         return;
                                 }
+                                claimsFetchWarned.remove(world);
                                 markerDocuments.put(world, document);
                                 claims.publish(world, document.towns());
                                 scheduleAggregation();

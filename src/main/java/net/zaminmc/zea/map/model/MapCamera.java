@@ -19,11 +19,12 @@ public record MapCamera(MapWorld world, double centerX, double centerZ, double p
         /**
          * Default zoom limits, in GUI pixels per block. The floor is far
          * below the whole-map fit scale (~1280/129,024 ≈ 1/101 at a
-         * 1280-wide viewport): the globe phases need headroom below the
-         * fit point — the transition curls the map at fit, and continued
-         * zoom-out recedes the finished globe.
+         * 1280-wide viewport, and ~1/179 at the map window's 360-wide
+         * interior): the globe phases need headroom below the fit point —
+         * the transition curls the map at fit, the finished sphere shows
+         * about two e-folds later, and continued zoom-out recedes it.
          */
-        public static final double MIN_PIXELS_PER_BLOCK = 1.0 / 1024.0;
+        public static final double MIN_PIXELS_PER_BLOCK = 1.0 / 4096.0;
         public static final double MAX_PIXELS_PER_BLOCK = 8.0;
 
         public MapCamera {

@@ -18,7 +18,8 @@ loom {
                         client()
                         name "ZEA Client"
                         vmArgs "-Xmx2560M"
-                        programArgs "--width", "1280", "--height", "800"
+                        programArgs "--width", "1280", "--height", "800",
+                                        "--quickPlaySingleplayer", "Flat Test"
                 }
         }
 }
