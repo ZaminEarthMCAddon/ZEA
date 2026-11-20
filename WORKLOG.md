@@ -5511,8 +5511,29 @@ creative screens instead of the items sidebar listing it was asked for.
 
 ### Verification
 
-Suite green (1486 tests): the replacement cases (changed item stops
+Suite green (1494 tests): the replacement cases (changed item stops
 selling the old one, flipped direction leaves the old side, sign-only
 same-text keeps and different-text retires), `SpawnRef` normalization
 and declines, `MarketData.annotate`, the wire round-trip with spawn.
-In-game pass below (frames in shots/).
+
+The in-game pass ran twice against the flat world under Xvfb/EGL, each
+against a seeded three-shop market (frames in shots/capture2/): the
+sign at exactly (8, -60, -6) read through a right-click captures after
+the sign-only window, the chat carries the announcement block — "Shop
+sign read — captured from the sign", the gray detail lines (Owner
+Abasing · Selling Diamond Pickaxe, Stock 36, Sign 8, -60, -6) and the
+"Missing: spawn, price [Add details]" prompt — the chat click opens the
+completion screen (captured listing read-only, spawn and price inputs
+only, the sign's own stock never prompting), the typed `/n spawn
+france` and `2` land, Done records, and the chat gains "Listing added
+to the market list · Item: Diamond Pickaxe · Sign: 8, -60, -6 · Spawn:
+/n spawn france". market.json after the flush carries the spawn on the
+shop record and the price-2 MANUAL observation. The browser after the
+capture: the seeded Block of Iron at those same coordinates is gone —
+the shop's latest observation names a different item, so the old
+listing left the index — and the Diamond Pickaxe tile's tooltip speaks
+the bullet lore: Sellers: 2, Price: 1.5G-2G, Stock: 55 items, the age
+line, and NEU's yellow LMB hint. The first pass caught the completion
+panel drawing its inputs at a relative offset in absolute space (the
+rows on top of the captured facts) and the rows overlapping each other
+at an 18 px pitch — both fixed and re-driven clean.
