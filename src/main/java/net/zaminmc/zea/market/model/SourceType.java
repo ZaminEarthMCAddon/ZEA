@@ -22,10 +22,19 @@ package net.zaminmc.zea.market.model;
  *       information — the displayed item name can be truncated and the
  *       advertised price can be stale — so sign-only observations may aid
  *       discovery but are never treated as equally reliable.</li>
+ *   <li>{@code MANUAL} — the player entered or confirmed the listing
+ *       themselves, through the market editor: a shop the player visited
+ *       and whose details the player vouches for, whether typed from
+ *       scratch or captured and then corrected. The player is the
+ *       strongest evidence their own client has, so a manual entry with
+ *       an exact item identity ranks with the verified responses — while
+ *       one built from display text alone stays as preliminary as a sign
+ *       advert, for the same reasons.</li>
  * </ul>
  */
 public enum SourceType {
-	SERVER_RESPONSE,
-	REMOTE_SHARED,
-	SIGN_ONLY
+        SERVER_RESPONSE,
+        REMOTE_SHARED,
+        SIGN_ONLY,
+        MANUAL
 }

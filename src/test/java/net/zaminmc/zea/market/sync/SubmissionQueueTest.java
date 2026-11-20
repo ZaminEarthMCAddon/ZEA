@@ -27,122 +27,139 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SubmissionQueueTest {
-	private static final Instant T = Instant.ofEpochMilli(1_000_000L);
-	private static final Instant SUBMITTED = Instant.ofEpochMilli(2_000_000L);
-	private static final String TOKEN = "minecraft:diamond_pickaxe|{}";
+        private static final Instant T = Instant.ofEpochMilli(1_000_000L);
+        private static final Instant SUBMITTED = Instant.ofEpochMilli(2_000_000L);
+        private static final String TOKEN = "minecraft:diamond_pickaxe|{}";
 
-	@BeforeAll
-	static void boot() {
-		VanillaBootstrap.ensure();
-	}
+        @BeforeAll
+        static void boot() {
+                VanillaBootstrap.ensure();
+        }
 
-	private static PhysicalShop shop() {
-		return new PhysicalShop("earthmc.net|world|1,64,2", "earthmc.net", "world",
-				new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), "Abasing", null, T, T);
-	}
+        private static PhysicalShop shop() {
+                return new PhysicalShop("earthmc.net|world|1,64,2", "earthmc.net", "world",
+                                new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), "Abasing", null, T, T);
+        }
 
-	private static ShopObservation verified() {
-		return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
-				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
-				"Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_BULK, 7,
-				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, T);
-	}
+        private static ShopObservation verified() {
+                return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
+                                new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
+                                "Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_BULK, 7,
+                                "78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE, T);
+        }
 
-	private static ShopObservation signOnly() {
-		return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
-				new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
-				"Diamond Pickaxe", null, null, null, "36", StockUnit.UNKNOWN,
-				null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T);
-	}
+        private static ShopObservation signOnly() {
+                return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
+                                new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
+                                "Diamond Pickaxe", null, null, null, "36", StockUnit.UNKNOWN,
+                                null, null, null, null, null, false, List.of(), SourceType.SIGN_ONLY, T);
+        }
 
-	private static ExecutorService executor() {
-		return new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-				new ArrayBlockingQueue<>(4), task -> {
-					Thread thread = new Thread(task, "ZEA-Market-Test");
-					thread.setDaemon(true);
-					return thread;
-				});
-	}
+        private static ShopObservation manual() {
+                return new ShopObservation("earthmc.net|world|1,64,2", ShopDirection.SELLING,
+                                new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
+                                "Diamond Pickaxe", new BigDecimal("1"), PriceScope.PER_BULK, 7,
+                                "78", StockUnit.UNKNOWN, null, null, null, null, null, false, List.of(), SourceType.MANUAL, T);
+        }
 
-	private static void drain(ExecutorService executor) throws InterruptedException {
-		executor.shutdown();
-		assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
-	}
+        private static ExecutorService executor() {
+                return new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                                new ArrayBlockingQueue<>(4), task -> {
+                                        Thread thread = new Thread(task, "ZEA-Market-Test");
+                                        thread.setDaemon(true);
+                                        return thread;
+                                });
+        }
 
-	@Test
-	void serverVerifiedObservationsValidateIntoRecords() {
-		SubmissionValidator.SubmissionRecord record =
-				SubmissionValidator.validate(shop(), verified(), SUBMITTED).orElseThrow();
+        private static void drain(ExecutorService executor) throws InterruptedException {
+                executor.shutdown();
+                assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+        }
 
-		assertEquals("earthmc.net|world|1,64,2", record.shopId());
-		assertEquals("SELLING", record.direction());
-		assertEquals("1", record.price());
-		assertEquals(T, Instant.ofEpochMilli(record.observedAt()));
-		assertEquals(SUBMITTED, Instant.ofEpochMilli(record.submittedAt()));
-		assertTrue(record.observedAt() != record.submittedAt());
-	}
+        @Test
+        void serverVerifiedObservationsValidateIntoRecords() {
+                SubmissionValidator.SubmissionRecord record =
+                                SubmissionValidator.validate(shop(), verified(), SUBMITTED).orElseThrow();
 
-	@Test
-	void signOnlyObservationsNeverSubmit() {
-		assertTrue(SubmissionValidator.validate(shop(), signOnly(), SUBMITTED).isEmpty());
-	}
+                assertEquals("earthmc.net|world|1,64,2", record.shopId());
+                assertEquals("SELLING", record.direction());
+                assertEquals("1", record.price());
+                assertEquals(T, Instant.ofEpochMilli(record.observedAt()));
+                assertEquals(SUBMITTED, Instant.ofEpochMilli(record.submittedAt()));
+                assertTrue(record.observedAt() != record.submittedAt());
+        }
 
-	@Test
-	void aResponseWithoutAPriceIsRejected() {
-		ShopObservation unpriced = new ShopObservation("id", ShopDirection.SELLING,
-				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
-				"Diamond Pickaxe", null, null, null, null, StockUnit.UNKNOWN,
-				null, null, null, null, null, false, List.of(), SourceType.SERVER_RESPONSE, T);
-		assertTrue(SubmissionValidator.validate(shop(), unpriced, SUBMITTED).isEmpty());
-	}
+        @Test
+        void signOnlyObservationsNeverSubmit() {
+                assertTrue(SubmissionValidator.validate(shop(), signOnly(), SUBMITTED).isEmpty());
+        }
 
-	@Test
-	void theQueuePersistsAndSurvivesARestart(@TempDir Path dir) throws InterruptedException {
-		Path file = dir.resolve("submissions.json");
-		ExecutorService executor = executor();
-		SubmissionQueue queue = new SubmissionQueue(file, executor);
-		assertTrue(queue.enqueue(shop(), verified()));
-		queue.flushNow();
-		drain(executor);
+        @Test
+        void manualListingsSubmitLikeVerifiedOnes() {
+                // The player entered or confirmed the listing in the market editor;
+                // the repository takes it with the same exactness bar.
+                SubmissionValidator.SubmissionRecord record = SubmissionValidator.validate(shop(),
+                                manual(), SUBMITTED).orElseThrow();
+                assertEquals("SELLING", record.direction());
+                assertEquals("1", record.price());
+        }
 
-		ExecutorService executor2 = executor();
-		SubmissionQueue reloaded = new SubmissionQueue(file, executor2);
-		assertEquals(1, reloaded.size());
-		assertEquals("1", reloaded.queued().get(0).price());
-		assertEquals(T, Instant.ofEpochMilli(reloaded.queued().get(0).observedAt()));
-		drain(executor2);
-	}
+        @Test
+        void aResponseWithoutAPriceIsRejected() {
+                ShopObservation unpriced = new ShopObservation("id", ShopDirection.SELLING,
+                                new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
+                                "Diamond Pickaxe", null, null, null, null, StockUnit.UNKNOWN,
+                                null, null, null, null, null, false, List.of(), SourceType.SERVER_RESPONSE, T);
+                assertTrue(SubmissionValidator.validate(shop(), unpriced, SUBMITTED).isEmpty());
+        }
 
-	@Test
-	void anIdenticalObservationIsNeverQueuedTwice(@TempDir Path dir) {
-		SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
-		assertTrue(queue.enqueue(shop(), verified()));
-		assertFalse(queue.enqueue(shop(), verified()));
+        @Test
+        void theQueuePersistsAndSurvivesARestart(@TempDir Path dir) throws InterruptedException {
+                Path file = dir.resolve("submissions.json");
+                ExecutorService executor = executor();
+                SubmissionQueue queue = new SubmissionQueue(file, executor);
+                assertTrue(queue.enqueue(shop(), verified()));
+                queue.flushNow();
+                drain(executor);
 
-		assertEquals(1, queue.size());
-	}
+                ExecutorService executor2 = executor();
+                SubmissionQueue reloaded = new SubmissionQueue(file, executor2);
+                assertEquals(1, reloaded.size());
+                assertEquals("1", reloaded.queued().get(0).price());
+                assertEquals(T, Instant.ofEpochMilli(reloaded.queued().get(0).observedAt()));
+                drain(executor2);
+        }
 
-	@Test
-	void aChangedPriceQueuesAgain(@TempDir Path dir) {
-		SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
-		assertTrue(queue.enqueue(shop(), verified()));
-		assertTrue(queue.enqueue(shop(), new ShopObservation("earthmc.net|world|1,64,2",
-				ShopDirection.SELLING,
-				new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
-				"Diamond Pickaxe", new BigDecimal("2"), PriceScope.PER_BULK, 7,
-				"78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE,
-				T.plusSeconds(60))));
+        @Test
+        void anIdenticalObservationIsNeverQueuedTwice(@TempDir Path dir) {
+                SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
+                assertTrue(queue.enqueue(shop(), verified()));
+                assertFalse(queue.enqueue(shop(), verified()));
 
-		assertEquals(2, queue.size());
-	}
+                assertEquals(1, queue.size());
+        }
 
-	@Test
-	void aDrainedBatchLeavesTheQueue(@TempDir Path dir) {
-		SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
-		queue.enqueue(shop(), verified());
+        @Test
+        void aChangedPriceQueuesAgain(@TempDir Path dir) {
+                SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
+                assertTrue(queue.enqueue(shop(), verified()));
+                assertTrue(queue.enqueue(shop(), new ShopObservation("earthmc.net|world|1,64,2",
+                                ShopDirection.SELLING,
+                                new ItemFingerprint(TOKEN, ItemFingerprint.Fidelity.EXACT),
+                                "Diamond Pickaxe", new BigDecimal("2"), PriceScope.PER_BULK, 7,
+                                "78", StockUnit.UNKNOWN, null, 64, null, null, null, true, List.of(), SourceType.SERVER_RESPONSE,
+                                T.plusSeconds(60))));
 
-		queue.removeAll(queue.queued());
+                assertEquals(2, queue.size());
+        }
 
-		assertEquals(0, queue.size());
-	}
+        @Test
+        void aDrainedBatchLeavesTheQueue(@TempDir Path dir) {
+                SubmissionQueue queue = new SubmissionQueue(dir.resolve("q.json"), executor());
+                queue.enqueue(shop(), verified());
+
+                queue.removeAll(queue.queued());
+
+                assertEquals(0, queue.size());
+        }
 }
