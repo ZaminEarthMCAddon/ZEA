@@ -1,0 +1,16 @@
+The textures in this directory are part of ZEA's market viewer — the
+JEI-style screen that opens over the inventory when an item is clicked
+in the item browser.
+
+All of these files — panel.png, button.png, button_hover.png,
+button_pressed.png, button_disabled.png, icons/arrow_next.png,
+icons/arrow_previous.png, tab_selected.png, tab_unselected.png — are
+copied unmodified from the JustEnoughItems repository
+(https://github.com/mezz/JustEnoughItems, formerly
+assets/jei/textures/gui/sprites/, renamed), copyright the JEI
+contributors (mezz and the JustEnoughItems contributors), distributed
+under the MIT License. ZEA is not endorsed by or affiliated with the
+JEI project.
+
+The MIT License text is included in the repository's
+LICENSE-JEI.txt.

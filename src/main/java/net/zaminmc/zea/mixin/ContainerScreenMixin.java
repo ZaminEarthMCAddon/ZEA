@@ -19,7 +19,6 @@ import net.zaminmc.zea.buttons.ButtonRenderer;
 import net.zaminmc.zea.buttons.InventoryButton;
 import net.zaminmc.zea.buttons.InventoryButtons;
 import net.zaminmc.zea.browser.ItemBrowser;
-import net.zaminmc.zea.browser.ItemBrowserState;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.duck.ContainerScreenAccess;
 import net.zaminmc.zea.duck.HoveredSlotAccess;
@@ -433,16 +432,6 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
         @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
         private void zea$handleKeys(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
                 AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
-                // The detail overlay is the top layer: Esc closes it
-                // before anything else sees the key. It never captures
-                // typing keys — the search bar keeps its ownership.
-                ItemBrowser browser = ZeaClient.browser();
-                if (browser != null && browser.state().view() == ItemBrowserState.View.DETAIL
-                                && event.isEscape()) {
-                        browser.state().closeDetail();
-                        cir.setReturnValue(true);
-                        return;
-                }
                 InventoryButtons buttons = ZeaClient.inventoryButtons();
                 if (zea$buttonsActive(buttons) && ZeaKeys.EDIT_BUTTONS.matches(event)) {
                         Minecraft minecraft = Minecraft.getInstance();
@@ -450,11 +439,11 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                         cir.setReturnValue(true);
                         return;
                 }
-                // NEU's close-panes binding: the grid pane slides away —
-                // the detail pane with it — and only the reopen tab stays.
-                // The search bar keeps its query; clearing it is the bar's
-                // own right-click.
+                // NEU's close-panes binding: the grid pane slides away and
+                // only the reopen tab stays. The search bar keeps its query;
+                // clearing it is the bar's own right-click.
                 ZeaConfig browserConfig = ZeaClient.config();
+                ItemBrowser browser = ZeaClient.browser();
                 if (browser != null && browserConfig != null
                                 && browserConfig.inventoryShopBrowserEnabled()
                                 && !zea$isCreative(self)

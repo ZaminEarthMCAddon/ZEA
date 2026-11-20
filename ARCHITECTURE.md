@@ -69,7 +69,8 @@ Packages represent responsibilities. The mapping:
 | `net.zaminmc.zea.slots` | Slot locking and binding: state, click guard, indicators |
 | `net.zaminmc.zea.share` | Paste client, share envelope, payload codecs, coordinator, `/zea` commands |
 | `net.zaminmc.zea.market` | Physical-shop market: inspection correlation, observation store, pricing, item-variant index, shared-dataset sync, tooltips, submission queue (`docs/MARKET.md`) |
-| `net.zaminmc.zea.browser` | The inventory shop index: variant grid, detail views, variant display stacks |
+| `net.zaminmc.zea.browser` | The inventory shop index: variant grid, variant display stacks |
+| `net.zaminmc.zea.market.viewer` | The market viewer: JEI's recipe-gui model opened over the container for one variant's offers |
 | `net.zaminmc.zea.nav` | Spawn-command observation, shop destinations (temporary waypoints), smart navigation |
 | `net.zaminmc.zea.earthmc` | EarthMC API client, server identity, ZEA-REPO data |
 | `net.zaminmc.zea.config` | Configuration (MoulConfig), the `/zea` settings screen |

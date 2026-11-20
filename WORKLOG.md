@@ -5270,3 +5270,73 @@ in-game pass (layer over Xaero's terrain at every zoom, the opening
 path, the no-Xaero message) runs when the dev client next has Xaero
 installed — the mixin is soft, so its absence is a silent no-op, not
 a crash.
+
+## The market viewer — JEI's recipe gui rebuilt for a live market (2026-11-20)
+
+The browser's tile click opened an in-pane detail — ZEA's own invention,
+and it read like one. The reference the genre actually ships is JEI's
+RecipesGui, so that is what replaces it: the upstream source (master,
+2026-11-20, MC 26.3 / Java 25 — the same target ZEA builds against) was
+read for its open/close semantics, its geometry constants and its
+rendering passes, not approximated from screenshots.
+
+### What JEI does, this does
+
+Opening captures the current screen as the parent and swaps the viewer
+in — the container stays alive behind it and returns exactly as it was
+when the viewer closes; Esc and the inventory key both close (JEI's
+"Close inventory" command); `isPauseScreen = false`, `isInGameUi = true`.
+The panel sizes to JEI's defaults — width 198, height at most 350, the
+screen minus 58 pixels, `guiTop` 45 — and the content area follows JEI's
+`getRecipeLayoutsArea`: six pixels of frame padding under the two nav
+rows. The chrome is JEI's own files copied unmodified (MIT;
+`LICENSE-JEI.txt`, `textures/market/NOTICE.txt`): the `gui_background_v2`
+nine-slice panel (ZEA's three-by-three blit, the sprite's 16 px border
+fractions — the same pass the search bar uses), the vanilla-look button
+plates with their disabled and hover states, the 9×7 arrows inside the
+13 px nav buttons, and the 24 px side tabs riding the panel's top edge
+with JEI's three-pixel overlap. The title truncates with an ellipsis and
+shows the full name as a tooltip — JEI's `RecipeCategoryTitle` behavior.
+
+The market translations: the header's prev/next arrows cycle the
+browser's current results (JEI's previous/next category); the tabs pick
+the market's side (all, buy from, sell to) with chest, emerald and gold
+icons; the page row paginates the offer list over JEI's dark strip with
+the centered page string; one offer per row in JEI's slot language —
+the item in a vanilla slot plate, owner and unit price on the first
+line, stock and where plus the age on the second; the identity block
+carries the enchantment summary and both sides' aggregate statistics;
+the footer's Navigate action draws on JEI's button sprites, disabled
+until a row is selected. Summaries trim at their last whole "·" section
+— a half-word like "1 owne" reads worse than the section the tooltip
+already carries.
+
+### What it replaced
+
+The in-pane detail and its whole machinery: the info pane draw, the
+offer-row geometry, the scroll state, the info lerp, the red close disc,
+and the state's `View` enum with its selection fields — the browser
+state keeps only open, page, order and filter, and the viewer owns the
+selection (a selection still never issues a command). The mixin's Esc
+branch for the detail went with it; the close-panes binding keeps the
+grid pane's behavior untouched.
+
+### Verification
+
+Clean compile and the suite green (the state test follows the hand-off:
+the detail-view cases give way to the close-reopen round-trip). The
+in-game pass ran against a seeded market — six shops, seven variants,
+fifteen exact `SERVER_RESPONSE` observations written straight into
+`market.json`, the dev client driven under Xvfb/EGL with a screenshot
+at every step: the pane opens closed behind its edge tab, a tile click
+opens the viewer over the container, the tabs switch sides with their
+tooltips, the next-item arrow cycles the title and identity, a row
+selects with the gold frame and shows the full observation tooltip, the
+wheel turns the list's page (a fourteen-shop diamond spans two pages and
+the section header carries onto the second), the next-item arrow cycles
+the title and identity, Esc
+and the E key each return the inventory with the pane exactly as it
+stood, and the disabled arrows carry JEI's disabled plate. One finding
+the frames caught: `SideStats.shops()` is the variant-wide count, so the
+identity block counts each side's offers itself — a one-shop SELL TO
+read as fourteen.

@@ -193,8 +193,8 @@ class ItemBrowserStateTest {
         /**
          * The pane starts closed — NEU's {@code itemPaneOpen = false}:
          * the sidebar never greets a screen wide open. Opening, closing
-         * and reopening round-trip, and closing takes the detail view
-         * with it.
+         * and reopening round-trip; the chosen variant hands off to the
+         * market viewer screen, so the state keeps no detail of its own.
          */
         @Test
         void thePaneStartsClosedAndRoundTrips() {
@@ -202,12 +202,8 @@ class ItemBrowserStateTest {
                 assertTrue(state.isOpen() == false, "NEU starts with the pane closed");
                 state.open();
                 assertTrue(state.isOpen());
-                state.openDetail("some-token");
-                assertEquals(ItemBrowserState.View.DETAIL, state.view());
                 state.close();
                 assertTrue(state.isOpen() == false, "the close hides the pane");
-                assertEquals(ItemBrowserState.View.GRID, state.view(),
-                                "closing takes the detail view with it");
                 state.open();
                 assertTrue(state.isOpen(), "the edge tab reopens it");
         }
@@ -248,44 +244,21 @@ class ItemBrowserStateTest {
                 assertEquals(results, state.results());
         }
 
-        @Test
-        void detailStateKeysSelectionByTokenAndShopId() {
-                ItemBrowserState state = new ItemBrowserState();
-                state.openDetail("minecraft:diamond_pickaxe|enchanted");
-                assertEquals(ItemBrowserState.View.DETAIL, state.view());
-                assertEquals("minecraft:diamond_pickaxe|enchanted", state.selectedToken());
-                assertNull(state.selectedShopId());
-                state.selectOffer("shop-a");
-                assertEquals("shop-a", state.selectedShopId());
-                state.selectOffer("shop-a");
-                assertNull(state.selectedShopId(), "re-clicking the row deselects it");
-                state.selectOffer("shop-b");
-                assertEquals("shop-b", state.selectedShopId());
-                state.closeDetail();
-                assertEquals(ItemBrowserState.View.GRID, state.view());
-                assertNull(state.selectedToken());
-                assertNull(state.selectedShopId());
-                assertEquals(0, state.detailScroll());
-        }
-
-        @Test
-        void detailScrollNeverGoesNegative() {
-                ItemBrowserState state = new ItemBrowserState();
-                state.setDetailScroll(30);
-                assertEquals(30, state.detailScroll());
-                state.setDetailScroll(-5);
-                assertEquals(0, state.detailScroll());
-        }
+        /**
+         * The viewer screen owns the offer selection now — the state
+         * carries no detail fields at all: the old detail-view API is
+         * gone, and the pane's own state is only open, page, order and
+         * filter. The market revision moving under an open pane is the
+         * viewer's own refreshEntries check, not a state concern.
+         */
 
         @Test
         void closeHidesThePaneAndOpenBringsItBack() {
                 ItemBrowserState state = new ItemBrowserState();
                 state.open();
                 assertTrue(state.isOpen());
-                state.openDetail("token");
                 state.close();
-                assertFalse(state.isOpen());
-                assertEquals(ItemBrowserState.View.GRID, state.view(), "closing the pane leaves the detail too");
+                assertFalse(state.isOpen(), "closing hides the pane");
                 state.open();
                 assertTrue(state.isOpen());
         }

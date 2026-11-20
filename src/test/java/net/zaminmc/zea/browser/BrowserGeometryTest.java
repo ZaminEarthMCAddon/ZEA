@@ -205,17 +205,6 @@ class BrowserGeometryTest {
         }
 
         @Test
-        void infoPaneAnchorsAtOneThirdWithNeusCloseButton() {
-                float open = BrowserGeometry.INFO_OPEN_OFFSET;
-                assertEquals((int) (1280 * open), BrowserGeometry.infoPaneRight(TYPICAL, open));
-                assertEquals(0, BrowserGeometry.infoPaneLeft(TYPICAL, open));
-                int[] close = BrowserGeometry.infoCloseButton(TYPICAL, open);
-                assertEquals(426 - 15 - 8, close[0]);
-                assertEquals(15 - 8, close[1]);
-                assertEquals(16, close[2]);
-        }
-
-        @Test
         void paneRegionGateFollowsTheAnimatedEdge() {
                 // NEU: clicks right of the moving edge are the pane's.
                 assertTrue(BrowserGeometry.inPane(BrowserGeometry.OPEN_OFFSET, TYPICAL, 900, 400));

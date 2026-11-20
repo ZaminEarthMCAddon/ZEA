@@ -40,8 +40,6 @@ public final class NeuTextures {
         public static final Identifier RIGHT_ARROW = id("rightarrow.png");
         /** The arrow's hover/press border overlay. */
         public static final Identifier RIGHT_ARROW_OVERLAY = id("rightarrow_overlay.png");
-        /** The red close disc on the info pane. */
-        public static final Identifier CLOSE = id("close.png");
         /** The rounded per-tile mask behind every item. */
         public static final Identifier ITEM_MASK = id("item_mask.png");
         /** The edge tab's chevron. */
