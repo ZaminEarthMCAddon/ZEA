@@ -670,10 +670,25 @@ public final class MarketViewerScreen extends Screen {
                 if (trimmed.length() >= text.length()) {
                         return text;
                 }
-                int cut = Math.max(trimmed.lastIndexOf('·'), trimmed.lastIndexOf(','));
+                // Prefer a section boundary (·), then a word boundary: a
+                // trimmed line never ends inside a word ("9 stacks ite").
+                int cut = trimmed.lastIndexOf('·');
                 if (cut > 0) {
-                        trimmed = trimmed.substring(0, cut).stripTrailing();
-                        if (!trimmed.isEmpty() && trimmed.charAt(trimmed.length() - 1) == '·') {
+                        trimmed = trimmed.substring(0, cut);
+                        if (trimmed.endsWith("·")) {
+                                trimmed = trimmed.substring(0, trimmed.length() - 1);
+                        }
+                        trimmed = trimmed.stripTrailing();
+                }
+                int len = trimmed.length();
+                if (len > 0 && len < text.length()
+                                && !Character.isWhitespace(text.charAt(len))
+                                && text.charAt(len) != '·') {
+                        int space = trimmed.lastIndexOf(' ');
+                        if (space > 0) {
+                                trimmed = trimmed.substring(0, space).stripTrailing();
+                        }
+                        if (trimmed.endsWith("·")) {
                                 trimmed = trimmed.substring(0, trimmed.length() - 1).stripTrailing();
                         }
                 }
@@ -1065,7 +1080,13 @@ public final class MarketViewerScreen extends Screen {
                         case STACKS -> " stacks";
                         case UNKNOWN -> "";
                 };
-                return "Stock: " + observation.stockRaw() + unit
+                // A raw stock that already carries its unit word ("8 stacks")
+                // never gets the parsed suffix repeated after it.
+                String word = unit.strip();
+                boolean carried = word.isEmpty()
+                                || observation.stockRaw().toLowerCase(java.util.Locale.ROOT)
+                                                .endsWith(word.toLowerCase(java.util.Locale.ROOT));
+                return "Stock: " + observation.stockRaw() + (carried ? "" : unit)
                                 + (observation.maxBuyItems() != null ? " · can buy " + observation.maxBuyItems()
                                 : observation.maxBuyBulks() != null ? " · can buy " + observation.maxBuyBulks() + " bulks"
                                 : observation.maxSellItems() != null ? " · takes " + observation.maxSellItems()
