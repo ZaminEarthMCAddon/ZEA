@@ -1,4 +1,4 @@
-package net.zaminmc.zea.map.model;
+package net.zaminmc.zea.market.claims;
 
 import java.util.List;
 import java.util.Locale;

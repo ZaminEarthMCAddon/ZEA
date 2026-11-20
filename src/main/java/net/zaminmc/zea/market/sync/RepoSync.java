@@ -2,7 +2,6 @@ package net.zaminmc.zea.market.sync;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.zaminmc.zea.map.source.MapHttp;
 import net.zaminmc.zea.persistence.JsonStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +43,7 @@ public final class RepoSync {
 	/** The manifest the repository's CI generates and keeps current. */
 	public static final String MANIFEST_URL = RAW_BASE + "/manifest.json";
 
-	private final MapHttp http;
+	private final DatasetHttp http;
 	private final Executor executor;
 	private final Path cacheFile;
 	private final Path metaFile;
@@ -52,7 +51,7 @@ public final class RepoSync {
 	private String manifestEtag;
 	private String manifestLastModified;
 
-	public RepoSync(MapHttp http, Executor executor, Path cacheFile,
+	public RepoSync(DatasetHttp http, Executor executor, Path cacheFile,
 			Consumer<List<SharedShops.SharedRecord>> clientThreadSink) {
 		this.http = http;
 		this.executor = executor;
@@ -81,7 +80,7 @@ public final class RepoSync {
 						return CompletableFuture.completedFuture(
 								new Summary(cacheCount(), true, false));
 					}
-					return refreshFromManifest(MapHttp.utf8(fetched.body()));
+					return refreshFromManifest(DatasetHttp.utf8(fetched.body()));
 				})
 				.exceptionally(failure -> {
 					LOGGER.info("Repository sync unavailable ({}); the cached dataset stays active",
@@ -105,7 +104,7 @@ public final class RepoSync {
 				return http.getAsync(RAW_BASE + "/" + entry.path(), null, null, executor)
 						.thenApply(datasetBody -> {
 							List<SharedShops.SharedRecord> records =
-									SharedShops.parse(MapHttp.utf8(datasetBody.body()), entry.path());
+									SharedShops.parse(DatasetHttp.utf8(datasetBody.body()), entry.path());
 					SharedShops.saveCache(cacheFile, records);
 					saveMeta(new Meta(entry.sha256(), System.currentTimeMillis()));
 					clientThreadSink.accept(records);

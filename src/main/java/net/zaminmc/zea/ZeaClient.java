@@ -31,17 +31,16 @@ import net.zaminmc.zea.config.ZeaConfigStore;
 import net.zaminmc.zea.config.ZeaPaths;
 import net.zaminmc.zea.keybind.ZeaKeys;
 import net.zaminmc.zea.lifecycle.ClientLifecycle;
-import net.zaminmc.zea.map.MapSubsystem;
-import net.zaminmc.zea.map.cache.ClaimStore;
+import net.zaminmc.zea.market.claims.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.market.editor.MarketEditorCommands;
 import net.zaminmc.zea.market.sync.DatasetMerger;
+import net.zaminmc.zea.market.sync.DatasetHttp;
 import net.zaminmc.zea.market.sync.RepoSync;
 import net.zaminmc.zea.market.sync.SharedShops;
 import net.zaminmc.zea.hud.HudCommands;
 import net.zaminmc.zea.hud.HudSubsystem;
-import net.zaminmc.zea.map.hud.MapHudRenderer;
 import net.zaminmc.zea.misc.TooltipScroller;
 import net.zaminmc.zea.nav.ShopDestinationHud;
 import net.zaminmc.zea.nav.ShopDestinationTracker;
@@ -84,7 +83,6 @@ public final class ZeaClient implements ClientModInitializer {
         private static SlotLocks slotLocks;
         private static ZeaConfig config;
         private static HudSubsystem hud;
-        private static MapHudRenderer mapHudRenderer;
         private static RepoSync repoSync;
         private static ExecutorService repoExecutor;
         private static ExecutorService historyExecutor;
@@ -97,7 +95,6 @@ public final class ZeaClient implements ClientModInitializer {
         private static SpawnCommandObserver spawnCommands;
         private static ShopDestinationTracker destinationTracker;
         private static ItemBrowser browser;
-        private static MapSubsystem map;
 
         public static ClientLifecycle lifecycle() {
                 return lifecycle;
@@ -123,11 +120,6 @@ public final class ZeaClient implements ClientModInitializer {
 
         public static ZeaConfig config() {
                 return config;
-        }
-
-        /** The map subsystem (world map, minimap, claims and players). */
-        public static MapSubsystem map() {
-                return map;
         }
 
         /** The physical-shop market subsystem. */
@@ -213,38 +205,21 @@ public final class ZeaClient implements ClientModInitializer {
                 destinationTracker = new ShopDestinationTracker();
                 browser = new ItemBrowser();
                 marketExecutor = newIoExecutor("ZEA-Market");
-                // The claim cache is constructed here because the market's town
-                // resolution reads it; the map subsystem reuses this instance
-                // when its claim fetch pipeline lands.
+                // The claim cache is constructed here because the market's
+                // town and nation resolution reads it.
                 ClaimStore claimStore = new ClaimStore(System::currentTimeMillis);
                 market = new MarketSubsystem(lifecycle, configDir.resolve("zea/market.json"), marketExecutor,
                                 config.market, new ClaimTownResolver(claimStore));
                 slotLocks = new SlotLocks(new SlotLockStore(paths.slotLocks()));
-                // The universal HUD manager and the map engine behind its map
-                // elements: the element specs seed their factory size from the
-                // map config, position and scale belong to the manager (the
-                // on-screen pixel state MapConfig deliberately does not carry).
-                        hud = new HudSubsystem(paths.hudSettings());
-                hud.register(
-                                new net.zaminmc.zea.hud.HudElementSpec(
-                                                Identifier.fromNamespaceAndPath("zea", "hud/minimap"),
-                                                "Minimap",
-                                                config.map.minimap.size, config.map.minimap.size,
-                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 8, true),
-                                mapHudRenderer = new MapHudRenderer(MapHudRenderer.Kind.MINIMAP));
-                hud.register(
-                                new net.zaminmc.zea.hud.HudElementSpec(
-                                                Identifier.fromNamespaceAndPath("zea", "hud/map"),
-                                                "Map overlay",
-                                                config.map.minimap.size * 2, config.map.minimap.size * 2,
-                                                net.zaminmc.zea.hud.HudAnchor.BOTTOM_RIGHT, 8, 8, false),
-                                new MapHudRenderer(MapHudRenderer.Kind.MAP_OVERLAY));
+                // The universal HUD manager: the element specs carry their
+                // factory size, position and scale belong to the manager.
+                hud = new HudSubsystem(paths.hudSettings());
                 hud.register(
                                 new net.zaminmc.zea.hud.HudElementSpec(
                                                 Identifier.fromNamespaceAndPath("zea", "hud/destination"),
                                                 "Shop destination",
                                                 180, 14,
-                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 28, false),
+                                                net.zaminmc.zea.hud.HudAnchor.TOP_RIGHT, 8, 8, false),
                                 new ShopDestinationHud());
                         repoExecutor = newIoExecutor("ZEA-Repo");
                 // The shared dataset sync: fetch and parse on the repo
@@ -252,7 +227,7 @@ public final class ZeaClient implements ClientModInitializer {
                 // index. The last accepted snapshot loads right now, on
                 // the client thread — a restart serves the dataset from
                 // disk before the network answers anything.
-                repoSync = new RepoSync(new net.zaminmc.zea.map.source.MapHttp(repoExecutor), repoExecutor,
+                repoSync = new RepoSync(new DatasetHttp(repoExecutor), repoExecutor,
                                 paths.sharedDataset(), records -> Minecraft.getInstance().execute(() -> {
                                         var result = DatasetMerger.merge(market.data(), records);
                                         if (result.shopsAdded() + result.observationsAppended() > 0) {
@@ -294,9 +269,7 @@ public final class ZeaClient implements ClientModInitializer {
                                                                                 RarityEngine.invalidateCaches();
                                                                                 TooltipScroller.reset();
                                                                 });
-                map = new MapSubsystem(config, lifecycle);
                 ClientTickEvents.END_CLIENT_TICK.register(client -> {
-                        map.tick(client);
                         spawnCommands.tick(
                                                         client.player == null ? null
                                                                         : new double[] {client.player.getX(), client.player.getZ()},
@@ -309,11 +282,6 @@ public final class ZeaClient implements ClientModInitializer {
                                 if (destinationTick >= 20) {
                                         destinationTick = 0;
                                         destinationTracker.tick(currentWorld(), playerNation());
-                                }
-                        }
-                        while (ZeaKeys.OPEN_MAP.consumeClick()) {
-                                if (client.gui.screen() == null) {
-                                        map.openWorldMap(client);
                                 }
                         }
                 });
@@ -336,12 +304,6 @@ public final class ZeaClient implements ClientModInitializer {
                 // client queue like the settings screen: a client command
                 // runs mid-keystroke in the chat screen, whose follow-up
                 // close would otherwise wipe the editor before a frame.
-                ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
-                                ClientCommands.literal("zeamap").executes(context -> {
-                                        Minecraft client = context.getSource().getClient();
-                                        client.execute(() -> map.openWorldMap(client));
-                                        return 1;
-                                })));
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
                                 ClientCommands.literal("zeabuttons").executes(context -> {
                                         Minecraft client = context.getSource().getClient();
@@ -407,10 +369,6 @@ public final class ZeaClient implements ClientModInitializer {
         private static void shutdownBackgroundWork() {
                 try {
                         chat.shutdownHistory();
-                        if (mapHudRenderer != null) {
-                                mapHudRenderer.close();
-                        }
-                        map.shutdown();
                 } finally {
                         market.flushNow();
                         pasteService.close();

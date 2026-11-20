@@ -6,8 +6,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  * One HUD element's drawing implementation. The manager and the live HUD
  * call the same method — an element renders into the rectangle the layout
  * math resolved for it and nowhere else, and {@code editorPreview} lets
- * it relax live-only gates (a map with no world data still draws its
- * frame) so the manager always shows where the element sits.
+ * it relax live-only gates (a destination waypoint with no live data
+ * still draws its diamond) so the manager always shows where the element
+ * sits.
  */
 public interface HudRenderer {
         /**

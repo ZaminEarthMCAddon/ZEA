@@ -13,7 +13,6 @@
                 "ContainerScreenMixin",
                 "CreativeScreenMixin",
                 "EditBoxAccessor",
-                "GuiGraphicsExtractorAccessor",
                 "GuiGraphicsExtractorMixin",
                 "HudMixin",
                 "MouseHandlerMixin",

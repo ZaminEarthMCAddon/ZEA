@@ -1,4 +1,4 @@
-package net.zaminmc.zea.map.geometry;
+package net.zaminmc.zea.market.claims;
 
 import java.util.ArrayList;
 import java.util.List;

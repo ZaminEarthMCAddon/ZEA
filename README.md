@@ -3,9 +3,8 @@
 A client-side Fabric mod for [EarthMC](https://earthmc.net). ZEA is an
 all-in-one EarthMC addon: a modern chat experience with EarthMC-aware message
 classification, feeds and notifications, an item browser beside the inventory
-that indexes every physical shop you observe, a native EarthMC map, player
-information, persistent chat history, inventory buttons and configuration
-sharing.
+that indexes every physical shop you observe, player information,
+persistent chat history, inventory buttons and configuration sharing.
 
 ZEA is exclusively client-side. It does not require (or support) installation
 on the server, and it never sends anything on your behalf unless you explicitly
@@ -57,9 +56,7 @@ development builds: expect rough edges, and report what you find.
 - **Shop observation** — inspecting a shop sign records the shop and its
   response: the exact item identity, the transaction direction, prices, stock
   and the sign's coordinates. Observations persist locally, merge with the
-  community dataset, and resolve to towns and nations through the map data.
-- **Map** — a native EarthMC map: full-screen world map, minimap, town claim
-  overlays and player markers, with shop navigation to observed stores.
+  community dataset, and resolve to towns and nations through claim geometry.
 - **Inventory utilities** — freely placed inventory buttons with an in-game
   editor, the search bar with an inline calculator, slot binding and slot
   locking.
@@ -72,8 +69,7 @@ development builds: expect rough edges, and report what you find.
 
 | Command | What it does |
 |---|---|
-| `/zeamap` | Opens the full-screen world map (also bound to `M`). |
-| `/zeahud` | Opens the HUD manager for the map surfaces. |
+| `/zeahud` | Opens the HUD manager for the HUD elements. |
 | `/zea capture on\|off` | Records EarthMC's raw server messages for a bug report. |
 | `/zea capture status` | Shows whether a capture is running. |
 | `/zea share` | Exports configurations or button layouts as paste links. |
@@ -87,13 +83,13 @@ line, Ctrl+F for the chat search) work regardless.
 
 ZEA's config screen opens through Mod Menu (or `/zea share status`'s
 companion UI). Settings are grouped per subsystem — Chat, Inventory utilities,
-Rarity, Map, Market — and every group documents what its options do. Nothing
+Rarity, Market — and every group documents what its options do. Nothing
 toggles another player's experience: ZEA is a client mod.
 
 ## Data collection and privacy
 
 ZEA records what your own client observes on EarthMC: shop responses, sign
-contents, chat messages, map data from the public EarthMC API. Everything is
+contents, chat messages. Everything is
 stored locally in your game folder. Nothing leaves your machine unless you
 share a configuration paste yourself or submit an observation to
 [ZEA-REPO](https://github.com/ZaminEarthMCAddon/ZEA-REPO) through the

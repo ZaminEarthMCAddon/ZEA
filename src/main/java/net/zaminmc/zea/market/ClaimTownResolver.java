@@ -1,8 +1,8 @@
 package net.zaminmc.zea.market;
 
-import net.zaminmc.zea.map.cache.ClaimStore;
-import net.zaminmc.zea.map.model.MapWorld;
-import net.zaminmc.zea.map.model.TownClaim;
+import net.zaminmc.zea.market.claims.ClaimStore;
+import net.zaminmc.zea.market.claims.MapWorld;
+import net.zaminmc.zea.market.claims.TownClaim;
 import org.jspecify.annotations.Nullable;
 
 /**
