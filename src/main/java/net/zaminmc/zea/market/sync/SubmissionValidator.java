@@ -17,10 +17,11 @@ import java.util.Optional;
  * <p>Rules, in order:
  *
  * <ul>
- *   <li>Only server-verified observations submit. Sign-only adverts may
- *       aid local discovery but are never shared — the repository's
- *       strongest recommendations must stay grounded in real shop
- *       responses.</li>
+ *   <li>Only server-verified and player-confirmed observations submit.
+ *       Sign-only adverts may aid local discovery but are never shared —
+ *       the repository's strongest recommendations must stay grounded in
+ *       real shop responses or in a listing the player entered or
+ *       corrected themselves.</li>
  *   <li>The record must carry a usable exact identity, a direction, a
  *       price with scope, and a physical position (sign coordinates);
  *       anything less cannot be validated downstream and is rejected
@@ -31,69 +32,70 @@ import java.util.Optional;
  * </ul>
  */
 public final class SubmissionValidator {
-	private SubmissionValidator() {
-	}
+        private SubmissionValidator() {
+        }
 
-	public static Optional<SubmissionRecord> validate(PhysicalShop shop, ShopObservation observation,
-			Instant submittedAt) {
-		if (observation.sourceType() != net.zaminmc.zea.market.model.SourceType.SERVER_RESPONSE) {
-			return Optional.empty();
-		}
-		if (observation.fingerprint() == null || !observation.fingerprint().isExact()
-				|| observation.direction() == null
-				|| observation.price() == null || observation.price().signum() < 0
-				|| observation.priceScope() == null
-				|| observation.observedAt() == null || submittedAt == null) {
-			return Optional.empty();
-		}
-		return Optional.of(new SubmissionRecord(
-				shop.shopId(), shop.serverId(), shop.world(),
-				shop.signPos().getX(), shop.signPos().getY(), shop.signPos().getZ(),
-				shop.chestPos() == null ? null : shop.chestPos().getX(),
-				shop.chestPos() == null ? null : shop.chestPos().getY(),
-				shop.chestPos() == null ? null : shop.chestPos().getZ(),
-				shop.owner(), shop.nation(),
-				observation.direction().name(),
-				observation.fingerprint().token(),
-				observation.itemDisplay(),
-				observation.price().toPlainString(),
-				observation.priceScope().name(),
-				observation.bulkSize(),
-				observation.stockRaw(),
-				observation.stockUnit() == null ? null : observation.stockUnit().name(),
-				observation.maxBuyBulks(),
-				observation.maxBuyItems(),
-				observation.maxSellBulks(),
-				observation.maxSellItems(),
-				observation.enchantments(),
-				observation.supportsAll(),
-				observation.observedAt().toEpochMilli(),
-				submittedAt.toEpochMilli()));
-	}
+        public static Optional<SubmissionRecord> validate(PhysicalShop shop, ShopObservation observation,
+                        Instant submittedAt) {
+                if (observation.sourceType() != net.zaminmc.zea.market.model.SourceType.SERVER_RESPONSE
+                                && observation.sourceType() != net.zaminmc.zea.market.model.SourceType.MANUAL) {
+                        return Optional.empty();
+                }
+                if (observation.fingerprint() == null || !observation.fingerprint().isExact()
+                                || observation.direction() == null
+                                || observation.price() == null || observation.price().signum() < 0
+                                || observation.priceScope() == null
+                                || observation.observedAt() == null || submittedAt == null) {
+                        return Optional.empty();
+                }
+                return Optional.of(new SubmissionRecord(
+                                shop.shopId(), shop.serverId(), shop.world(),
+                                shop.signPos().getX(), shop.signPos().getY(), shop.signPos().getZ(),
+                                shop.chestPos() == null ? null : shop.chestPos().getX(),
+                                shop.chestPos() == null ? null : shop.chestPos().getY(),
+                                shop.chestPos() == null ? null : shop.chestPos().getZ(),
+                                shop.owner(), shop.nation(),
+                                observation.direction().name(),
+                                observation.fingerprint().token(),
+                                observation.itemDisplay(),
+                                observation.price().toPlainString(),
+                                observation.priceScope().name(),
+                                observation.bulkSize(),
+                                observation.stockRaw(),
+                                observation.stockUnit() == null ? null : observation.stockUnit().name(),
+                                observation.maxBuyBulks(),
+                                observation.maxBuyItems(),
+                                observation.maxSellBulks(),
+                                observation.maxSellItems(),
+                                observation.enchantments(),
+                                observation.supportsAll(),
+                                observation.observedAt().toEpochMilli(),
+                                submittedAt.toEpochMilli()));
+        }
 
-	/**
-	 * One shareable shop observation. Field-for-field the local
-	 * observation plus its physical shop context and both timestamps;
-	 * the ZEA-REPO shop dataset schema (which does not exist yet) must
-	 * accept exactly this shape or a documented subset.
-	 */
-	public record SubmissionRecord(
-			String shopId, String serverId, String world,
-			int signX, int signY, int signZ,
-			@Nullable Integer chestX, @Nullable Integer chestY, @Nullable Integer chestZ,
-			@Nullable String owner, @Nullable String nation,
-			String direction, String token, @Nullable String itemDisplay,
-			String price, String priceScope,
-			@Nullable Integer bulkSize, @Nullable String stockRaw, @Nullable String stockUnit,
-			@Nullable Integer maxBuyBulks, @Nullable Integer maxBuyItems,
-			@Nullable Integer maxSellBulks, @Nullable Integer maxSellItems,
-			List<String> enchantments, boolean supportsAll,
-			long observedAt, long submittedAt) {
-		public SubmissionRecord {
-			if (shopId == null || serverId == null || world == null || direction == null
-					|| token == null || token.isEmpty() || price == null || priceScope == null) {
-				throw new NullPointerException("submission fields must not be null");
-			}
-		}
-	}
+        /**
+         * One shareable shop observation. Field-for-field the local
+         * observation plus its physical shop context and both timestamps;
+         * the ZEA-REPO shop dataset schema (which does not exist yet) must
+         * accept exactly this shape or a documented subset.
+         */
+        public record SubmissionRecord(
+                        String shopId, String serverId, String world,
+                        int signX, int signY, int signZ,
+                        @Nullable Integer chestX, @Nullable Integer chestY, @Nullable Integer chestZ,
+                        @Nullable String owner, @Nullable String nation,
+                        String direction, String token, @Nullable String itemDisplay,
+                        String price, String priceScope,
+                        @Nullable Integer bulkSize, @Nullable String stockRaw, @Nullable String stockUnit,
+                        @Nullable Integer maxBuyBulks, @Nullable Integer maxBuyItems,
+                        @Nullable Integer maxSellBulks, @Nullable Integer maxSellItems,
+                        List<String> enchantments, boolean supportsAll,
+                        long observedAt, long submittedAt) {
+                public SubmissionRecord {
+                        if (shopId == null || serverId == null || world == null || direction == null
+                                        || token == null || token.isEmpty() || price == null || priceScope == null) {
+                                throw new NullPointerException("submission fields must not be null");
+                        }
+                }
+        }
 }
