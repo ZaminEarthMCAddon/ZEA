@@ -5340,3 +5340,43 @@ stood, and the disabled arrows carry JEI's disabled plate. One finding
 the frames caught: `SideStats.shops()` is the variant-wide count, so the
 identity block counts each side's offers itself — a one-shop SELL TO
 read as fourteen.
+
+## dev.108 — who gets this message: the PMs tab's Send-to tag (2026-11-20)
+
+The PMs tab routes a plain message to `/r` — the server's reply target,
+which moves with every PM exchange in either direction — but nothing on
+screen said who that was. The refusal toast fired only when nobody was
+there to reply to; between "partner exists" and "partner is who you
+think" the screen was silent, and a PM arriving mid-conversation would
+silently redirect the next message.
+
+### The tag
+
+`PmSendIndicator` — a small widget on the chat input's row at its right
+end, visible only while the PMs tab is selected. With a reply target it
+reads `Send to <partner>` in the selected tab's yellow; before any
+exchange it reads `Recent: a, b, c` in gray — the session's frequent
+partners (two or more exchanges, `PrivateMessaging.FREQUENT_EXCHANGES`),
+most recent first, capped at three. One-off pings never reach the hint;
+with no contacts the row reads exactly like vanilla. Text, not chrome:
+no box, no icon, no animation, and by construction non-interactive —
+no clicks, no focus, no sound. Steps aside silently when a long name
+would not fit the screen. Config toggle in a new PMs category, on by
+default.
+
+### The model
+
+`PrivateMessaging` keeps the session's contacts beside the reply target
+(name, exchange count, last exchange). The reply-target rule is
+unchanged — it already mirrored the server's `/r` semantics (last PM
+in either direction wins; cleared on disconnect). A typed `/msg`
+(`/m` `/tell` `/w` `/whisper`, case-insensitive) now moves the target
+at send time rather than when the echo lands, and deliberately records
+no contact: the echo confirms the message landed and records the
+exchange exactly once, so the counts stay honest.
+
+### Verification
+
+1466 tests, zero failures; full build green. The in-game look (tag
+placement against the real input row, the refusal-toast interplay)
+awaits the next live dev-client pass.

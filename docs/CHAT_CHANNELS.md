@@ -77,3 +77,14 @@ to `ClientTickEvents.END_CLIENT_TICK` in `ChatSubsystem`; sends go through
 - MoulConfig options for interval and default-visible tabs.
 - Whether the server reports the writing channel on join (unverified) —
   until observed, `ChannelState` starts unknown after each join.
+
+## The PMs tab's send target (dev.108)
+
+The PMs tab sends plain messages as `/r <msg>`; the reply target is the
+partner of the most recent PM exchange in either direction —
+[`PrivateMessaging`](../src/main/java/net/zaminmc/zea/chat/feeds/PrivateMessaging.java)
+mirrors that rule, and a typed `/msg` (aliases `/m` `/tell` `/w`
+`/whisper`) moves it at send time, before the echo. The `Send to
+<partner>` tag beside the chat input names it live (`PmSendIndicator`);
+before any exchange it lists the session's frequent partners instead.
+`clear()` on disconnect resets both, like the server's own target.
