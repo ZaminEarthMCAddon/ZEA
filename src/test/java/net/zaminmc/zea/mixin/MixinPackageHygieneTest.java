@@ -57,9 +57,13 @@ class MixinPackageHygieneTest {
         private static final Path MAIN_CLASSES = Paths.get("build", "classes", "java", "main");
 
         /** The mixin config, whose lists define what "registered" means. */
-        private static final Path MIXIN_CONFIG = Paths.get("src", "main", "resources", "zea.mixins.json");
+        private static final List<Path> MIXIN_CONFIGS = List.of(
+                        Paths.get("src", "main", "resources", "zea.mixins.json"),
+                        // The soft config for the Xaero integration: required=false
+                        // and require=0, but Mixin owns the package just the same.
+                        Paths.get("src", "main", "resources", "zea-xaero.mixins.json"));
 
-        /** Class names the mixin config registers, in internal form. */
+        /** Class names the mixin configs register, in internal form. */
         private static Set<String> registered;
 
         /** Every production class file, keyed by internal name. */
@@ -69,14 +73,16 @@ class MixinPackageHygieneTest {
         static void readConfigAndClasses() throws IOException {
                 assumeTrue(Files.isDirectory(MAIN_CLASSES),
                                 "compiled classes not found — run through Gradle");
-                try (Reader reader = Files.newBufferedReader(MIXIN_CONFIG, StandardCharsets.UTF_8)) {
-                        JsonObject config = new Gson().fromJson(reader, JsonObject.class);
-                        String pkg = config.get("package").getAsString();
-                        registered = new HashSet<>();
-                        for (String key : List.of("mixins", "client", "server")) {
-                                if (config.has(key)) {
-                                        for (var entry : config.getAsJsonArray(key)) {
-                                                registered.add(pkg.replace('.', '/') + "/" + entry.getAsString());
+                registered = new HashSet<>();
+                for (Path configPath : MIXIN_CONFIGS) {
+                        try (Reader reader = Files.newBufferedReader(configPath, StandardCharsets.UTF_8)) {
+                                JsonObject config = new Gson().fromJson(reader, JsonObject.class);
+                                String pkg = config.get("package").getAsString();
+                                for (String key : List.of("mixins", "client", "server")) {
+                                        if (config.has(key)) {
+                                                for (var entry : config.getAsJsonArray(key)) {
+                                                        registered.add(pkg.replace('.', '/') + "/" + entry.getAsString());
+                                                }
                                         }
                                 }
                         }

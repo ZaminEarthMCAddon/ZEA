@@ -1,0 +1,12 @@
+{
+        "required": false,
+        "minVersion": "0.8",
+        "package": "net.zaminmc.zea.mixin",
+        "compatibilityLevel": "JAVA_25",
+        "client": [
+                "XaeroGuiMapMixin"
+        ],
+        "injectors": {
+                "defaultRequire": 0
+        }
+}

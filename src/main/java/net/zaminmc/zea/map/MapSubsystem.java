@@ -1,12 +1,15 @@
 package net.zaminmc.zea.map;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.config.ZeaConfig;
 import net.zaminmc.zea.mixin.GuiGraphicsExtractorAccessor;
@@ -30,6 +33,7 @@ import net.zaminmc.zea.map.render.overlay.ClaimOverlay;
 import net.zaminmc.zea.map.render.overlay.PlayerOverlay;
 import net.zaminmc.zea.map.render.tile.OverlayDrawer;
 import net.zaminmc.zea.map.render.tile.TileFrameDrawer;
+import net.zaminmc.zea.map.xaero.XaeroGateway;
 import net.zaminmc.zea.map.render.tile.TileFrameDriver;
 import net.zaminmc.zea.map.render.tile.TileRenderer;
 import net.zaminmc.zea.map.render.tile.TileTextures;
@@ -447,26 +451,32 @@ public final class MapSubsystem {
                 return worldMapScreen;
         }
 
-        /** Opens the full-screen world map. */
+        /**
+         * Opens the world map — Xaero's GuiMap, the engine ZEA's EarthMC
+         * layer renders inside. Xaero is the renderer: terrain, camera,
+         * zoom and chrome are its; ZEA's soft mixin draws the claim and
+         * player layer over its terrain at its camera. Without Xaero
+         * installed there is no map of ZEA's own anymore — the player
+         * gets told what to install instead of a second-rate screen.
+         */
         public void openWorldMap(Minecraft client) {
                 if (!active() || !config.map.worldMapEnabled) {
                         return;
                 }
+                if (FabricLoader.getInstance().isModLoaded("xaeroworldmap")) {
+                        XaeroGateway.openWorldMap(client);
+                        return;
+                }
                 LocalPlayer player = client.player;
-                double x = player == null ? 0 : player.getX();
-                double z = player == null ? 0 : player.getZ();
-                MapWorld viewed = switch (config.map.defaultWorld) {
-                        case EARTH -> MapWorld.EARTH;
-                        case MOON -> MapWorld.MOON;
-                        case AUTO -> playerWorld;
-                };
-                worldCamera(viewed, x, z);
-                WorldMapScreen screen = new WorldMapScreen(this, viewed, config.map.worldMap.followPlayer);
-                worldMapScreen = screen;
-                client.gui.setScreen(screen);
+                if (player != null) {
+                        client.gui.hud.getChat().addClientSystemMessage(Component.literal(
+                                        "Install Xaero's World Map for the EarthMC map — ZEA draws its "
+                                                        + "claims and players inside it.")
+                                        .withStyle(ChatFormatting.YELLOW));
+                }
         }
 
-        /** The screen reports its own lifetime. */
+        /** The screen reports its own lifetime (the retired own screen, until it is removed). */
         public void worldMapClosed(WorldMapScreen screen) {
                 if (worldMapScreen == screen) {
                         worldMapScreen = null;

@@ -36,6 +36,13 @@ repositories {
                 name = 'TerraformersMC'
                 url = 'https://maven.terraformersmc.com/releases/'
         }
+        // Xaero's own Maven, for the world-map compile-only dependency below.
+        // The EarthMC map layer draws inside Xaero's GuiMap through a soft
+        // mixin; users install Xaero at runtime (fabric.mod.json suggests it).
+        maven {
+                name = "XaerosMaven"
+                url = 'https://chocolateminecraft.com/maven/'
+        }
 }
 
 dependencies {
@@ -68,6 +75,17 @@ dependencies {
         // bundles nothing: players who want the mod-list button install
         // ModMenu themselves.
         implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+        // Xaero's World Map, compile-only from Xaero's Maven: the EarthMC
+        // world-map layer draws inside Xaero's GuiMap through a soft mixin
+        // (zea-xaero.mixins.json, required=false), and the screen itself
+        // opens through Xaero's own session. Optional at runtime — without
+        // Xaero installed ZEA says so instead of rendering a map. The
+        // published jar carries Mojang-mapped Minecraft signatures, so the
+        // plain configuration matches ZEA's compile classpath directly;
+        // every Xaero-owned name the integration touches (GuiMap, its
+        // camera fields, WorldMapSession) is stable across mappings.
+        compileOnly "xaero.map:xaeroworldmap-fabric-${project.minecraft_version}:${project.xaeroworldmap_version}"
 
         testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
         testRuntimeOnly "org.junit.platform:junit-platform-launcher:${project.junit_launcher_version}"

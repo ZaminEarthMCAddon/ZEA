@@ -14,7 +14,8 @@
         "license": "LGPL-3.0-or-later",
         "environment": "client",
         "mixins": [
-                "zea.mixins.json"
+                "zea.mixins.json",
+                "zea-xaero.mixins.json"
         ],
         "entrypoints": {
                 "client": [
@@ -29,5 +30,9 @@
                 "minecraft": "~26.3",
                 "java": ">=25",
                 "fabric-api": "*"
+        },
+        "suggests": {
+                "xaeroworldmap": ">=1.47.2",
+                "xaerominimap": ">=26.6.2"
         }
 }
