@@ -391,8 +391,26 @@ public final class MarketSubsystem {
                 if (data.record(shop, completed)) {
                         persistence.markDirty(MarketPersistence.snapshot(data));
                         submissions.enqueue(shop, completed);
+                        confirmCompletion(shop, completed, spawn);
                 }
                 return true;
+        }
+
+        /** The chat confirmation of a completion: the listing as it now stands. */
+        private void confirmCompletion(PhysicalShop shop, ShopObservation completed,
+                        @Nullable String spawn) {
+                Minecraft client = Minecraft.getInstance();
+                if (client.player == null) {
+                        return;
+                }
+                String item = completed.itemDisplay() == null ? "item" : completed.itemDisplay();
+                MutableComponent line = headline("Listing added to the market list")
+                                .append(" · ").append(detail("Item: ", item))
+                                .append(" · ").append(detail("Sign: ", coordinates(shop.signPos())));
+                if (spawn != null) {
+                        line.append(" · ").append(detail("Spawn: ", spawn));
+                }
+                chat(client, line);
         }
 
         /**
