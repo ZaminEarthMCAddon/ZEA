@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Who the player's next {@code /r} goes to: the partner of their most
@@ -59,6 +60,14 @@ public final class PrivateMessaging {
 	/** Insertion-ordered: ties in recency resolve to the first-seen partner. */
 	private final Map<String, Contact> contacts = new LinkedHashMap<>();
 
+	/**
+	 * The server's aliases for a directed private message, matched at the
+	 * start of the normalized command line — the rest of the line is the
+	 * message body and must not constrain the name.
+	 */
+	private static final Pattern OUTGOING_COMMAND =
+					Pattern.compile("^(?i)(?:msg|m|tell|w|whisper)\\s+(\\S+)");
+
 	/** Records one private message, incoming or outgoing, as the new reply target. */
 	public void onPrivateMessage(PrivateMessage message) {
 		onPrivateMessage(message, System.currentTimeMillis());
@@ -79,6 +88,33 @@ public final class PrivateMessaging {
 	/** Whom {@code /r} would reach right now. */
 	public Optional<String> partner() {
 		return Optional.ofNullable(partner);
+	}
+
+	/**
+	 * The player typed a directed PM themselves — {@code /msg <name> ...}
+	 * and its aliases — so the reply target moves <b>now</b>, before the
+	 * server's echo comes back: the Send-to tag must never show a stale
+	 * name in the beat between typing and echoing. The exchange itself is
+	 * not recorded here; the echo confirms it landed and records it
+	 * exactly once, so the contact counts stay honest.
+	 *
+	 * @param normalizedCommand the typed text with its leading slash, as
+	 *                          the chat input normalizes it
+	 * @return whether the line named a private-message recipient
+	 */
+	public boolean onOutgoingPrivateCommand(String normalizedCommand) {
+		if (normalizedCommand == null) {
+			return false;
+		}
+		String body = normalizedCommand.startsWith("/")
+						? normalizedCommand.substring(1)
+						: normalizedCommand;
+		var matcher = OUTGOING_COMMAND.matcher(body);
+		if (!matcher.lookingAt()) {
+			return false;
+		}
+		partner = matcher.group(1);
+		return true;
 	}
 
 	/**

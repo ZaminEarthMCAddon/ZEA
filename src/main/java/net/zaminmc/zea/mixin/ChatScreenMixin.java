@@ -574,6 +574,13 @@ public abstract class ChatScreenMixin {
                         return;
                 }
                 if (message == null || message.isBlank() || message.startsWith("/")) {
+                        // A typed /msg moves the reply target the moment it is
+                        // sent, not when the echo lands — the Send-to tag must
+                        // never show a stale name in that beat. The echo still
+                        // records the exchange; this only moves the pointer.
+                        if (message != null && !message.isBlank()) {
+                                chat.privateMessaging().onOutgoingPrivateCommand(message);
+                        }
                         return;
                 }
                 ChatSubsystem.ChannelSend outcome =
