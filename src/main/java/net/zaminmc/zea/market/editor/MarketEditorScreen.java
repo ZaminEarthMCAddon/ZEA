@@ -94,7 +94,12 @@ public final class MarketEditorScreen extends Screen {
         private static final int SLOT_INTERIOR = 0xFF8B8B8B;
         /** The red a rejected number wears until it parses. */
         private static final int FIELD_ERROR = 0xFFFF5555;
-        private static final int FIELD_OK = 0xFFE0E0E0;
+        /** Field text sits on the EditBox's own dark plate — light always. */
+        private static final int FIELD_TEXT = 0xFFE0E0E0;
+        private static final int FIELD_TEXT_DIM = 0xFFA0A0A0;
+        /** Vanilla button labels — light on the button plates. */
+        private static final int BUTTON_TEXT = 0xFFE0E0E0;
+        private static final int BUTTON_TEXT_DIM = 0xFF8C8C8C;
         /** The selected toggle's gold wash — the browser's selection accent. */
         private static final int SELECTED_WASH = 0x30E8C14A;
         private static final int SELECTED_FRAME = 0xFFE8C14A;
@@ -156,7 +161,6 @@ public final class MarketEditorScreen extends Screen {
         private int @Nullable [] buyingBox;
         private int @Nullable [] itemBox;
         private int @Nullable [] perItemBox;
-        private int @Nullable [] perBulkBox;
         private int @Nullable [] doneBox;
         private int @Nullable [] cancelBox;
         private final List<int[]> gridBoxes = new ArrayList<>();
@@ -377,7 +381,7 @@ public final class MarketEditorScreen extends Screen {
                         drawNineSliceBorder(graphics, x, y, w, FIELD_HEIGHT);
                 }
                 int textWidth = f.width(label);
-                int color = selected ? TEXT : TEXT_DIM;
+                int color = selected ? TEXT : BUTTON_TEXT;
                 graphics.text(f, label, x + (w - textWidth) / 2, y + (FIELD_HEIGHT - 8) / 2 + 1, color, false);
         }
 
@@ -395,7 +399,7 @@ public final class MarketEditorScreen extends Screen {
                 field.setX(guiLeft + CONTENT_X);
                 field.setY(guiTop + row + LABEL_PITCH);
                 field.setWidth(CONTENT_WIDTH);
-                field.setTextColor(field.isFocused() ? FIELD_OK : TEXT);
+                field.setTextColor(field.isFocused() ? FIELD_TEXT : FIELD_TEXT_DIM);
                 field.extractRenderState(graphics, mouseX, mouseY, 0f);
         }
 
@@ -413,7 +417,7 @@ public final class MarketEditorScreen extends Screen {
                 itemField.setX(slotX + SLOT_SIZE + 4);
                 itemField.setY(y);
                 itemField.setWidth(CONTENT_WIDTH - SLOT_SIZE - 4);
-                itemField.setTextColor(itemField.isFocused() ? FIELD_OK : TEXT);
+                itemField.setTextColor(itemField.isFocused() ? FIELD_TEXT : FIELD_TEXT_DIM);
                 itemField.extractRenderState(graphics, mouseX, mouseY, 0f);
                 // The hint: what the slot click does.
                 if (hover(itemBox, mouseX, mouseY)) {
@@ -436,15 +440,15 @@ public final class MarketEditorScreen extends Screen {
                 priceField.setX(guiLeft + CONTENT_X);
                 priceField.setY(y);
                 priceField.setWidth(fieldWidth);
-                priceField.setTextColor(priceField.isFocused() ? FIELD_OK
-                                : priceTextValid() ? TEXT : FIELD_ERROR);
+                priceField.setTextColor(!priceTextValid() ? FIELD_ERROR
+                                : priceField.isFocused() ? FIELD_TEXT : FIELD_TEXT_DIM);
                 priceField.extractRenderState(graphics, mouseX, mouseY, 0f);
                 int toggleX = guiLeft + CONTENT_X + fieldWidth + 6;
                 int toggleWidth = CONTENT_WIDTH - fieldWidth - 6;
                 drawToggle(graphics, f, toggleX, y, toggleWidth,
                                 scope == PriceScope.PER_ITEM ? "per item" : "per bulk",
-                                false, hover(scope == PriceScope.PER_ITEM ? perItemBox : perBulkBox, mouseX, mouseY));
-                // The scope button shows the current scope and cycles on click.
+                                false, hover(perItemBox, mouseX, mouseY));
+                // One button showing the current scope; a click cycles it.
         }
 
         private void drawSignRow(GuiGraphicsExtractor graphics, Font f, int mouseX, int mouseY) {
@@ -458,7 +462,7 @@ public final class MarketEditorScreen extends Screen {
                         box.setX(guiLeft + CONTENT_X + i * (fieldWidth + 6));
                         box.setY(y);
                         box.setWidth(fieldWidth);
-                        box.setTextColor(box.isFocused() ? FIELD_OK : TEXT);
+                        box.setTextColor(box.isFocused() ? FIELD_TEXT : FIELD_TEXT_DIM);
                         box.extractRenderState(graphics, mouseX, mouseY, 0f);
                 }
         }
@@ -470,21 +474,21 @@ public final class MarketEditorScreen extends Screen {
                 int y = guiTop + ROW_FOOTER;
                 drawNineSlice(graphics, BUTTON, cancelX, y, buttonWidth, FIELD_HEIGHT + 4,
                                 BUTTON_SPRITE, BUTTON_BORDER);
-                centerLabel(graphics, f, "Cancel", cancelX, y, buttonWidth, FIELD_HEIGHT + 4, TEXT);
+                centerLabel(graphics, f, "Cancel", cancelX, y, buttonWidth, FIELD_HEIGHT + 4, BUTTON_TEXT);
                 if (hover(cancelBox, mouseX, mouseY)) {
                         drawNineSlice(graphics, BUTTON_HOVER, cancelX, y, buttonWidth, FIELD_HEIGHT + 4,
                                         BUTTON_SPRITE, BUTTON_BORDER);
-                        centerLabel(graphics, f, "Cancel", cancelX, y, buttonWidth, FIELD_HEIGHT + 4, TEXT);
+                        centerLabel(graphics, f, "Cancel", cancelX, y, buttonWidth, FIELD_HEIGHT + 4, BUTTON_TEXT);
                 }
                 boolean doneReady = doneReady();
-                drawNineSlice(graphics, doneReady ? BUTTON : BUTTON, doneX, y, buttonWidth, FIELD_HEIGHT + 4,
+                drawNineSlice(graphics, BUTTON, doneX, y, buttonWidth, FIELD_HEIGHT + 4,
                                 BUTTON_SPRITE, BUTTON_BORDER);
                 if (hover(doneBox, mouseX, mouseY) && doneReady) {
                         drawNineSlice(graphics, BUTTON_HOVER, doneX, y, buttonWidth, FIELD_HEIGHT + 4,
                                         BUTTON_SPRITE, BUTTON_BORDER);
                 }
                 centerLabel(graphics, f, "Done", doneX, y, buttonWidth, FIELD_HEIGHT + 4,
-                                doneReady ? TEXT : TEXT_DIM);
+                                doneReady ? BUTTON_TEXT : BUTTON_TEXT_DIM);
                 if (hover(doneBox, mouseX, mouseY) && !doneReady()) {
                         setTooltipFor(graphics, f, doneBlocker());
                 }
@@ -543,7 +547,6 @@ public final class MarketEditorScreen extends Screen {
                 int toggleX = guiLeft + CONTENT_X + fieldWidth + 6;
                 int toggleWidth = CONTENT_WIDTH - fieldWidth - 6;
                 perItemBox = new int[] {toggleX, guiTop + ROW_PRICE + LABEL_PITCH, toggleWidth, FIELD_HEIGHT};
-                perBulkBox = perItemBox;
                 int buttonWidth = 80;
                 cancelBox = new int[] {guiLeft + CONTENT_X, guiTop + ROW_FOOTER, buttonWidth, FIELD_HEIGHT + 4};
                 doneBox = new int[] {guiLeft + PANEL_WIDTH - CONTENT_X - buttonWidth,
@@ -642,12 +645,7 @@ public final class MarketEditorScreen extends Screen {
                         return true;
                 }
                 if (contains(perItemBox, mouseX, mouseY)) {
-                        scope = PriceScope.PER_ITEM;
-                        playPressSound();
-                        return true;
-                }
-                if (contains(perBulkBox, mouseX, mouseY) && scope != PriceScope.PER_BULK) {
-                        scope = PriceScope.PER_BULK;
+                        scope = scope == PriceScope.PER_ITEM ? PriceScope.PER_BULK : PriceScope.PER_ITEM;
                         playPressSound();
                         return true;
                 }

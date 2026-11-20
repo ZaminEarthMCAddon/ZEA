@@ -171,7 +171,10 @@ public final class MarketTooltipLines {
         }
 
         private static MutableComponent bullet() {
-                return Component.literal("▪ ").withStyle(ChatFormatting.BLACK);
+                // The spec's dark bullet: black is invisible on the tooltip's
+                // near-black background, so the dark ends of the palette
+                // carry it — still a dark marker, now visible.
+                return Component.literal("▪ ").withStyle(ChatFormatting.DARK_GRAY);
         }
 
         /** The gold price shape: exact decimal text plus the gold suffix. */

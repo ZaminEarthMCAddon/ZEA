@@ -202,7 +202,7 @@ class MarketTooltipLinesTest {
                 // The bullet is black, the label white, the value gold: the
                 // bullet is the line's own style, the label and value are
                 // its siblings.
-                assertEquals(0x000000, line.getStyle().getColor().getValue());
+                assertEquals(0x555555, line.getStyle().getColor().getValue());
                 assertEquals(0xFFFFFF, line.getSiblings().get(0).getStyle().getColor().getValue());
                 String valueText = line.getSiblings().get(2).getString();
                 assertTrue(valueText.contains("1"), valueText);
