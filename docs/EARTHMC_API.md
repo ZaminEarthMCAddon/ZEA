@@ -10,7 +10,6 @@ plugin, not an SDK). Verified 2026-11-08.
 
 - Base: `https://api.earthmc.net/v4`
 - v1/v2 were disabled 2025-01-14; v3 returns 404. Current version: **4**.
-- Map data is versioned separately: `https://api.earthmc.net/map/v1/...`
 
 ## Endpoints
 
@@ -31,7 +30,6 @@ plugin, not an SDK). Verified 2026-11-08.
 | `/v4/shop` | POST | **key** | Your shops |
 | `/v4/mcmmo`, `/v4/mcmmo-top` | POST | **key** | Your mcMMO data |
 | `/v4/pursuits` | POST | **key** | Your pursuits |
-| `map/v1/players` | GET | public | Live player coordinates (hidden when sneaking/invisible/no sky light) |
 
 POST bodies: `{"query": ["name" | "uuid" | "discordId"], "template": {...}, "key": "..."}`.
 Templates select top-level fields; absent data is omitted. Lists (GET) return

@@ -1,8 +1,5 @@
-package net.zaminmc.zea.map.cache;
+package net.zaminmc.zea.market.claims;
 
-import net.zaminmc.zea.map.geometry.ChunkRings;
-import net.zaminmc.zea.map.model.MapWorld;
-import net.zaminmc.zea.map.model.TownClaim;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -1,4 +1,4 @@
-package net.zaminmc.zea.map.geometry;
+package net.zaminmc.zea.market.claims;
 
 import org.junit.jupiter.api.Test;
 

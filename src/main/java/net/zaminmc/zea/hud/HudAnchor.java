@@ -3,8 +3,8 @@ package net.zaminmc.zea.hud;
 /**
  * The screen corner a HUD element measures its offset from. Anchored
  * positioning is what makes element positions survive resolution and GUI
- * scale changes: the stored numbers are distances from one edge, so a
- * minimap docked near the top-right stays near the top-right whether the
+ * scale changes: the stored numbers are distances from one edge, so an
+ * element docked near the top-right stays near the top-right whether the
  * window is 854 or 2560 pixels wide.
  */
 public enum HudAnchor {

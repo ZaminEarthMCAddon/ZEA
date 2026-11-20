@@ -16,7 +16,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.TextColor;
 import net.zaminmc.zea.buttons.ButtonEditorScreen;
 import net.zaminmc.zea.chat.model.MessageCategory;
-import net.zaminmc.zea.map.config.MapConfig;
 import net.zaminmc.zea.market.config.MarketConfig;
 import net.zaminmc.zea.chat.feeds.Feeds;
 import net.zaminmc.zea.chat.feeds.GlobalVisibility;
@@ -706,7 +705,7 @@ public final class ZeaConfig extends Config {
                 @ConfigOption(name = "EarthMC Only", desc = "Stay idle on every server the "
                                 + "address does not recognise as EarthMC (earthmc.net and its "
                                 + "subdomains): the EarthMC-specific features — chat channels, "
-                                + "the map — stay off there and ZEA logs one notice per "
+                                + "the market — stay off there and ZEA logs one notice per "
                                 + "connection. Off keeps them available everywhere for testing.")
                 @ConfigEditorBoolean
                 @ConfigOrder(0)
@@ -747,10 +746,6 @@ public final class ZeaConfig extends Config {
         @Category(name = "Miscellaneous", desc = "Small utilities: scrollable tooltips and friends.")
         @ConfigOrder(3)
         public Miscellaneous miscellaneous = new Miscellaneous();
-
-        @Category(name = "Map", desc = "Native EarthMC map: world map, minimap, claims and players.")
-        @ConfigOrder(4)
-        public MapConfig map = new MapConfig();
 
         @Category(name = "Market", desc = "EarthMC physical shops: inspect, compare, navigate.")
         @ConfigOrder(5)
@@ -1181,7 +1176,7 @@ public final class ZeaConfig extends Config {
         /**
          * Whether ZEA stays idle on servers the address does not recognise
          * as EarthMC: the EarthMC-specific features (chat channels, the
-         * map) stay off there and one warning is logged per connection.
+         * market) stay off there and one warning is logged per connection.
          * Off by default — the pre-existing behavior that permits
          * supported functionality on other servers for testing.
          */

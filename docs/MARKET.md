@@ -211,11 +211,11 @@ because the shop has one, never the observing player's identity.
 
 - Success/failure transaction outcomes are not recognized (no captured
   message shapes); no outcome is claimed after a send.
-- Nation and town resolution follow the map subsystem's claim store;
+- Nation and town resolution follow the market's claim store;
   where claims are not loaded, the fields stay unknown — never guessed
   from proximity.
-- The destination marker is a HUD element (label, distance, bearing),
-  not yet a marker drawn on the world map and minimap canvases.
+- The destination marker is a HUD element (label, distance, bearing);
+  there is no map canvas to draw it on.
 - The shop response component tree was parsed from observed text
   shapes; a real capture via `/zea capture` should confirm the hover
   layout (the parser tolerates missing hovers already).

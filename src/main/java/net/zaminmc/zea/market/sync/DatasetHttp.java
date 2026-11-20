@@ -1,4 +1,4 @@
-package net.zaminmc.zea.map.source;
+package net.zaminmc.zea.market.sync;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -18,12 +18,12 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 /**
- * Shared conditional-GET plumbing for every map data source.
+ * Shared conditional-GET plumbing for the market's dataset sources.
  *
  * <p>Discipline encoded here, each earned the hard way upstream:
  *
  * <ul>
- * <li><b>Always accept gzip.</b> markers.json is ~10.7 MB raw vs ~1.4 MB
+ * <li><b>Always accept gzip.</b> the shared dataset is ~10.7 MB raw vs ~1.4 MB
  *     gzipped; polling it uncompressed multiplied bandwidth ~7.5× and the
  *     slow transfers surfaced as random connection resets.
  * <li><b>Validators are per encoding.</b> The server issues a different
@@ -39,7 +39,7 @@ import java.util.zip.GZIPInputStream;
  *     there was just nothing to send.
  * </ul>
  */
-public final class MapHttp {
+public final class DatasetHttp {
 
 	/** A completed conditional GET: body or not-modified, plus validators. */
 	public record Fetched(byte[] body, String etag, String lastModified, long maxAgeMs) {
@@ -53,11 +53,11 @@ public final class MapHttp {
 	private final HttpClient http;
 	private final Duration timeout;
 
-	public MapHttp(Executor executor) {
+	public DatasetHttp(Executor executor) {
 		this(executor, Duration.ofSeconds(15));
 	}
 
-	public MapHttp(Executor executor, Duration timeout) {
+	public DatasetHttp(Executor executor, Duration timeout) {
 		// The HttpClient keeps its own internal executor for response
 		// processing: pointing it at the caller's pool while send() blocks
 		// a pool thread deadlocked both — two threads, every one of them

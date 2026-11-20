@@ -37,9 +37,7 @@
     "zea.buttons.edit.error.command": "Enter a command (without the slash).",
     "zea.buttons.edit.error.icon": "Enter an item id like minecraft:compass, or a display text.",
     "zea.key.lock_slot": "Lock / bind inventory slot",
-    "zea.key.open_map": "Open the world map",
     "zea.key.close_panes": "Close the shop index panes",
-    "zea.map.screen.title": "World Map",
     "zea.buttons.unconfigured": "Not configured yet — set a command in the button editor",
     "zea.buttons.hidden": "Currently hidden (no room, recipe book, or search bar off)",
     "zea.buttons.close_on_execute": "Closes the inventory when run",
@@ -206,7 +204,5 @@
     "zea.hud.manager.toggle_visibility": "Show / Hide",
     "zea.hud.manager.reset": "Reset",
     "zea.hud.manager.done": "Done",
-    "zea.hud.manager.scale": "Scale: %s",
-    "zea.hud.map.minimap_placeholder": "Minimap (EarthMC only)",
-    "zea.hud.map.map_placeholder": "Map (EarthMC only)"
+    "zea.hud.manager.scale": "Scale: %s"
 }

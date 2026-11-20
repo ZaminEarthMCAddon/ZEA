@@ -5452,3 +5452,32 @@ one and page two of the fifteen-shop diamond, the Sell-to tab, the
 selection frame with its enabled Navigate plate, the item cycle, and the
 Esc and E restores — every stock line renders "Stock: N stacks" with no
 stray unit and no mid-word tail.
+## Pass: stripping the map system — the map leaves, the market's claim data stays (2026-11-20)
+
+The maintainer's call: the map subsystem is too complex to maintain right
+now, so it leaves ZEA entirely. Thirty-six production files under
+`net.zaminmc.zea.map` — the world map window, the minimap and map-overlay
+HUD elements, the globe projection, the tile and claim renderers, the
+squaremap and EarthMC-api clients — and their twenty-seven test files,
+`docs/map/` with them. The wiring went the same way: the MapSubsystem
+construction, tick and shutdown flush in `ZeaClient`, the M keybind and
+`/zeamap`, the Map config group, the map lang keys, the Xaero maven repo
+and its compile-only dependency, `zea-xaero.mixins.json` with its
+fabric.mod.json entry, and the map-only `GuiGraphicsExtractorAccessor`
+mixin whose sole consumer was the globe path.
+
+The market kept what it reads. Town and nation resolution follows the
+claim geometry, and the shared-dataset sync fetches over the same HTTP
+discipline, so `ClaimStore`, `ChunkRings`, `MapWorld` and `TownClaim`
+moved to `net.zaminmc.zea.market.claims` and the fetcher became
+`market.sync.DatasetHttp` (renamed from MapHttp — it only serves the
+dataset now). The HUD manager stays for the shop-destination element,
+which takes the minimap's old first slot. The README, MARKET, EARTHMC_API,
+ECOSYSTEM and ROADMAP docs dropped their map rows; WORKLOG keeps the
+history.
+
+### Verification
+
+Full build and the suite green after the move; the final git grep sweep
+finds no map reference outside this worklog. The change is ninety files,
+about ten thousand lines out.
