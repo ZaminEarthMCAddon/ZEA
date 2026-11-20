@@ -5331,6 +5331,12 @@ fifteen exact `SERVER_RESPONSE` observations written straight into
 at every step: the pane opens closed behind its edge tab, a tile click
 opens the viewer over the container, the tabs switch sides with their
 tooltips, the next-item arrow cycles the title and identity, a row
-selects with the gold frame and shows the full observation tooltip, Esc
+selects with the gold frame and shows the full observation tooltip, the
+wheel turns the list's page (a fourteen-shop diamond spans two pages and
+the section header carries onto the second), the next-item arrow cycles
+the title and identity, Esc
 and the E key each return the inventory with the pane exactly as it
-stood, and the disabled arrows carry JEI's disabled plate.
+stood, and the disabled arrows carry JEI's disabled plate. One finding
+the frames caught: `SideStats.shops()` is the variant-wide count, so the
+identity block counts each side's offers itself — a one-shop SELL TO
+read as fourteen.
