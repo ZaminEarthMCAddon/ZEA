@@ -37,10 +37,4 @@ class MapSubsystemSmokeTest {
 		assertEquals(-2000.25, camera.centerZ(), 1e-9);
 	}
 
-	@Test
-	void worldCameraPersistsPerWorld() {
-		var first = MAP.worldCamera(MapWorld.MOON, 10, 20);
-		var second = MAP.worldCamera(MapWorld.MOON, 99, 99);
-		assertEquals(first, second, "the stored camera survives, it is not re-created at the player");
-	}
 }

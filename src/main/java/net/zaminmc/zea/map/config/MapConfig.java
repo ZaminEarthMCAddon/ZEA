@@ -238,12 +238,6 @@ public final class MapConfig {
 		@ConfigOrder(0)
 		public int defaultBlocksAcross = 1024;
 
-		@ConfigOption(name = "Follow player", desc = "Keep the camera on your position while "
-				+ "you move. Panning turns this off until you recenter.")
-		@ConfigEditorBoolean
-		@ConfigOrder(1)
-		public boolean followPlayer = false;
-
 		@ConfigOption(name = "Show player markers", desc = "Other online players on the map.")
 		@ConfigEditorBoolean
 		@ConfigOrder(2)
