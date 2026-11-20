@@ -316,3 +316,15 @@ accessors; user data (positions, favorites-if-any) preserved on reset.
 Player/town/nation profile viewers, search, history/archives, market,
 shops, waypoints, planning tools, cave/Nether/dungeon mapping, Xaero or
 Xiro interop of any kind.
+
+## 15. Scope revision (dev.105): Xaero's World Map is the engine
+
+The world map is no longer ZEA's. A soft mixin draws the EarthMC layer
+— claims, outlines, player markers — inside Xaero's GuiMap, using a
+north-up `MapProjection` built from Xaero's own camera pair
+(`scale / screenScale` = GUI px per block). `/zeamap` opens Xaero's
+screen through its session. The full-screen engine, the globe family,
+the country mosaic/flags and the world-map tile driver are removed;
+the HUD minimap stays ZEA's and shares the stores with the Xaero
+layer. Sections 5 (world-map parts), 9 and the curved paths above are
+historical.

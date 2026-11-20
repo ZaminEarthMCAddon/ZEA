@@ -5218,3 +5218,55 @@ screen closes it unless a search is already active (bound after the
 search session so the rule reads the new screen's own query), and
 NEU's close-panes keybind arrives as `zea.key.close_panes`,
 unbound by default, taking the detail pane away with the grid.
+
+## dev.105 — the map becomes Xaero's: the xeroworld engine, ZEA's EarthMC layer (2026-11-20)
+
+The decision the map had been drifting toward since the first globe
+frame: stop maintaining a world-map engine. Xaero's World Map — the
+engine every EarthMC player already runs — becomes the map; ZEA keeps
+only the EarthMC-only layer on top of it, which is what no general
+renderer can have: the live claim fills, outlines and player markers
+from the squaremap feed.
+
+### How the integration works
+
+A soft mixin (required=false, require=0) injects into Xaero's GuiMap
+at the player-arrow pass of extractRenderState — the anchor the
+EarthMC Map Addon verified against Xaero 26.3 — and draws through
+GuiGraphicsExtractor, which composites over everything Xaero drew
+wherever the inject sits. The layer builds ZEA's flat north-up
+projection straight from Xaero's camera pair (scale / screenScale is
+GUI pixels per world block, the one scalar the projection takes), so
+layer and terrain agree by construction at every zoom. Claims and
+players plan and draw through the same ClaimOverlay / PlayerOverlay /
+OverlayDrawer the minimap uses — one drawing vocabulary, no second
+renderer. /zeamap and the map keybind open Xaero's own GuiMap through
+its session, the exact construction Xaero's keybind performs
+(verified against the 1.47.2 bytecode); without Xaero installed ZEA
+says what to install instead of rendering a second-rate screen.
+
+The compile-only dependency resolves from Xaero's own Maven. The
+mixin class names no Xaero type (targets and the field anchor are
+strings, shadows are primitives); the one gateway class that imports
+Xaero loads only when the mod is present. The mixin-package hygiene
+test now validates both configs.
+
+### What the retirement removed
+
+The own full-screen world map with its camera persistence and the
+follow-player option; the flat-to-globe projection family
+(GlobeTransition, the mesh planner and element, the curved draw path,
+the globe tile driver); the country mosaic and flags with their
+bundled countries.json and the aggregation scheduler; MapCameraInput;
+the world-map tile driver. The HUD minimap stays ZEA's, drawing from
+the same stores through the same flat drawSurface path — and the
+Xaero layer shares those stores, so one refresh cadence serves both.
+
+### Verification
+
+Clean compile, remapJar, and the full suite (1457 tests) green after
+the deletion; the deleted engines' test suites go with them. The
+in-game pass (layer over Xaero's terrain at every zoom, the opening
+path, the no-Xaero message) runs when the dev client next has Xaero
+installed — the mixin is soft, so its absence is a silent no-op, not
+a crash.
