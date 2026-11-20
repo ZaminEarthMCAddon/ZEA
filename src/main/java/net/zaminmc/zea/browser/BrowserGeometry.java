@@ -40,9 +40,6 @@ public final class BrowserGeometry {
         /** NEU's open offset: the pane's left edge rests at two-thirds of the screen. */
         public static final float OPEN_OFFSET = 2f / 3f;
 
-        /** NEU's info-pane offset: the left pane's right edge rests at one-third. */
-        public static final float INFO_OPEN_OFFSET = 1f / 3f;
-
         /** The edge tab's texture size — NEU's 64 px {@code item_pane_tab_arrow}. */
         public static final int TAB_TEXTURE_SIZE = 64;
 
@@ -369,31 +366,6 @@ public final class BrowserGeometry {
         }
 
         // ------------------------------------------------------------------
-        // Info pane (the detail view, NEU's left pane)
-        // ------------------------------------------------------------------
-
-        /**
-         * The info pane's left edge — NEU's
-         * {@code rightSide = width * getInfoPaneOffsetFactor(); leftSide = rightSide - paneWidth}.
-         */
-        public static int infoPaneLeft(Metrics m, float infoOffsetFactor) {
-                return (int) (m.screenWidth * infoOffsetFactor) - m.paneWidth;
-        }
-
-        /** The info pane's right edge. */
-        public static int infoPaneRight(Metrics m, float infoOffsetFactor) {
-                return (int) (m.screenWidth * infoOffsetFactor);
-        }
-
-        /**
-         * The info pane's close button — NEU's 16 px {@code close} texture
-         * at the pane's top-right corner.
-         */
-        public static int[] infoCloseButton(Metrics m, float infoOffsetFactor) {
-                return new int[] {infoPaneRight(m, infoOffsetFactor) - m.boxPadding - 8,
-                                m.boxPadding - 8, 16, 16};
-        }
-
         // ------------------------------------------------------------------
         // Points and rectangles
         // ------------------------------------------------------------------

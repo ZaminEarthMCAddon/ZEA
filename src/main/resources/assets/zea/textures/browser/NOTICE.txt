@@ -2,7 +2,7 @@ The textures in this directory are part of ZEA's inventory item browser.
 
 Most of these files — search_bar.png, search_bar_gold.png,
 search_mode_button.png, quickcommand_background.png, settings.png,
-rightarrow.png, rightarrow_overlay.png, close.png, item_mask.png,
+rightarrow.png, rightarrow_overlay.png, item_mask.png,
 item_pane_tab_arrow.png, ascending_overlay.png, descending_overlay.png,
 order_alphabetical.png, order_alphabetical_active.png, order_rarity.png,
 order_rarity_active.png, order_value.png, order_value_active.png,
