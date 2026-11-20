@@ -637,12 +637,16 @@ public final class MarketViewerScreen extends Screen {
                 int lineY = y + 20;
                 VariantPricing.SideStats buyFrom = VariantPricing.stats(variant.offers(), ShopDirection.SELLING);
                 VariantPricing.SideStats sellTo = VariantPricing.stats(variant.offers(), ShopDirection.BUYING);
-                if (buyFrom.shops() > 0) {
-                        drawStatLine(graphics, font, "BUY FROM", BUY_COLOR, summaryLine(buyFrom), x, lineY);
+                List<Offer> buyOffers = sideOffers(Side.BUY_FROM);
+                List<Offer> sellOffers = sideOffers(Side.SELL_TO);
+                if (!buyOffers.isEmpty()) {
+                        drawStatLine(graphics, font, "BUY FROM", BUY_COLOR,
+                                        summaryLine(buyFrom, buyOffers.size()), x, lineY);
                         lineY += 10;
                 }
-                if (sellTo.shops() > 0) {
-                        drawStatLine(graphics, font, "SELL TO", SELL_COLOR, summaryLine(sellTo), x, lineY);
+                if (!sellOffers.isEmpty()) {
+                        drawStatLine(graphics, font, "SELL TO", SELL_COLOR,
+                                        summaryLine(sellTo, sellOffers.size()), x, lineY);
                 }
         }
 
@@ -1036,12 +1040,18 @@ public final class MarketViewerScreen extends Screen {
                                 .stripTrailingZeros().toPlainString() + "G";
         }
 
-        private static String summaryLine(VariantPricing.SideStats stats) {
+        /**
+         * One side's summary line: best and median through the pricing
+         * engine, then the side's own shop and owner counts — {@code
+         * SideStats.shops()} is the variant-wide count, which would read
+         * as "SELL TO · 14 shops" on a side with one.
+         */
+        private static String summaryLine(VariantPricing.SideStats stats, int sideShops) {
                 String line = "best " + priceOrDash(stats.best());
                 if (stats.median() != null) {
                         line += " · median " + format(stats.median());
                 }
-                return line + " · " + stats.shops() + " shop" + (stats.shops() == 1 ? "" : "s")
+                return line + " · " + sideShops + " shop" + (sideShops == 1 ? "" : "s")
                                 + " · " + stats.owners() + " owner" + (stats.owners() == 1 ? "" : "s");
         }
 
