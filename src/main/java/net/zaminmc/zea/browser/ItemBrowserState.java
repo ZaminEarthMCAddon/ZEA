@@ -7,30 +7,22 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * The inventory item browser's session state — what is open, what is
- * selected, and the cached variant results. The state survives screen
- * re-inits (a resize or a recipe-book toggle rebuilds the screen but
- * not the session), exactly like the search bar's session, and resets
- * when the pane closes.
+ * The inventory item browser's session state — whether the pane is open
+ * and the cached variant results. The state survives screen re-inits (a
+ * resize or a recipe-book toggle rebuilds the screen but not the
+ * session), exactly like the search bar's session, and resets when the
+ * pane closes.
  *
  * <p>The variant results are cached against the market's revision, the
  * search query and the view's filter and order: the caller recomputes
  * them when any of those change, never per frame — a still screen does
- * zero index work. Selection is by variant token and shop id — never by
- * row index — so a refresh or re-sort cannot move the selection.
+ * zero index work. The chosen variant hands off to the market viewer
+ * screen, which keeps its own selection state.
  *
  * <p>The grid paginates like NEU's item list: a page is a fixed grid of
  * tiles, Prev and Next turn it, and the wheel turns it too.
  */
 public final class ItemBrowserState {
-        /** Which view the pane shows. */
-        public enum View {
-                /** The item grid. */
-                GRID,
-                /** One variant's detail: market summary and physical shops. */
-                DETAIL
-        }
-
         /**
          * The summary order — the sort bar's three cycle buttons plus the
          * unsorted state. Each of the three buttons cycles: first click
@@ -180,7 +172,6 @@ public final class ItemBrowserState {
                 }
         }
 
-        private View view = View.GRID;
         /**
          * Whether the pane shows at all. It starts closed — NEU's
          * {@code itemPaneOpen = false}: the pane never greets a screen
@@ -190,7 +181,6 @@ public final class ItemBrowserState {
          */
         private boolean open = false;
         private int page;
-        /** The grid's current order — relevance until a sort button is clicked. */
         private Order order = Order.NONE;
         /**
          * NEU's per-order direction: {@code true} sorts by the comparator's
@@ -202,12 +192,6 @@ public final class ItemBrowserState {
          */
         private boolean ascending = true;
         private Filter filter = Filter.ALL;
-
-        /** The selected variant's fingerprint token (detail view). */
-        private @Nullable String selectedToken;
-        /** The selected offer's shop id (detail view); selection is not navigation. */
-        private @Nullable String selectedShopId;
-        private int detailScroll;
 
         // The cached results: rebuilt only when the market or the view changes.
         private long resultsRevision = -1;
@@ -235,7 +219,6 @@ public final class ItemBrowserState {
         /** Hides the pane; the edge tab or the next close-reopen cycle brings it back. */
         public void close() {
                 open = false;
-                closeDetail();
         }
 
         /** The grid's current page, zero-based. */
@@ -303,25 +286,6 @@ public final class ItemBrowserState {
                 filter = filter == clicked ? Filter.ALL : clicked;
         }
 
-        /** The selected variant token, or null in grid view. */
-        public @Nullable String selectedToken() {
-                return selectedToken;
-        }
-
-        /** The selected offer's shop id, or null when no offer is selected. */
-        public @Nullable String selectedShopId() {
-                return selectedShopId;
-        }
-
-        /** The detail view's scroll offset in pixels. */
-        public int detailScroll() {
-                return detailScroll;
-        }
-
-        public void setDetailScroll(int detailScroll) {
-                this.detailScroll = Math.max(0, detailScroll);
-        }
-
         /** The cached variants the grid shows (filtered, ordered, search-filtered). */
         public List<ItemVariantIndex.Variant> results() {
                 return results;
@@ -346,27 +310,6 @@ public final class ItemBrowserState {
                 this.resultsOrder = order;
                 this.resultsAscending = ascending;
                 this.resultsFilter = filter;
-        }
-
-        /** Opens a variant's detail view. */
-        public void openDetail(String token) {
-                view = View.DETAIL;
-                selectedToken = token;
-                selectedShopId = null;
-                detailScroll = 0;
-        }
-
-        /** Selects one offer inside the detail view; no navigation happens. */
-        public void selectOffer(String shopId) {
-                selectedShopId = shopId.equals(selectedShopId) ? null : shopId;
-        }
-
-        /** Back to the grid. */
-        public void closeDetail() {
-                view = View.GRID;
-                selectedToken = null;
-                selectedShopId = null;
-                detailScroll = 0;
         }
 
 }

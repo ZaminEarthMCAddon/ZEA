@@ -13,22 +13,18 @@ import net.zaminmc.zea.ZeaClient;
 import net.zaminmc.zea.market.MarketData;
 import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.market.index.ItemVariantIndex;
-import net.zaminmc.zea.market.index.ItemVariantIndex.Offer;
 import net.zaminmc.zea.market.index.ItemVariantIndex.Variant;
 import net.zaminmc.zea.market.index.VariantPricing;
 import net.zaminmc.zea.market.model.ShopDirection;
-import net.zaminmc.zea.market.model.ShopObservation;
-import net.zaminmc.zea.market.model.SourceType;
 import net.zaminmc.zea.market.ui.MarketAge;
+import net.zaminmc.zea.market.viewer.MarketViewerScreen;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,13 +55,13 @@ import java.util.Optional;
  * the 400 ms hover NEU requires. Tooltips carry NEU's yellow bold action
  * hints. Button presses play the vanilla click.
  *
- * <p>Choosing a variant opens the detail as NEU's info pane: a second
- * pane, the same width, sliding in from the screen's left while the grid
- * stays live on the right — NEU's recipe/info-pane model. Its close
- * button is NEU's red disc at the pane's top-right corner; its content
- * is the variant's market identity and offers; its footer carries the
- * explicit Navigate action, NEU's wide-button look. Selecting an offer
- * never issues a command.
+ * <p>Choosing a variant opens the market viewer — JEI's RecipesGui
+ * rebuilt for a live market ({@code MarketViewerScreen}): the screen
+ * captures the container as its parent, swaps itself in and returns the
+ * inventory exactly as it was when it closes — JEI's open/close
+ * semantics. Its tabs pick the market's side, its arrows cycle the
+ * browser's results and paginate the offers, and its footer carries the
+ * explicit Navigate action. Selecting an offer never issues a command.
  *
  * <p>The search bar ZEA already draws drives the filter — the pane reads
  * the same session query the slot matching reads, one search system, and
@@ -124,12 +120,10 @@ public final class ItemBrowser {
         // NEU's three sliding elements, its LerpingFloat ported verbatim.
         private final Lerp paneOffset = new Lerp(1);
         private final Lerp tabOffset = new Lerp(BrowserGeometry.TAB_CLOSED_OFFSET, 50);
-        private final Lerp infoOffset = new Lerp(0);
 
         // Per-frame geometry, recomputed from the live screen rectangle.
         private BrowserGeometry.@Nullable Metrics metrics;
         private float itemFactor = 1;
-        private float infoFactor = 0;
         private int paneLeft;
         /**
          * One pane unit expressed in container gui units — the pose scale
@@ -137,15 +131,6 @@ public final class ItemBrowser {
          * pixels smaller than the container's; this is ZEA's equivalent.
          */
         private float unitToGui = 1f;
-
-        // The detail's offer-row geometry for hit-testing and tooltips.
-        private final List<Row> detailRowsGeom = new ArrayList<>();
-        // The detail's town context, resolved once when the detail opens:
-        // shop id → town, and shop id → nation. Unknown stays absent.
-        private final Map<String, String> townByShop = new HashMap<>();
-        private final Map<String, String> nationByShop = new HashMap<>();
-        // The Navigate footer's hit box, redrawn per frame.
-        private int @Nullable [] navigateButton;
 
         // The 400 ms icon-hover clock, NEU's millisLastMouseMove discipline.
         private long iconHoverStart = -1;
@@ -231,13 +216,10 @@ public final class ItemBrowser {
                         drawGrid(graphics, screen, mx, my, mouseX, mouseY);
                         drawSortBar(graphics, screen, mx, my);
                 }
-                if (state.view() == ItemBrowserState.View.DETAIL && variantOf(state.selectedToken()) != null) {
-                        drawInfoPane(graphics, screen, mx, my);
-                }
                 graphics.pose().popMatrix();
         }
 
-        /** NEU's animation state machine: tab, pane and info pane chase their targets. */
+        /** NEU's animation state machine: tab and pane chase their targets. */
         private void tickAnimations() {
                 boolean open = state.isOpen();
                 if (open) {
@@ -257,17 +239,9 @@ public final class ItemBrowser {
                                 paneOffset.setTarget(1f);
                         }
                 }
-                boolean infoOpen = state.view() == ItemBrowserState.View.DETAIL
-                                && variantOf(state.selectedToken()) != null;
-                float infoTarget = infoOpen ? BrowserGeometry.INFO_OPEN_OFFSET : 0f;
-                if (infoOffset.getTarget() != infoTarget) {
-                        infoOffset.setTarget(infoTarget);
-                }
                 paneOffset.tick();
                 tabOffset.tick();
-                infoOffset.tick();
                 itemFactor = paneOffset.getValue();
-                infoFactor = infoOffset.getValue();
         }
 
         // ------------------------------------------------------------------
@@ -521,6 +495,15 @@ public final class ItemBrowser {
                 return Component.literal(text).withStyle(style -> style.withColor(HINT).withBold(true));
         }
 
+        private static String priceOrDash(@Nullable BigDecimal price) {
+                return price == null ? "—" : format(price);
+        }
+
+        private static String format(BigDecimal price) {
+                return price.setScale(2, java.math.RoundingMode.HALF_UP)
+                                .stripTrailingZeros().toPlainString() + "G";
+        }
+
         // ------------------------------------------------------------------
         // Sort bar
         // ------------------------------------------------------------------
@@ -666,282 +649,6 @@ public final class ItemBrowser {
         }
 
         // ------------------------------------------------------------------
-        // Info pane — the detail view, NEU's left pane
-        // ------------------------------------------------------------------
-
-        /**
-         * The detail as NEU's info pane: the same-width pane sliding in from
-         * the screen's left, the red close disc at its top-right corner, the
-         * variant's identity and offers inside, the Navigate footer beneath.
-         */
-        private void drawInfoPane(GuiGraphicsExtractor graphics, AbstractContainerScreen<?> screen,
-                        int mouseX, int mouseY) {
-                BrowserGeometry.Metrics m = metrics;
-                if (m == null) {
-                        return;
-                }
-                Variant variant = variantOf(state.selectedToken());
-                if (variant == null) {
-                        state.closeDetail();
-                        return;
-                }
-                Font font = screen.getFont();
-                int left = BrowserGeometry.infoPaneLeft(m, infoFactor);
-                int right = BrowserGeometry.infoPaneRight(m, infoFactor);
-                int top = Math.max(0, m.boxPadding - 5);
-                int bottom = Math.min(m.screenHeight, m.screenHeight - m.boxPadding + 5);
-                graphics.fill(left + m.boxPadding - 5, top, right - m.boxPadding + 5, bottom, PANE_TINT);
-
-                int contentLeft = left + m.boxPadding + 5;
-                int contentWidth = right - m.boxPadding - 5 - contentLeft;
-
-                // Title: NEU's TextInfoPane centers it white at the top. NEU
-                // centers naively, so a title wider than the pane slides off the
-                // screen — market display names ("Aqua Affinity Respiration III
-                // Diamond Helmet") run longer than NEU's item names ever do, so
-                // the title takes the pill label's NEU
-                // drawStringCenteredScaledMaxWidth treatment: centered, scaled
-                // down to the pane's width instead of clipped.
-                String title = variant.display();
-                drawCenteredScaledMaxWidth(graphics, font, Component.literal(title),
-                                contentLeft + contentWidth / 2f, m.boxPadding + 9,
-                                contentWidth, TEXT, true);
-
-                // Identity: the item's own stack and its enchantment summary.
-                VariantStacks.Resolved resolved = VariantStacks.of(variant.token());
-                graphics.blit(RenderPipelines.GUI_TEXTURED, NeuTextures.ITEM_MASK, contentLeft,
-                                m.boxPadding + 17, 0f, 0f, BrowserGeometry.ITEM_SIZE + 2,
-                                BrowserGeometry.ITEM_SIZE + 2, 36, 36, 36, 36, FG);
-                graphics.item(resolved.stack(), contentLeft + 1, m.boxPadding + 18);
-                String sub = resolved.exact()
-                                ? (variant.enchantments().isEmpty() ? "No enchantments"
-                                                : String.join(", ", variant.enchantments()))
-                                : "icon approximate";
-                graphics.text(font, sub, contentLeft + 22, m.boxPadding + 21, TEXT_DIM, true);
-
-                // Summary: one BUY FROM line, one SELL TO line.
-                int y = m.boxPadding + 36;
-                VariantPricing.SideStats buyFrom = VariantPricing.stats(variant.offers(), ShopDirection.SELLING);
-                VariantPricing.SideStats sellTo = VariantPricing.stats(variant.offers(), ShopDirection.BUYING);
-                if (buyFrom.shops() > 0) {
-                        graphics.text(font, "BUY FROM", contentLeft, y, BUY_COLOR, true);
-                        graphics.text(font, summaryLine(buyFrom), contentLeft, y + 10, TEXT, true);
-                        y += 24;
-                }
-                if (sellTo.shops() > 0) {
-                        graphics.text(font, "SELL TO", contentLeft, y, SELL_COLOR, true);
-                        graphics.text(font, summaryLine(sellTo), contentLeft, y + 10, TEXT, true);
-                        y += 24;
-                }
-
-                // The offer rows, grouped like the summary, scrolled.
-                int listTop = y + 6;
-                int footerTop = m.screenHeight - m.boxPadding - BrowserGeometry.ITEM_SIZE - 4;
-                drawOfferRows(graphics, font, m, variant, contentLeft, contentWidth, listTop, footerTop, mouseX, mouseY);
-
-                drawNavigateFooter(graphics, font, m, left, right, footerTop);
-
-                // NEU's close disc, 16 px at the pane's top-right corner.
-                int[] close = BrowserGeometry.infoCloseButton(m, infoFactor);
-                graphics.blit(NeuTextures.CLOSE, close[0], close[1], close[0] + close[2],
-                                close[1] + close[3], 0f, 1f, 0f, 1f);
-        }
-
-        private void drawOfferRows(GuiGraphicsExtractor graphics, Font font, BrowserGeometry.Metrics m,
-                        Variant variant, int contentLeft, int contentWidth, int listTop, int listBottom,
-                        int mouseX, int mouseY) {
-                List<Offer> buyFrom = new ArrayList<>(offersOf(variant, ShopDirection.SELLING));
-                buyFrom.sort(java.util.Comparator.comparing(Offer::unitPrice,
-                                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
-                List<Offer> sellTo = new ArrayList<>(offersOf(variant, ShopDirection.BUYING));
-                sellTo.sort(java.util.Comparator.comparing(Offer::unitPrice,
-                                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
-                detailRowsGeom.clear();
-                int scrollPx = state.detailScroll();
-                graphics.enableScissor(contentLeft - m.boxPadding - 4, listTop - 4,
-                                contentLeft + contentWidth + m.boxPadding + 4, listBottom);
-                int y = listTop - scrollPx;
-                int rowHeight = 24;
-                if (!buyFrom.isEmpty()) {
-                        y = drawOfferGroup(graphics, font, "BUY FROM — cheapest first", BUY_COLOR, buyFrom,
-                                        contentLeft, contentWidth, y, rowHeight, listTop, listBottom, mouseX, mouseY);
-                        y += 10;
-                }
-                if (!sellTo.isEmpty()) {
-                        y = drawOfferGroup(graphics, font, "SELL TO — highest payout first", SELL_COLOR, sellTo,
-                                        contentLeft, contentWidth, y, rowHeight, listTop, listBottom, mouseX, mouseY);
-                        y += 10;
-                }
-                graphics.disableScissor();
-                // The scroll clamp: NEU's TextInfoPane pulls the scroll back onto
-                // the content's height.
-                int contentBottom = y - 10 + scrollPx;
-                int maxScroll = Math.max(0, contentBottom - listBottom);
-                if (scrollPx > maxScroll) {
-                        state.setDetailScroll(maxScroll);
-                }
-        }
-
-        /** One grouped direction block; returns the y below the group's last row. */
-        private int drawOfferGroup(GuiGraphicsExtractor graphics, Font font, String title, int color,
-                        List<Offer> offers, int left, int width, int y, int rowHeight,
-                        int listTop, int listBottom, int mouseX, int mouseY) {
-                if (y + 9 > listTop && y < listBottom) {
-                        graphics.text(font, title, left, y, color, true);
-                }
-                y += 14;
-                for (Offer offer : offers) {
-                        if (y + rowHeight > listTop && y < listBottom) {
-                                drawOfferRow(graphics, font, offer, left, width, y, rowHeight, mouseX, mouseY);
-                                detailRowsGeom.add(new Row(left, y, width, rowHeight, offer));
-                        }
-                        y += rowHeight;
-                }
-                return y;
-        }
-
-        /**
-         * One offer row: NEU's selected-item-group framing for the selected
-         * row, the hover wash, and the row's own text — direction, owner,
-         * price on the first line with the age right-aligned; stock and
-         * where on the second, everything trimmed into the pane's width.
-         */
-        private void drawOfferRow(GuiGraphicsExtractor graphics, Font font, Offer offer,
-                        int left, int width, int y, int rowHeight, int mouseX, int mouseY) {
-                boolean selected = offer.shop().shopId().equals(state.selectedShopId());
-                boolean hovered = BrowserGeometry.contains(left, y, width, rowHeight - 2, mouseX, mouseY);
-                if (selected) {
-                        graphics.fill(left, y + 1, left + width + 2, y + rowHeight - 1, ROW_SHADOW);
-                        graphics.fill(left - 1, y, left + width + 1, y + rowHeight, ROW_FRAME);
-                        graphics.fill(left, y + 1, left + width, y + rowHeight - 1, ROW_DARK);
-                        graphics.fill(left, y, left + width, y + rowHeight - 2, ROW_SELECTED);
-                } else if (hovered) {
-                        graphics.fill(left, y, left + width, y + rowHeight - 2, ROW_HOVER);
-                }
-                ShopObservation observation = offer.observation();
-                // Line 1: the direction tag, then the owner in the middle space,
-                // then the price right-aligned — the middle shrinks, never overlaps.
-                String tag = observation.direction() == ShopDirection.SELLING ? "[BUY FROM] " : "[SELL TO] ";
-                int tagColor = observation.direction() == ShopDirection.SELLING ? BUY_COLOR : SELL_COLOR;
-                String price = priceOrDash(offer.unitPrice());
-                String owner = offer.shop().owner() == null ? "?" : offer.shop().owner();
-                int priceWidth = font.width(price);
-                int middle = width - font.width(tag) - priceWidth - 6;
-                graphics.text(font, tag, left + 2, y + 2, tagColor, true);
-                if (middle > 8) {
-                        String trimmed = font.plainSubstrByWidth(owner, middle);
-                        graphics.text(font, trimmed, left + 2 + font.width(tag), y + 2, TEXT, true);
-                }
-                graphics.text(font, price, left + width - 2 - priceWidth, y + 2, TEXT, true);
-
-                // Line 2: stock, the bulk note and where, trimmed, the age right-aligned.
-                String stock = stockLine(observation) + priceNote(observation);
-                String where = whereLine(offer);
-                String age = MarketAge.format(observation.observedAt(), Instant.now())
-                                + (observation.sourceType() == SourceType.REMOTE_SHARED ? " · shared" : "");
-                int ageWidth = font.width(age);
-                int detailWidth = width - ageWidth - 8;
-                if (detailWidth > 8) {
-                        String line = font.plainSubstrByWidth(stock + (stock.isEmpty() ? "" : " · ") + where, detailWidth);
-                        graphics.text(font, line, left + 2, y + 12, TEXT_DIM, true);
-                }
-                graphics.text(font, age, left + width - 2 - ageWidth, y + 12, TEXT_DIM, true);
-        }
-
-        /**
-         * The Navigate footer: NEU's wide-button look — the foreground plate
-         * with the bold black label — and the one action that navigates.
-         */
-        private void drawNavigateFooter(GuiGraphicsExtractor graphics, Font font, BrowserGeometry.Metrics m,
-                        int left, int right, int footerTop) {
-                boolean selected = state.selectedShopId() != null;
-                Component label = Component.literal("Navigate to selected shop")
-                                .withStyle(style -> style.withBold(true));
-                int labelWidth = font.width(label);
-                int buttonWidth = labelWidth + 16;
-                int buttonX = left + m.boxPadding + 5 + (right - m.boxPadding - 5 - (left + m.boxPadding + 5)
-                                - buttonWidth) / 2;
-                graphics.fill(buttonX, footerTop, buttonX + buttonWidth, footerTop + 16,
-                                selected ? FG : 0x80646464);
-                graphics.text(font, label, buttonX + 8, footerTop + 4, selected ? 0xFF000000 : 0xFF202020, false);
-                navigateButton = new int[] {buttonX, footerTop, buttonWidth, 16};
-        }
-
-        private String priceNote(ShopObservation observation) {
-                if (observation.priceScope() == null) {
-                        return "";
-                }
-                if (observation.priceScope() == net.zaminmc.zea.market.model.PriceScope.PER_BULK
-                                && observation.bulkSize() != null) {
-                        return " (" + observation.bulkSize() + "x " + observation.price() + "G)";
-                }
-                return "";
-        }
-
-        private String stockLine(ShopObservation observation) {
-                if (observation.stockRaw() == null) {
-                        return "";
-                }
-                String unit = switch (observation.stockUnit()) {
-                        case SPACE -> " space";
-                        case ITEMS -> " items";
-                        case STACKS -> " stacks";
-                        case UNKNOWN -> "";
-                };
-                return "Stock: " + observation.stockRaw() + unit
-                                + (observation.maxBuyItems() != null ? " · can buy " + observation.maxBuyItems()
-                                : observation.maxBuyBulks() != null ? " · can buy " + observation.maxBuyBulks() + " bulks"
-                                : observation.maxSellItems() != null ? " · takes " + observation.maxSellItems()
-                                : "");
-        }
-
-        private String whereLine(Offer offer) {
-                String town = townByShop.get(offer.shop().shopId());
-                String nation = nationByShop.get(offer.shop().shopId());
-                int x = offer.shop().signPos().getX();
-                int z = offer.shop().signPos().getZ();
-                String coords = x + ", " + offer.shop().signPos().getY() + ", " + z;
-                String where = town == null ? coords : town + (nation == null ? "" : " (" + nation + ")");
-                return where + " · " + coords;
-        }
-
-        private @Nullable Variant variantOf(@Nullable String token) {
-                if (token == null) {
-                        return null;
-                }
-                for (Variant variant : state.results()) {
-                        if (variant.token().equals(token)) {
-                                return variant;
-                        }
-                }
-                return null;
-        }
-
-        private static List<Offer> offersOf(Variant variant, ShopDirection direction) {
-                return variant.offers().stream()
-                                .filter(offer -> offer.observation().direction() == direction)
-                                .toList();
-        }
-
-        private static String priceOrDash(@Nullable BigDecimal price) {
-                return price == null ? "—" : format(price);
-        }
-
-        private static String format(BigDecimal price) {
-                return price.setScale(2, java.math.RoundingMode.HALF_UP)
-                                .stripTrailingZeros().toPlainString() + "G";
-        }
-
-        private static String summaryLine(VariantPricing.SideStats stats) {
-                String line = "best " + priceOrDash(stats.best());
-                if (stats.median() != null) {
-                        line += " · median " + format(stats.median());
-                }
-                return line + " · " + stats.shops() + " shop" + (stats.shops() == 1 ? "" : "s")
-                                + " · " + stats.owners() + " owner" + (stats.owners() == 1 ? "" : "s");
-        }
-
-        // ------------------------------------------------------------------
         // Edge tab — NEU's 64 px item_pane_tab_arrow
         // ------------------------------------------------------------------
 
@@ -1008,11 +715,10 @@ public final class ItemBrowser {
         // ------------------------------------------------------------------
 
         /**
-         * Routes a click. Returns true when the pane or the info pane
-         * consumed it — over either pane, the tab or the close disc — so the
-         * click never reaches a slot. A tile click opens the detail (NEU's
-         * LMB action); an offer click selects it; a selection never issues a
-         * command.
+         * Routes a click. Returns true when the pane consumed it — over
+         * the pane, the tab or the sort bar — so the click never reaches a
+         * slot. A tile click opens the market viewer (NEU's LMB action); a
+         * selection never issues a command.
          */
         public boolean click(AbstractContainerScreen<?> screen, double mouseX, double mouseY) {
                 int mx = paneMouse(mouseX);
@@ -1020,12 +726,6 @@ public final class ItemBrowser {
                 BrowserGeometry.Metrics m = metrics;
                 if (m == null) {
                         return false;
-                }
-                // The info pane's region, while the detail is open — NEU's
-                // mouseInput gates it before the item pane.
-                if (state.view() == ItemBrowserState.View.DETAIL && infoFactor > 0.01f
-                                && mx < BrowserGeometry.infoPaneRight(m, infoFactor)) {
-                        return clickInfoPane(m, mx, my);
                 }
                 // NEU's factor gate: everything right of the pane's animated edge
                 // is the pane's — handled when open, swallowed while it slides.
@@ -1045,8 +745,9 @@ public final class ItemBrowser {
                 }
                 int index = BrowserGeometry.indexAt(mx, my, m, paneLeft, state.page(), state.results().size());
                 if (index >= 0 && index < state.results().size()) {
-                        state.openDetail(state.results().get(index).token());
-                        openDetailContext();
+                        // The viewer opens over the container and restores it
+                        // on close — JEI's open() semantics.
+                        MarketViewerScreen.open(state.results().get(index), state.results());
                         return true;
                 }
                 clickSortBar(m, mx, my);
@@ -1061,30 +762,6 @@ public final class ItemBrowser {
         /** The bold-text width seam the nav math needs. */
         private static BrowserGeometry.FontMetrics boldWidths(Font font) {
                 return text -> font.width(Component.literal(text).withStyle(style -> style.withBold(true)));
-        }
-
-        private boolean clickInfoPane(BrowserGeometry.Metrics m, int mx, int my) {
-                int[] close = BrowserGeometry.infoCloseButton(m, infoFactor);
-                if (BrowserGeometry.contains(close[0], close[1], close[2], close[3], mx, my)) {
-                        state.closeDetail();
-                        playPressSound();
-                        return true;
-                }
-                if (navigateButton != null && state.selectedShopId() != null
-                                && BrowserGeometry.contains(navigateButton[0], navigateButton[1],
-                                navigateButton[2], navigateButton[3], mx, my)) {
-                        navigateToSelected();
-                        playPressSound();
-                        return true;
-                }
-                for (Row row : detailRowsGeom) {
-                        if (BrowserGeometry.contains(row.x(), row.y(), row.w(), row.h(), mx, my)) {
-                                state.selectOffer(row.offer().shop().shopId());
-                                playPressSound();
-                                return true;
-                        }
-                }
-                return true; // inside the info pane, on nothing: consumed
         }
 
         private void handleNavButton(int kind) {
@@ -1143,20 +820,6 @@ public final class ItemBrowser {
                 }
         }
 
-        private void navigateToSelected() {
-                String shopId = state.selectedShopId();
-                if (shopId == null) {
-                        return;
-                }
-                for (Row row : detailRowsGeom) {
-                        if (row.offer().shop().shopId().equals(shopId)) {
-                                net.zaminmc.zea.nav.ShopNavigation.navigate(row.offer(),
-                                                townByShop.get(shopId), nationByShop.get(shopId));
-                                return;
-                        }
-                }
-        }
-
         /** The pane's UI click, shared with the search bar's mode button. */
         public static void playUiClick() {
                 playPressSound();
@@ -1170,8 +833,8 @@ public final class ItemBrowser {
 
         /**
          * A wheel scroll over the pane turns the grid's page, NEU's paging
-         * with the wheel added; over the info pane it scrolls the offer list.
-         * The return says whether the scroll was consumed.
+         * with the wheel added. The return says whether the scroll was
+         * consumed.
          */
         public boolean scroll(double mouseX, double mouseY, double delta) {
                 int mx = paneMouse(mouseX);
@@ -1179,11 +842,6 @@ public final class ItemBrowser {
                 BrowserGeometry.Metrics m = metrics;
                 if (m == null) {
                         return false;
-                }
-                if (state.isOpen() && state.view() == ItemBrowserState.View.DETAIL && infoFactor > 0.01f
-                                && mx < BrowserGeometry.infoPaneRight(m, infoFactor)) {
-                        state.setDetailScroll(state.detailScroll() + (delta < 0 ? 12 : -12));
-                        return true;
                 }
                 if (!state.isOpen() || !BrowserGeometry.inPane(itemFactor, m, mx, my)) {
                         return false;
@@ -1204,40 +862,6 @@ public final class ItemBrowser {
                         return BrowserGeometry.tabHover(m.screenWidth,
                                         Math.round(tabOffset.getValue()), mx, my, m.screenHeight);
                 }
-                if (state.view() == ItemBrowserState.View.DETAIL && infoFactor > 0.01f
-                                && mx < BrowserGeometry.infoPaneRight(m, infoFactor)) {
-                        return true;
-                }
                 return BrowserGeometry.inPane(itemFactor, m, mx, my);
-        }
-
-        /** Resolves the detail's town context once, when the detail opens. */
-        private void openDetailContext() {
-                townByShop.clear();
-                nationByShop.clear();
-                MarketSubsystem market = ZeaClient.market();
-                if (market == null || market.townLookup() == null) {
-                        return;
-                }
-                Variant variant = variantOf(state.selectedToken());
-                if (variant == null) {
-                        return;
-                }
-                for (Offer offer : variant.offers()) {
-                        var resolved = market.townLookup().at(offer.shop().world(),
-                                        offer.shop().signPos().getX(), offer.shop().signPos().getZ());
-                        if (resolved != null) {
-                                if (resolved.town() != null) {
-                                        townByShop.put(offer.shop().shopId(), resolved.town());
-                                }
-                                if (resolved.nation() != null) {
-                                        nationByShop.put(offer.shop().shopId(), resolved.nation());
-                                }
-                        }
-                }
-        }
-
-        /** One offer row's hit box. */
-        private record Row(int x, int y, int w, int h, Offer offer) {
         }
 }
