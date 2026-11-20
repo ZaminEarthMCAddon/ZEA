@@ -16,6 +16,7 @@ import net.zaminmc.zea.market.interaction.ShopInspectionTracker;
 import net.zaminmc.zea.market.model.PhysicalShop;
 import net.zaminmc.zea.market.model.PriceScope;
 import net.zaminmc.zea.market.model.ShopDirection;
+import net.zaminmc.zea.market.model.ShopObservation;
 import net.zaminmc.zea.market.model.ShopResponse;
 import net.zaminmc.zea.market.model.SpawnRef;
 import net.zaminmc.zea.market.model.StockUnit;
@@ -66,7 +67,8 @@ public final class MarketCaptureScreen extends Screen {
         private static final int CONTENT_WIDTH = PANEL_WIDTH - 2 * CONTENT_X;
         private static final int FIELD_HEIGHT = 14;
         private static final int LABEL_PITCH = 10;
-        private static final int FIELD_PITCH = FIELD_HEIGHT + 4;
+        /** Label above, input below, four pixels of air before the next row. */
+        private static final int FIELD_PITCH = LABEL_PITCH + FIELD_HEIGHT + 4;
         private static final int INFO_PITCH = 10;
         private static final int FOOTER_HEIGHT = 24;
 
@@ -145,9 +147,9 @@ public final class MarketCaptureScreen extends Screen {
         protected void init() {
                 buildInfo();
                 boolean spawnMissing = spawnUnknown();
-                ShopResponse response = review.response();
-                boolean priceMissing = response == null || response.price() == null;
-                boolean stockMissing = response == null || response.stockRaw() == null;
+                ShopObservation observation = latestObservation();
+                boolean priceMissing = observation == null || observation.price() == null;
+                boolean stockMissing = observation == null || observation.stockRaw() == null;
 
                 if (spawnMissing) {
                         spawnField = field(64);
@@ -192,26 +194,45 @@ public final class MarketCaptureScreen extends Screen {
         private void buildInfo() {
                 MarketSubsystem market = ZeaClient.market();
                 PhysicalShop shop = market == null ? null : market.data().shop(shopId);
+                ShopObservation observation = latestObservation();
                 ShopResponse response = review.response();
                 String owner = shop == null || shop.owner() == null || shop.owner().isBlank()
                                 ? "?" : shop.owner();
                 infoLines.add(new InfoLine("Owner", owner));
-                String direction = response != null ? direction(response.direction())
+                String direction = observation != null ? direction(observation.direction())
+                                : response != null ? direction(response.direction())
                                 : signDirection();
-                String item = response != null && response.itemDisplay() != null
-                                ? response.itemDisplay()
-                                : signItem();
+                String item = observation != null && observation.itemDisplay() != null
+                                ? observation.itemDisplay()
+                                : response != null && response.itemDisplay() != null
+                                                ? response.itemDisplay()
+                                                : signItem();
                 infoLines.add(new InfoLine("Item", direction + " " + (item == null ? "?" : item)));
-                String stock = response == null ? null : stockText(response);
+                String stock = observation != null ? stockText(observation)
+                                : response == null ? null : stockText(response);
                 infoLines.add(new InfoLine("Stock", stock == null ? "—" : stock));
-                String price = response == null ? null : priceText(response);
+                String price = observation != null && observation.price() != null
+                                ? gold(observation.price())
+                                : response == null ? null : priceText(response);
                 infoLines.add(new InfoLine("Price", price == null ? "—" : price));
-                String enchantments = response == null || response.enchantments().isEmpty()
-                                ? null : String.join(", ", response.enchantments());
+                String enchantments = observation != null && !observation.enchantments().isEmpty()
+                                ? String.join(", ", observation.enchantments())
+                                : response == null || response.enchantments().isEmpty()
+                                                ? null : String.join(", ", response.enchantments());
                 infoLines.add(new InfoLine("Enchantments", enchantments == null ? "—" : enchantments));
                 String spawn = shop == null ? null : shop.spawn();
                 infoLines.add(new InfoLine("Spawn", spawn == null ? "—" : spawn));
                 infoLines.add(new InfoLine("Sign", coordinates(review.signPos())));
+        }
+
+        /** The shop's latest recorded observation — what the capture actually kept. */
+        private @Nullable ShopObservation latestObservation() {
+                MarketSubsystem market = ZeaClient.market();
+                if (market == null) {
+                        return null;
+                }
+                List<ShopObservation> history = market.data().observations(shopId);
+                return history.isEmpty() ? null : history.get(history.size() - 1);
         }
 
         /** Whether no spawn reference stands for this shop yet. */
@@ -246,6 +267,17 @@ public final class MarketCaptureScreen extends Screen {
         }
 
         /** The stock as the server worded it, unit word only when it is known. */
+        private static @Nullable String stockText(ShopObservation observation) {
+                if (observation.stockRaw() == null) {
+                        return null;
+                }
+                return switch (observation.stockUnit()) {
+                        case ITEMS -> observation.stockRaw() + " items";
+                        case SPACE -> observation.stockRaw() + " space";
+                        default -> observation.stockRaw();
+                };
+        }
+
         private static @Nullable String stockText(ShopResponse response) {
                 if (response.stockRaw() == null) {
                         return null;
@@ -319,7 +351,7 @@ public final class MarketCaptureScreen extends Screen {
                         drawInfoLine(graphics, f, line.label(), line.value(), y);
                         y += INFO_PITCH;
                 }
-                int fieldY = fieldsTop;
+                int fieldY = guiTop + fieldsTop;
                 fieldY = drawFieldRow(graphics, f, spawnField, "Spawn", fieldY, mouseX, mouseY);
                 fieldY = drawFieldRow(graphics, f, priceField, "Price (gold)", fieldY, mouseX, mouseY);
                 fieldY = drawFieldRow(graphics, f, stockField, "Stock (items)", fieldY, mouseX, mouseY);
