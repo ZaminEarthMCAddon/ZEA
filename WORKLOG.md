@@ -5431,3 +5431,24 @@ seeded: seller Abasing, item Diamond Pickaxe, direction Selling, sign
 coordinates 8/-60/-6, price empty awaiting the player. The chat-click
 itself was exercised through the command (chat refused to open under
 the driver in that session); the link runs the same command.
+## Pass: the viewer's rows read clean — the stock suffix and the mid-word trims (2026-11-20)
+
+The first full in-game matrix of the rebuilt drive harness (Xvfb + EGL,
+XTEST, a seeded fifteen-shop market) caught two text defects the frames
+showed at full resolution. The row and tooltip stock line appended the
+parsed unit word after a raw stock that already carried its own — "Stock:
+8 stacks items" — and the identity block's unit-price lines hid it; the
+detail line that didn't fit then fell back to a character cut and ended
+mid-word ("9 stacks ite"). The stock suffix now stays off when the raw
+ends with the unit word it would print, and the trim falls from a section
+boundary (·) to a word boundary before it ever ends inside a word. The
+stock unit the capture parser admits is UNKNOWN, so live captures read
+clean either way.
+
+### Verification
+
+Suite green, and the drive matrix re-run against the patched build: page
+one and page two of the fifteen-shop diamond, the Sell-to tab, the
+selection frame with its enabled Navigate plate, the item cycle, and the
+Esc and E restores — every stock line renders "Stock: N stacks" with no
+stray unit and no mid-word tail.
