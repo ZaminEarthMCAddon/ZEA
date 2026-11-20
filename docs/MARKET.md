@@ -90,11 +90,18 @@ the level's registries — glint and durability included; a tile whose
 patch cannot decode is marked approximate). The existing inventory
 search bar drives the filter — one search system, shared with slot
 matching. A tile's tooltip carries the identity, counts and best prices;
-clicking opens the variant's detail: the owner-balanced market summary
-per side, and every physical shop as its own offer, grouped by
-transaction direction, cheapest purchase and highest payout first.
-Selecting an offer only selects it — a selection and a navigation are
-separate interactions.
+clicking opens the market viewer — JEI's RecipesGui rebuilt for a live
+market (`market.viewer`), studied from the upstream source with its
+history: the screen captures the container as its parent and swaps
+itself in the way JEI's `open()` does, and Esc or the inventory key
+returns the container exactly as it was. Its chrome is JEI's own files
+(MIT, `textures/market/NOTICE.txt`): the nine-slice panel, the 13 px
+nav arrows, the 24 px side tabs, the vanilla-look buttons. The tabs
+pick the market's side (all, buy from, sell to), the header's arrows
+cycle the browser's results and paginate the offers, and the rows show
+one offer each in JEI's slot language — cheapest purchase and highest
+payout first, grouped by transaction direction. Selecting an offer only
+selects it — a selection and a navigation are separate interactions.
 
 ## Transaction safety
 
@@ -107,7 +114,7 @@ are, no outcome is claimed.
 
 ## Smart navigation
 
-Navigate is explicit — the detail view's footer button, for the
+Navigate is explicit — the viewer's footer button, for the
 selected offer. The planner reads the shop's resolved town and nation
 and the player's current nation from claim geometry:
 
