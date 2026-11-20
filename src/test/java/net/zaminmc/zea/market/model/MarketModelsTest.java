@@ -55,7 +55,7 @@ class MarketModelsTest {
 	@Test
 	void revisitingUpdatesOwnerAndStampButKeepsIdentity() {
 		PhysicalShop shop = new PhysicalShop("id", "earthmc.net", "minecraft_overworld",
-				new BlockPos(0, 64, 0), null, "Abasing", null, T, T);
+				new BlockPos(0, 64, 0), null, "Abasing", null, null, T, T);
 
 		PhysicalShop revisited = shop.revisited("Pelle_Nomme", "France", Instant.ofEpochMilli(2_000_000L));
 
@@ -68,7 +68,7 @@ class MarketModelsTest {
 	@Test
 	void revisitingKeepsThePreviousOwnerWhenUnreported() {
 		PhysicalShop shop = new PhysicalShop("id", "earthmc.net", "minecraft_overworld",
-				new BlockPos(0, 64, 0), null, "Abasing", null, T, T);
+				new BlockPos(0, 64, 0), null, "Abasing", null, null, T, T);
 
 		assertEquals("Abasing", shop.revisited(null, null, T).owner());
 	}

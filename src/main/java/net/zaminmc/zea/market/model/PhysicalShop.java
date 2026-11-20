@@ -21,42 +21,56 @@ import java.time.Instant;
  * <p>Nation is recorded only when a reliable source (authorized claim
  * data) resolves it; an unresolved nation stays {@code null} and is never
  * guessed from surrounding text or approximate positions.
+ *
+ * <p>Spawn is the way into the shop — the town or nation spawn command a
+ * player would run to reach it ({@code /n spawn france}). It is filled
+ * from claim data when that resolves, else it is the player's own
+ * annotation; it stays {@code null} until one of the two exists, and is
+ * never guessed from the sign text.
  */
 public record PhysicalShop(
-		String shopId,
-		String serverId,
-		String world,
-		BlockPos signPos,
-		@Nullable BlockPos chestPos,
-		@Nullable String owner,
-		@Nullable String nation,
-		Instant createdAt,
-		Instant lastObservedAt) {
-	public PhysicalShop {
-		if (shopId == null || serverId == null || world == null || signPos == null
-				|| createdAt == null || lastObservedAt == null) {
-			throw new NullPointerException("physical shop fields must not be null");
-		}
-	}
+                String shopId,
+                String serverId,
+                String world,
+                BlockPos signPos,
+                @Nullable BlockPos chestPos,
+                @Nullable String owner,
+                @Nullable String nation,
+                @Nullable String spawn,
+                Instant createdAt,
+                Instant lastObservedAt) {
+        public PhysicalShop {
+                if (shopId == null || serverId == null || world == null || signPos == null
+                                || createdAt == null || lastObservedAt == null) {
+                        throw new NullPointerException("physical shop fields must not be null");
+                }
+        }
 
-	/**
-	 * The stable identity of the shop anchored at a sign: server identity
-	 * plus world plus sign block position. The attached chest is data on
-	 * the record, never part of the identity — a chest resolved on a
-	 * later visit must not fork the shop into a second one.
-	 */
-	public static String idOf(String serverId, String world, BlockPos signPos) {
-		return new StringBuilder(serverId)
-				.append('|').append(world)
-				.append('|').append(signPos.getX()).append(',').append(signPos.getY()).append(',').append(signPos.getZ())
-				.toString();
-	}
+        /**
+         * The stable identity of the shop anchored at a sign: server identity
+         * plus world plus sign block position. The attached chest is data on
+         * the record, never part of the identity — a chest resolved on a
+         * later visit must not fork the shop into a second one.
+         */
+        public static String idOf(String serverId, String world, BlockPos signPos) {
+                return new StringBuilder(serverId)
+                                .append('|').append(world)
+                                .append('|').append(signPos.getX()).append(',').append(signPos.getY()).append(',').append(signPos.getZ())
+                                .toString();
+        }
 
-	/** A copy of this shop with the owner, nation and observation stamp updated. */
-	public PhysicalShop revisited(@Nullable String owner, @Nullable String nation, Instant at) {
-		return new PhysicalShop(shopId, serverId, world, signPos, chestPos,
-				owner != null ? owner : this.owner,
-				nation != null ? nation : this.nation,
-				createdAt, at);
-	}
+        /** A copy of this shop with the owner, nation and observation stamp updated. */
+        public PhysicalShop revisited(@Nullable String owner, @Nullable String nation, Instant at) {
+                return new PhysicalShop(shopId, serverId, world, signPos, chestPos,
+                                owner != null ? owner : this.owner,
+                                nation != null ? nation : this.nation,
+                                spawn,
+                                createdAt, at);
+        }
+
+        /** A copy of this shop with the spawn reference the player gave. */
+        public PhysicalShop annotated(String spawn) {
+                return new PhysicalShop(shopId, serverId, world, signPos, chestPos,
+                                owner, nation, spawn, createdAt, lastObservedAt);
+        }
 }

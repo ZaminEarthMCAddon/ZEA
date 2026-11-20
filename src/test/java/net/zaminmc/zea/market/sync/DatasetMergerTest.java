@@ -27,7 +27,7 @@ class DatasetMergerTest {
 
 	private static SharedShops.SharedRecord record(String shopId, long observedAt) {
 		return new SharedShops.SharedRecord(shopId, "earthmc.net", "minecraft:overworld",
-				10, 64, -20, 10, 64, -19, "RemoteOwner", null,
+				10, 64, -20, 10, 64, -19, "RemoteOwner", null, null,
 				"SELLING", TOKEN, "Diamond Pickaxe", "2", "PER_ITEM",
 				null, "47", "UNKNOWN", null, null, 4, null, null,
 				List.of("Fortune III"), true, observedAt);
@@ -39,7 +39,7 @@ class DatasetMergerTest {
 
 	private static PhysicalShop shop(String id) {
 		return new PhysicalShop(id, "earthmc.net", "minecraft:overworld",
-				new BlockPos(10, 64, -20), null, "LocalOwner", null, LOCAL_T, LOCAL_T);
+				new BlockPos(10, 64, -20), null, "LocalOwner", null, null, LOCAL_T, LOCAL_T);
 	}
 
 	private static ShopObservation observation(String shopId, Instant at) {
@@ -100,7 +100,7 @@ class DatasetMergerTest {
 		// A different variant measured at the same millisecond: the
 		// provenance rule decides — local wins the tie.
 		SharedShops.SharedRecord other = new SharedShops.SharedRecord("s|1", "earthmc.net",
-				"minecraft:overworld", 10, 64, -20, null, null, null, "RemoteOwner", null,
+				"minecraft:overworld", 10, 64, -20, null, null, null, "RemoteOwner", null, null,
 				"SELLING", "minecraft:diamond_pickaxe|{\"minecraft:enchantments\":1}",
 				"Enchanted Pickaxe", "2", "PER_ITEM", null, null, "UNKNOWN",
 				null, null, null, null, null, List.of(), false, LOCAL_T.toEpochMilli());

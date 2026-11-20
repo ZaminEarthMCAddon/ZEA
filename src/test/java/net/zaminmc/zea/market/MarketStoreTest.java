@@ -38,7 +38,7 @@ class MarketStoreTest {
         private static PhysicalShop shop() {
                 return new PhysicalShop("earthmc.net|minecraft_overworld|10,64,-20", "earthmc.net",
                                 "minecraft_overworld", new BlockPos(10, 64, -20), new BlockPos(10, 64, -19),
-                                "Abasing", null, T, T);
+                                "Abasing", null, null, T, T);
         }
 
         private static ShopObservation observation(BigDecimal price, Instant at) {
@@ -204,7 +204,7 @@ class MarketStoreTest {
                 data.record(first, observation(new BigDecimal("1"), T));
 
                 PhysicalShop revisitedShop = new PhysicalShop(first.shopId(), first.serverId(), first.world(),
-                                first.signPos(), first.chestPos(), "Pelle_Nomme", null, first.createdAt(),
+                                first.signPos(), first.chestPos(), "Pelle_Nomme", null, null, first.createdAt(),
                                 T.plusSeconds(60));
                 data.record(revisitedShop, observation(new BigDecimal("2"), T.plusSeconds(60)));
 
@@ -257,11 +257,11 @@ class MarketStoreTest {
         void aChestResolvedLaterFillsInWithoutErasingOwner() {
                 MarketData data = new MarketData();
                 PhysicalShop bare = new PhysicalShop("id", "earthmc.net", "minecraft_overworld",
-                                new BlockPos(1, 64, 2), null, "Abasing", null, T, T);
+                                new BlockPos(1, 64, 2), null, "Abasing", null, null, T, T);
                 data.record(bare, observation(new BigDecimal("1"), T));
 
                 PhysicalShop withChest = new PhysicalShop("id", "earthmc.net", "minecraft_overworld",
-                                new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), null, null, T, T.plusSeconds(30));
+                                new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), null, null, null, T, T.plusSeconds(30));
                 data.record(withChest, observation(new BigDecimal("1"), T.plusSeconds(30)));
 
                 assertEquals(new BlockPos(1, 64, 1), data.shop("id").chestPos());

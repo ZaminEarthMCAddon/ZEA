@@ -35,7 +35,7 @@ import net.zaminmc.zea.map.MapSubsystem;
 import net.zaminmc.zea.map.cache.ClaimStore;
 import net.zaminmc.zea.market.ClaimTownResolver;
 import net.zaminmc.zea.market.MarketSubsystem;
-import net.zaminmc.zea.market.editor.MarketEditorCommands;
+import net.zaminmc.zea.market.editor.MarketDevCommands;
 import net.zaminmc.zea.market.sync.DatasetMerger;
 import net.zaminmc.zea.market.sync.RepoSync;
 import net.zaminmc.zea.market.sync.SharedShops;
@@ -330,7 +330,7 @@ public final class ZeaClient implements ClientModInitializer {
                 ShareCommands.register(zea, coordinator);
                 CaptureCommands.register(zea, captureRecorder, lifecycle::onEarthMc);
                 HudCommands.register(zea, () -> hud);
-                MarketEditorCommands.register(zea);
+                MarketDevCommands.register(zea);
                 ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(zea));
                 // /zeabuttons — the button editor. Deferred through the
                 // client queue like the settings screen: a client command

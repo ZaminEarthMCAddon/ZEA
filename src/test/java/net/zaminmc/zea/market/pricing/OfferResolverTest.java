@@ -33,7 +33,7 @@ class OfferResolverTest {
 
 	private static PhysicalShop shop(String id, String owner) {
 		return new PhysicalShop(id, "earthmc.net", "minecraft_overworld",
-				new BlockPos(10, 64, 20 + id.hashCode() % 50), null, owner, null, T, T);
+				new BlockPos(10, 64, 20 + id.hashCode() % 50), null, owner, null, null, T, T);
 	}
 
 	private static ShopObservation selling(String shopId, String token, String price, int bulk, Instant at) {

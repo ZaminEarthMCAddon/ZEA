@@ -51,7 +51,7 @@ class MarketTooltipLinesTest {
         private static PhysicalShop shop(String id, String owner) {
                 int hash = Math.abs(id.hashCode());
                 return new PhysicalShop(id, "earthmc.net", "minecraft:overworld",
-                                new BlockPos(hash % 1000, 64, hash % 997), null, owner, null, T, T);
+                                new BlockPos(hash % 1000, 64, hash % 997), null, owner, null, null, T, T);
         }
 
         private static ShopObservation selling(String shopId, String price, String stock,
