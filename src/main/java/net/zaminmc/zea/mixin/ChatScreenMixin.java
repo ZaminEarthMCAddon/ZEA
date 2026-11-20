@@ -25,6 +25,7 @@ import net.zaminmc.zea.chat.render.ChatTabBar;
 import net.zaminmc.zea.chat.render.ClearHistoryToast;
 import net.zaminmc.zea.chat.render.CopyToast;
 import net.zaminmc.zea.chat.render.MultiSendToast;
+import net.zaminmc.zea.chat.render.PmSendIndicator;
 import net.zaminmc.zea.chat.render.PrivateMessageToast;
 import net.zaminmc.zea.chat.render.TradeQueuePanel;
 import net.zaminmc.zea.chat.render.TradeStatusIndicator;
@@ -141,6 +142,8 @@ public abstract class ChatScreenMixin {
         private TradeQueuePanel zea$queuePanel;
         /** Whether the queue panel is open; resets when the screen rebuilds. */
         private boolean zea$queuePanelOpen;
+        /** The PMs tab's Send-to tag on the input row; rebuilt with the screen. */
+        private PmSendIndicator zea$pmIndicator;
 
         @Inject(method = "init", at = @At("TAIL"))
         private void zea$addChatTabs(CallbackInfo ci) {
@@ -260,6 +263,29 @@ public abstract class ChatScreenMixin {
                                 () -> zea$closeQueuePanel());
                 zea$queuePanel.visible = false;
                 ((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(zea$queuePanel);
+
+                // The PMs tab's Send-to tag: one plain text tag on the input's
+                // row, at its right end, naming whom the tab's next send
+                // would reach — the live reply target — or, before any PM
+                // exchange, the session's recent frequent partners. Built
+                // unconditionally and hidden by default; the per-frame poll
+                // below flips it only while the PMs tab is selected and the
+                // PM state has something to say. The input exists by now:
+                // vanilla builds it in its own init, before this TAIL inject.
+                zea$pmIndicator = new PmSendIndicator(
+                                input.getX() + input.getWidth() + PmSendIndicator.GAP,
+                                input.getY(),
+                                input.getHeight(),
+                                minecraft.font,
+                                () -> ZeaClient.chat() == null ? null : ZeaClient.chat().privateMessaging(),
+                                () -> {
+                                        ChatSubsystem live = ZeaClient.chat();
+                                        return live != null && Feeds.PRIVATE_MESSAGES.id()
+                                                                        .equals(live.feedSelection().selected().id());
+                                },
+                                screen.width);
+                zea$pmIndicator.visible = false;
+                ((ScreenWidgetAccess) (Object) this).zea$addRenderableWidget(zea$pmIndicator);
         }
 
         /**
@@ -407,6 +433,25 @@ public abstract class ChatScreenMixin {
                                         && ZeaClient.config() != null
                                         && ZeaClient.config().tradePacingEnabled();
                 }
+        }
+
+        /**
+         * Flips the PMs tab's Send-to tag per frame: it shows while the
+         * PMs tab is selected, the config keeps the indicator on, and the
+         * PM state has something to name — the live reply target, or the
+         * session's recent frequent partners before one exists. The widget
+         * cannot poll itself back to life once invisible, so the screen
+         * does it here, the same per-frame hook the other chat widgets ride.
+         */
+        @Inject(method = "extractRenderState", at = @At("TAIL"))
+        private void zea$updatePmIndicator(GuiGraphicsExtractor extractor, int mouseX, int mouseY,
+                        float partialTick, CallbackInfo ci) {
+                if (zea$pmIndicator == null) {
+                        return;
+                }
+                zea$pmIndicator.visible = ZeaClient.config() != null
+                                && ZeaClient.config().pmSendIndicatorEnabled()
+                                && zea$pmIndicator.shouldShow();
         }
 
         /**

@@ -160,6 +160,23 @@ public final class ZeaConfig extends Config {
                                 + "they leave the General tab but are never deleted.")
                 @ConfigOrder(10)
                 public ChatFilters filters = new ChatFilters();
+
+                @Category(name = "PMs", desc = "The PMs tab's send target. The tab routes a plain "
+                                + "message to /r — the server replies to the last person it saw a PM "
+                                + "exchange with, incoming or outgoing.")
+                @ConfigOrder(11)
+                public Pms pms = new Pms();
+        }
+
+        /** The PMs tab's send-target indicator options. */
+        public static final class Pms {
+                @ConfigOption(name = "Send-to indicator", desc = "Show 'Send to <player>' beside the "
+                                + "chat input while the PMs tab is selected — the live reply target, "
+                                + "which moves with every PM exchange in either direction. Before any "
+                                + "exchange it shows the session's recent frequent partners instead.")
+                @ConfigEditorBoolean
+                @ConfigOrder(0)
+                public boolean sendIndicatorEnabled = true;
         }
 
         /** The optional advertisement-shaped message filters, each independently toggleable. */
@@ -854,6 +871,15 @@ public final class ZeaConfig extends Config {
         /** Whether received channel messages are tinted slightly yellow; on by default. */
         public boolean channelTintEnabled() {
                 return chat.channelTint;
+        }
+
+        /**
+         * Whether the PMs tab's Send-to indicator is on; on by default — the
+         * tag answers "who gets this?" where the refusal toast only says
+         * "nobody yet".
+         */
+        public boolean pmSendIndicatorEnabled() {
+                return chat.pms == null || chat.pms.sendIndicatorEnabled;
         }
 
         /**
