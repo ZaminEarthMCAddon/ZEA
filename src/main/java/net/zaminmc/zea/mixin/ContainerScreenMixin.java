@@ -439,11 +439,11 @@ public abstract class ContainerScreenMixin implements HoveredSlotAccess, Contain
                         cir.setReturnValue(true);
                         return;
                 }
-                // NEU's close-panes binding: the grid pane slides away —
-                // the detail pane with it — and only the reopen tab stays.
-                // The search bar keeps its query; clearing it is the bar's
-                // own right-click.
+                // NEU's close-panes binding: the grid pane slides away and
+                // only the reopen tab stays. The search bar keeps its query;
+                // clearing it is the bar's own right-click.
                 ZeaConfig browserConfig = ZeaClient.config();
+                ItemBrowser browser = ZeaClient.browser();
                 if (browser != null && browserConfig != null
                                 && browserConfig.inventoryShopBrowserEnabled()
                                 && !zea$isCreative(self)

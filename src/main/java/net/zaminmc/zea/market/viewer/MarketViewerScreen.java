@@ -7,8 +7,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -297,7 +297,7 @@ public final class MarketViewerScreen extends Screen {
         /** JEI's {@code updateSize}: the panel's JEI-default footprint. */
         private void updateSize() {
                 int maxWidth = Math.max(MIN_GUI_WIDTH, this.width - 2 * BORDER_PADDING);
-                xSize = Math.clamp(MIN_GUI_WIDTH, MIN_GUI_WIDTH, maxWidth);
+                xSize = Math.min(MIN_GUI_WIDTH, maxWidth);
                 int idealHeight = this.height - 58;
                 int extraSpace = 0;
                 ySize = Math.max(MIN_GUI_HEIGHT, idealHeight);
@@ -528,7 +528,7 @@ public final class MarketViewerScreen extends Screen {
         @Override
         public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
                 refreshEntries();
-                Font font = font();
+                Font font = this.font;
                 tabBoxes.clear();
 
                 drawTabs(graphics, font, mouseX, mouseY);
@@ -574,7 +574,7 @@ public final class MarketViewerScreen extends Screen {
                 int titleLeft = guiLeft + BORDER_PADDING + SMALL_BUTTON + TITLE_INNER_PADDING;
                 int titleRight = guiLeft + xSize - BORDER_PADDING - SMALL_BUTTON - TITLE_INNER_PADDING;
                 int titleWidth = Math.max(0, titleRight - titleLeft);
-                FormattedCharSequence title = visibleTitle.getVisualOrderText();
+                FormattedCharSequence title = net.minecraft.locale.Language.getInstance().getVisualOrder(visibleTitle);
                 int textWidth = font.width(visibleTitle);
                 int textX = titleLeft + (titleWidth - textWidth) / 2;
                 int textY = row1Y + (SMALL_BUTTON - font.lineHeight) / 2 + 1;
@@ -656,13 +656,14 @@ public final class MarketViewerScreen extends Screen {
                 int start = page * rowsPerPage;
                 int end = Math.min(entries.size(), start + rowsPerPage);
                 int y = listTop();
+                ItemStack icon = VariantStacks.of(variant.token()).stack();
                 for (int i = start; i < end; i++) {
                         Entry entry = entries.get(i);
                         if (entry instanceof HeaderEntry header) {
                                 graphics.text(font, header.text(), contentLeft, y + 1, header.color(), false);
                                 y += 12;
                         } else if (entry instanceof OfferEntry offerEntry) {
-                                drawOfferRow(graphics, font, offerEntry.offer(), contentLeft,
+                                drawOfferRow(graphics, font, offerEntry.offer(), icon, contentLeft,
                                                 contentRight - contentLeft, y, mouseX, mouseY);
                                 y += ROW_HEIGHT;
                         }

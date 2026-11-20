@@ -201,11 +201,6 @@ public final class ItemBrowserState {
         private @Nullable Filter resultsFilter;
         private List<ItemVariantIndex.Variant> results = List.of();
 
-        /** The view the pane currently shows. */
-        public View view() {
-                return view;
-        }
-
         /** Whether the pane shows at all. */
         public boolean isOpen() {
                 return open;
