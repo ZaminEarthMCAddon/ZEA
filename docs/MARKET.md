@@ -59,6 +59,7 @@ its unit justifies.
 | `market.index` | The item-variant index and the owner-balanced price aggregation |
 | `market.tx` | The transaction calculator behind the chat's shop-quantity flow |
 | `market.ui` | Observation ages (presentation formatting) |
+| `market.editor` | The market editor screen (`/zea market-editor`): manual listings and capture review |
 | `market.tooltip` | The market section in item tooltips |
 | `market.sync` | The shared-dataset sync (manifest, cache, merge) and the validated submission queue for ZEA-REPO |
 | `market.config` | The Market settings category |
@@ -102,6 +103,34 @@ cycle the browser's results and paginate the offers, and the rows show
 one offer each in JEI's slot language — cheapest purchase and highest
 payout first, grouped by transaction direction. Selecting an offer only
 selects it — a selection and a navigation are separate interactions.
+
+## The market editor and the capture review prompt
+
+`/zea market-editor` opens the market editor (`market.editor`): the
+viewer's JEI chrome around a form. A fresh listing seeds its location
+from the sign under the crosshair — the sign's text seeds seller, item
+and direction too — falling back to the player's feet; the item comes
+from an inventory picker, and the pick gives the listing its exact
+identity: a listing picked from the inventory carries an exact
+fingerprint and ranks with the verified responses, one typed from a
+name alone stays display text, as preliminary as a sign advert. The
+direction toggle, the per-item/per-bulk scope, the stock and the sign
+coordinates round the form out. Done records the listing through the
+same pipeline a captured inspection follows — index, disk, repository
+queue — with the provenance the player's own word earns: `MANUAL`.
+
+The auto capture stays automatic, and it now survives real chat: an
+unrelated line between two shop lines no longer splits the response
+half-recorded, a response attaches to the newest pending use that
+actually is a shop sign (a chest or door click never owns it), the next
+sign use flushes an open run, and sign direction matching is
+case-insensitive. When a capture records, one chat line appears —
+"▪ Captured <item> [Review]" — never a stolen screen. The Review click
+(and `/zea market-editor review`) opens the editor over the latest
+captured inspection with every field editable: what the server captured
+wrong can be fixed, what it never carried can be added, and Done
+records the corrected listing as the shop's newest observation. A
+review that changed nothing adds nothing — the capture already stands.
 
 ## Transaction safety
 
@@ -190,3 +219,6 @@ because the shop has one, never the observing player's identity.
 - The shop response component tree was parsed from observed text
   shapes; a real capture via `/zea capture` should confirm the hover
   layout (the parser tolerates missing hovers already).
+- The capture prompt's Review link runs `/zea market-editor review` as
+  a chat click; the command path is the same screen, so a prompt can
+  always be picked up from the command too.

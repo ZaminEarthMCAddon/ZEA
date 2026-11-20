@@ -5340,3 +5340,94 @@ stood, and the disabled arrows carry JEI's disabled plate. One finding
 the frames caught: `SideStats.shops()` is the variant-wide count, so the
 identity block counts each side's offers itself — a one-shop SELL TO
 read as fourteen.
+
+## The market editor — /zea market-editor, the capture prompt, the aggregated tooltip (2026-11-20)
+
+Three asks, one arc: a way to enter a listing by hand, a capture that
+actually captures and then asks the player whether it did, and item
+lore that speaks in aggregates.
+
+### The capture fixes first (the "barely works" diagnosis)
+
+The tracker closed a response run on the first message without
+shop-shaped lines. One unanchored line between the server's fields —
+another player talking, a broadcast, any wording the anchors do not
+know — recorded half a response and dropped the rest. The run now
+stays open and the quiet window closes it whole; the boundary between
+two inspections is the next sign the player clicks, not random chat.
+The response attaches to the newest pending use whose sign text
+actually is a shop sign: every block use (chests, doors) also lands
+here as a pending use, and a shop's response must not attach to
+whatever block was last touched. Sign direction matching is
+case-insensitive — signs are hand-written.
+
+### MANUAL as provenance
+
+`SourceType.MANUAL` marks what the player entered or confirmed in the
+editor. An exact identity ranks with the verified responses in the
+variant index and submits to the repository; a display-only identity
+stays as preliminary as a sign advert. The wire format needed no
+change — the enum name round-trips, and unknown names still degrade to
+SIGN_ONLY on older builds.
+
+### The editor
+
+The viewer's chrome with a form inside: JEI's panel, the direction
+toggle (Selling — you buy / Buying — you sell), the seller field, an
+inventory item picker (the pick gives the listing its exact identity),
+price with a per-item/per-bulk scope, bulk size, stock, and the sign
+coordinates. A fresh listing seeds its location from the sign under
+the crosshair — the sign's text seeds seller, item and direction too —
+falling back to the player's feet. The review path opens over the
+latest captured inspection: every field editable, Done records the
+corrected listing as the shop's newest observation, an unchanged
+review adds nothing, and Done that cannot parse a number keeps the
+panel open with the field red.
+
+### The capture prompt
+
+One chat line — "▪ Captured <item> [Review]" — after a capture
+records; the click runs `/zea market-editor review`, the same command
+the editor registers for picking a prompt back up. Chat lines never
+steal the screen: the capture is recorded as always, the prompt is the
+invitation. The toggle sits in the Market config.
+
+### The tooltip
+
+The market section speaks in aggregates now: Sellers (distinct sellers
+— one owner with several shops is one seller), Price (the range of
+every known unit price on the side), Stock (combined, but only when
+every stock report is item-denominated — stacks are not items, space
+is capacity, an uninterpretable figure leaves the line out), Buyers
+and Payout for the other side. Black bullet, white label, gold value —
+the bullet the spec asked for is dark gray in the end: black is
+invisible on the tooltip's near-black background. The section builds
+from the variant index once per market revision; a hover after that is
+a map lookup.
+
+### Verification
+
+The suite green (tracker: the split-response, chest-attribution,
+run-flush and sign-casing cases; index: MANUAL in with an exact
+identity, out with display text; validator and store: MANUAL submit
+and round-trip; tooltip lines: the aggregate shapes, the honest stock
+omissions, the colors). The in-game pass ran against the seeded
+market under Xvfb/EGL with a screenshot at every step: the editor
+opens with the JEI panel and readable labels (the first build's black
+field text on black plates caught by the frames and fixed — the
+EditBox paints its own dark plate, so field text is light always, and
+the scope button became one cycling control after the two-hitboxes
+bug it started with), the picker grid shows the inventory with the
+diamond in the first plate, the pick fills the item slot and display
+name, typed seller/price/stock land, Done records — the chat line
+"Listing added to the market list: Diamond" lands and market.json
+gains the MANUAL observation with the exact token, which the tooltip
+then proves by counting it into Sellers: 11. The tooltip lore shows
+the bullets, the ranges and the honest age. The sign round trip:
+a setblock shop sign ("Abasing / Selling 36 / Diamond Pickaxe / 2G
+each"), one right-click, twelve seconds — the chat HUD carries
+"▪ Captured Diamond Pickaxe [Review]", and the review editor opens
+seeded: seller Abasing, item Diamond Pickaxe, direction Selling, sign
+coordinates 8/-60/-6, price empty awaiting the player. The chat-click
+itself was exercised through the command (chat refused to open under
+the driver in that session); the link runs the same command.
