@@ -597,20 +597,24 @@ public final class MarketViewerScreen extends Screen {
         }
 
         /**
-         * One 13 px nav button: JEI's vanilla button plate with the arrow
-         * icon centered, the hover plate when hovered, no arrow when
-         * inactive. Returns the hit box.
+         * One 13 px nav button: JEI's vanilla button plate — the enabled
+         * sprite with the centered arrow when active, JEI's disabled
+         * plate when not — and the hover plate over the enabled one.
+         * Returns the hit box.
          */
         private int @Nullable [] drawNavButton(GuiGraphicsExtractor graphics,
                         int x, int y, Identifier arrow, int mouseX, int mouseY, boolean active) {
-                boolean hovered = active && mouseX >= x && mouseX < x + SMALL_BUTTON
+                if (!active) {
+                        graphics.blit(BUTTON_DISABLED,
+                                        x, y, x + SMALL_BUTTON, y + SMALL_BUTTON, 0f, 1f, 0f, 1f);
+                        return new int[] {x, y, SMALL_BUTTON, SMALL_BUTTON};
+                }
+                boolean hovered = mouseX >= x && mouseX < x + SMALL_BUTTON
                                 && mouseY >= y && mouseY < y + SMALL_BUTTON;
                 graphics.blit(hovered ? BUTTON_HOVER : BUTTON,
                                 x, y, x + SMALL_BUTTON, y + SMALL_BUTTON, 0f, 1f, 0f, 1f);
-                if (active) {
-                        // The 9×7 arrow centered in the 13 px plate.
-                        graphics.blit(arrow, x + 2, y + 3, x + 11, y + 10, 0f, 1f, 0f, 1f);
-                }
+                // The 9×7 arrow centered in the 13 px plate.
+                graphics.blit(arrow, x + 2, y + 3, x + 11, y + 10, 0f, 1f, 0f, 1f);
                 return new int[] {x, y, SMALL_BUTTON, SMALL_BUTTON};
         }
 
@@ -647,8 +651,29 @@ public final class MarketViewerScreen extends Screen {
                         String tag, int tagColor, String summary, int x, int y) {
                 graphics.text(font, tag, x, y, tagColor, false);
                 int summaryX = x + font.width(tag) + 6;
-                String trimmed = font.plainSubstrByWidth(summary, contentRight - summaryX);
+                String trimmed = trimSections(font, summary, contentRight - summaryX);
                 graphics.text(font, trimmed, summaryX, y, TEXT, false);
+        }
+
+        /**
+         * Trims a summary to the width, backing the cut up to the last
+         * whole section ("·" between facts, ", " between enchantments) —
+         * a half-word like "1 owne" reads worse than the section it
+         * belongs to, which the tooltip already carries.
+         */
+        private static String trimSections(Font font, String text, int width) {
+                String trimmed = font.plainSubstrByWidth(text, width);
+                if (trimmed.length() >= text.length()) {
+                        return text;
+                }
+                int cut = Math.max(trimmed.lastIndexOf('·'), trimmed.lastIndexOf(','));
+                if (cut > 0) {
+                        trimmed = trimmed.substring(0, cut).stripTrailing();
+                        if (!trimmed.isEmpty() && trimmed.charAt(trimmed.length() - 1) == '·') {
+                                trimmed = trimmed.substring(0, trimmed.length() - 1).stripTrailing();
+                        }
+                }
+                return trimmed;
         }
 
         /** The paginated offer list — one offer per row, in JEI's slot language. */
@@ -716,7 +741,7 @@ public final class MarketViewerScreen extends Screen {
                 int ageWidth = font.width(age);
                 int detailWidth = textWidth - ageWidth - 8;
                 if (detailWidth > 8) {
-                        String trimmed = font.plainSubstrByWidth(detail, detailWidth);
+                        String trimmed = trimSections(font, detail, detailWidth);
                         graphics.text(font, trimmed, textX, y + 12, TEXT_DIM, false);
                 }
                 graphics.text(font, age, left + width - 2 - ageWidth, y + 12, TEXT_DIM, false);
