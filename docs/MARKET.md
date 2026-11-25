@@ -97,12 +97,17 @@ history: the screen captures the container as its parent and swaps
 itself in the way JEI's `open()` does, and Esc or the inventory key
 returns the container exactly as it was. Its chrome is JEI's own files
 (MIT, `textures/market/NOTICE.txt`): the nine-slice panel, the 13 px
-nav arrows, the 24 px side tabs, the vanilla-look buttons. The tabs
-pick the market's side (all, buy from, sell to), the header's arrows
-cycle the browser's results and paginate the offers, and the rows show
-one offer each in JEI's slot language — cheapest purchase and highest
-payout first, grouped by transaction direction. Selecting an offer only
-selects it — a selection and a navigation are separate interactions.
+nav arrows, the vanilla-look buttons. The top bar names the market's
+side — Selling Shops or Buying Shops — flipped with JEI's arrows and
+reachable only while shops serve it, and the count line under it
+carries the side's seller or buyer count with the item. The content is
+a carousel, not a list: one offer at a time, the item in a large slot
+plate flanked by previous/next shop arrows (the mouse wheel turns the
+carousel too, wrapping at the ends), the listing's facts as labeled
+lines — seller, price per item, stock, bulk terms, where, observed —
+and a shop-n-of-m position line. Both sides' best and median prices
+stay on screen above the carousel; each side sorts its own way,
+cheapest purchase first, highest payout first.
 
 ## The market editor and the capture review prompt
 
@@ -143,17 +148,21 @@ are, no outcome is claimed.
 
 ## Smart navigation
 
-Navigate is explicit — the viewer's footer button, for the
-selected offer. The planner reads the shop's resolved town and nation
-and the player's current nation from claim geometry:
+Teleport is explicit — the viewer's footer button acts on the shop the
+carousel shows, and is disabled, with the reason on hover, whenever the
+planner has no spawn command for it. The planner reads the shop's
+resolved town and nation and the player's current nation from claim
+geometry:
 
-- Already inside the destination nation: the waypoint is set and **no
-  spawn command is issued** — teleporting back to a spawn the player
-  is already inside would be a regression.
+- Already inside the destination nation: **no spawn command is
+  issued** — the plate is disabled ("no spawn needed"), since
+  teleporting back to a spawn the player is already inside would be a
+  regression.
 - The town confidently resolved (the sign sits inside its claim):
   `/t spawn <town>` is preferred.
 - Only the nation resolved: `/n spawn <nation>`.
-- Neither known: no command is invented; the waypoint alone guides.
+- Neither known: the plate is disabled ("no spawn command") — no
+  command is invented, and nothing is dispatched.
 
 The dispatch goes through the ordinary send path, where the spawn
 observer records it like a typed command (macros included). The
@@ -211,11 +220,11 @@ because the shop has one, never the observing player's identity.
 
 - Success/failure transaction outcomes are not recognized (no captured
   message shapes); no outcome is claimed after a send.
-- Nation and town resolution follow the map subsystem's claim store;
+- Nation and town resolution follow the market's claim store;
   where claims are not loaded, the fields stay unknown — never guessed
   from proximity.
-- The destination marker is a HUD element (label, distance, bearing),
-  not yet a marker drawn on the world map and minimap canvases.
+- The destination marker is a HUD element (label, distance, bearing);
+  there is no map canvas to draw it on.
 - The shop response component tree was parsed from observed text
   shapes; a real capture via `/zea capture` should confirm the hover
   layout (the parser tolerates missing hovers already).

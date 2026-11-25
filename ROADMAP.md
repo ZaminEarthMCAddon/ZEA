@@ -164,6 +164,6 @@ development environment); see [docs/PASTE_SERVICE.md](docs/PASTE_SERVICE.md).
 
 ## Beyond Phase 1
 
-Future EarthMC integrations (map/towny-aware features, API-driven player
+Future EarthMC integrations (towny-aware features, API-driven player
 cards) are out of scope for Phase 1 and will be planned when the chat
 subsystem is complete.

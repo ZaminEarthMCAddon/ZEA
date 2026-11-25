@@ -723,7 +723,7 @@ public final class ItemBrowser {
                 if (index >= 0 && index < state.results().size()) {
                         // The viewer opens over the container and restores it
                         // on close — JEI's open() semantics.
-                        MarketViewerScreen.open(state.results().get(index), state.results());
+                        MarketViewerScreen.open(state.results().get(index));
                         return true;
                 }
                 clickSortBar(m, mx, my);

@@ -34,7 +34,7 @@ implementations of the data format can drift apart silently.
 
 | ZEA repository | Maps to | Why it exists |
 |---|---|---|
-| [ZEA](https://github.com/ZaminEarthMCAddon/ZEA) | NotEnoughUpdates | The user-facing Fabric mod: chat, the NEU-style item browser, shop observation, map, rarity. |
+| [ZEA](https://github.com/ZaminEarthMCAddon/ZEA) | NotEnoughUpdates | The user-facing Fabric mod: chat, the NEU-style item browser, shop observation, rarity. |
 | [ZEA-REPO](https://github.com/ZaminEarthMCAddon/ZEA-REPO) | NotEnoughUpdates-REPO | Community data: curated datasets, JSON schemas, and the CI that validates every push and pull request. |
 
 ZEA-REPO's CI (`.github/workflows/validate.yml`) is the workflow layer's
@@ -88,7 +88,7 @@ local persistence (market store, schema v2)
              DatasetMerger — shared records never overwrite newer
              verified local observations
                    v
-             the item browser, the tooltips, the map waypoints
+             the item browser, the tooltips, the shop waypoints
 ```
 
 The flow is implemented end to end: observation, fingerprinting,

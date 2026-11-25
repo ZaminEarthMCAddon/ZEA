@@ -9,8 +9,8 @@ import net.zaminmc.zea.hud.HudRenderer;
  * The shop-destination HUD element: the temporary waypoint, drawn as a
  * small diamond with the shop's label, its distance and its direction.
  * Subtle by design — one line at the element's anchor — and useful from
- * any distance, because the distance readout is the guidance a minimap
- * marker cannot give.
+ * any distance, because the distance readout is the guidance a chat
+ * coordinate cannot give.
  *
  * <p>The element draws nothing without an active destination, without a
  * player, or off the destination's world — a waypoint that outlived its

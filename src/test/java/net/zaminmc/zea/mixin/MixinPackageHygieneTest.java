@@ -58,10 +58,7 @@ class MixinPackageHygieneTest {
 
         /** The mixin config, whose lists define what "registered" means. */
         private static final List<Path> MIXIN_CONFIGS = List.of(
-                        Paths.get("src", "main", "resources", "zea.mixins.json"),
-                        // The soft config for the Xaero integration: required=false
-                        // and require=0, but Mixin owns the package just the same.
-                        Paths.get("src", "main", "resources", "zea-xaero.mixins.json"));
+                        Paths.get("src", "main", "resources", "zea.mixins.json"));
 
         /** Class names the mixin configs register, in internal form. */
         private static Set<String> registered;
