@@ -30,9 +30,13 @@ import java.util.Optional;
  *       variant identity; the fingerprint token decides, so an enchanted
  *       pickaxe and a plain one are different tiles, and a thousand
  *       owners of one variant still show one tile.</li>
- *   <li>An <b>offer</b> is one physical shop's latest observation of
- *       that variant. Offers are never merged away: identical items at
- *       identical prices stay distinct shops, each independently
+ *   <li>An <b>offer</b> is one physical shop's <em>latest</em> observation.
+ *       One shop trades one thing: a revisit whose response says something
+ *       different replaces what stood before, so a sign that changed its
+ *       item stops being a seller of the old one — the old listing leaves
+ *       the index with the shop instead of haunting it as a phantom
+ *       seller. Offers are never merged away across shops: identical
+ *       items at identical prices stay distinct shops, each independently
  *       navigable.</li>
  * </ul>
  *
@@ -139,19 +143,19 @@ public final class ItemVariantIndex {
         }
 
         /**
-         * Builds the variant index over the market's current data. Offers
-         * carry each shop's latest observation of that variant — an older
-         * observation of the same shop is history, not an active offer.
+         * Builds the variant index over the market's current data. One shop
+         * contributes at most one offer — its latest observation, whatever
+         * it says. An older observation is history, never an active offer,
+         * even when it named a different item: the shop changed, and the
+         * listing at those coordinates is gone.
          */
         public static List<Variant> variants(MarketData data) {
-                // Collect the latest exact observation per (shop, token) pair.
-                Map<String, Map<String, Offer>> byToken = new LinkedHashMap<>();
-                Map<String, Integer> displayVotes = new LinkedHashMap<>();
+                // The shop's latest observation decides what it trades — any
+                // observation competes for latest, a sign-only advert too: the
+                // newest interaction is the shop's present state, even when it
+                // speaks only in display text.
+                Map<String, Offer> latestPerShop = new LinkedHashMap<>();
                 for (ShopObservation observation : data.allObservations()) {
-                        ItemFingerprint fingerprint = observation.fingerprint();
-                        if (!trustedSource(observation.sourceType()) || !fingerprint.isExact()) {
-                                continue;
-                        }
                         PhysicalShop shop = data.shop(observation.shopId());
                         if (shop == null) {
                                 continue;
@@ -159,8 +163,25 @@ public final class ItemVariantIndex {
                         Offer candidate = new Offer(shop, observation,
                                         PriceMath.normalize(observation.price(), observation.priceScope(),
                                                         observation.bulkSize()).orElse(null));
-                        byToken.computeIfAbsent(fingerprint.token(), key -> new LinkedHashMap<>())
-                                        .merge(observation.shopId(), candidate, ItemVariantIndex::latest);
+                        latestPerShop.merge(observation.shopId(), candidate, ItemVariantIndex::latest);
+                }
+                // Group the shops' current offers by exact identity. A display-only
+                // latest observation (a sign-only advert) vouches for the shop's
+                // present state only by item text: the same text an exact record
+                // carries keeps the shop's exact offer alive, a different text
+                // retires it — the shop now trades something the index cannot name.
+                Map<String, Map<String, Offer>> byToken = new LinkedHashMap<>();
+                for (Offer offer : latestPerShop.values()) {
+                        Offer offered = offer;
+                        if (!offer.observation().fingerprint().isExact()) {
+                                offered = exactRecordMatching(data, offer);
+                                if (offered == null) {
+                                        continue;
+                                }
+                        }
+                        byToken.computeIfAbsent(offered.observation().fingerprint().token(),
+                                                        key -> new LinkedHashMap<>())
+                                        .merge(offered.shop().shopId(), offered, ItemVariantIndex::latest);
                 }
                 // One tile per token; the display name is the shops' consensus.
                 List<Variant> variants = new ArrayList<>();
@@ -170,6 +191,36 @@ public final class ItemVariantIndex {
                         variants.add(new Variant(entry.getKey(), display, offers));
                 }
                 return variants;
+        }
+
+        /**
+         * The exact offer a display-only latest observation stands for, or
+         * {@code null} when the shop leaves the index. The shop's newest exact
+         * record decides: the same item text the sign advertises confirms the
+         * shop still trades it; any other text — or no exact record at all —
+         * means the shop's exact listing is gone.
+         */
+        private static @Nullable Offer exactRecordMatching(MarketData data, Offer displayOnly) {
+                String display = displayOnly.observation().itemDisplay();
+                if (display == null || display.isBlank()) {
+                        return null;
+                }
+                List<ShopObservation> history = data.observations(displayOnly.shop().shopId());
+                for (int i = history.size() - 1; i >= 0; i--) {
+                        ShopObservation observation = history.get(i);
+                        if (!trustedSource(observation.sourceType())
+                                        || !observation.fingerprint().isExact()) {
+                                continue;
+                        }
+                        String recorded = observation.itemDisplay();
+                        if (recorded == null || !recorded.trim().equalsIgnoreCase(display.trim())) {
+                                return null;
+                        }
+                        return new Offer(displayOnly.shop(), observation,
+                                        PriceMath.normalize(observation.price(), observation.priceScope(),
+                                                        observation.bulkSize()).orElse(null));
+                }
+                return null;
         }
 
         /** The offer whose observation is newer; ties keep the incumbent. */

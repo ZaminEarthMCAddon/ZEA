@@ -14,9 +14,7 @@ import net.zaminmc.zea.market.MarketData;
 import net.zaminmc.zea.market.MarketSubsystem;
 import net.zaminmc.zea.market.index.ItemVariantIndex;
 import net.zaminmc.zea.market.index.ItemVariantIndex.Variant;
-import net.zaminmc.zea.market.index.VariantPricing;
-import net.zaminmc.zea.market.model.ShopDirection;
-import net.zaminmc.zea.market.ui.MarketAge;
+import net.zaminmc.zea.market.tooltip.MarketTooltipLines;
 import net.zaminmc.zea.market.viewer.MarketViewerScreen;
 import org.jspecify.annotations.Nullable;
 
@@ -468,22 +466,9 @@ public final class ItemBrowser {
                         Variant variant, int mouseX, int mouseY) {
                 List<Component> lines = new ArrayList<>();
                 lines.add(Component.literal(variant.display()));
-                VariantPricing.SideStats buyFrom = VariantPricing.stats(variant.offers(), ShopDirection.SELLING);
-                VariantPricing.SideStats sellTo = VariantPricing.stats(variant.offers(), ShopDirection.BUYING);
-                if (buyFrom.shops() > 0) {
-                        lines.add(Component.literal("Buy from: " + priceOrDash(buyFrom.best())
-                                        + " best · " + buyFrom.shops() + " shop" + (buyFrom.shops() == 1 ? "" : "s")));
-                }
-                if (sellTo.shops() > 0) {
-                        lines.add(Component.literal("Sell to: " + priceOrDash(sellTo.best())
-                                        + " best · " + sellTo.shops() + " shop" + (sellTo.shops() == 1 ? "" : "s")));
-                }
-                int owners = variant.owners().size();
-                lines.add(Component.literal(variant.shops().size() + " shop"
-                                + (variant.shops().size() == 1 ? "" : "s") + " · " + owners
-                                + " owner" + (owners == 1 ? "" : "s")));
-                lines.add(Component.literal("Observed " + MarketAge.format(variant.lastObservedAt(), Instant.now()))
-                                .withStyle(style -> style.withColor(0xFF909090)));
+                // The market lore: the bullet lines the whole market speaks —
+                // Sellers, Price, Stock, and the buyer side when one exists.
+                lines.addAll(MarketTooltipLines.build(variant, Instant.now()));
                 // NEU's action hints: yellow, bold, after a blank line.
                 lines.add(Component.literal(""));
                 lines.add(hint("LMB : View offers!"));
@@ -493,15 +478,6 @@ public final class ItemBrowser {
         /** NEU's hint line style: yellow and bold. */
         private static Component hint(String text) {
                 return Component.literal(text).withStyle(style -> style.withColor(HINT).withBold(true));
-        }
-
-        private static String priceOrDash(@Nullable BigDecimal price) {
-                return price == null ? "—" : format(price);
-        }
-
-        private static String format(BigDecimal price) {
-                return price.setScale(2, java.math.RoundingMode.HALF_UP)
-                                .stripTrailingZeros().toPlainString() + "G";
         }
 
         // ------------------------------------------------------------------

@@ -27,62 +27,62 @@ import java.util.Optional;
  * exact match.
  */
 public final class Observations {
-	private Observations() {
-	}
+        private Observations() {
+        }
 
-	/**
-	 * The records one inspection contributes. {@code empty} when neither
-	 * a response nor a usable sign advert is present — an inspection
-	 * with no evidence records nothing.
-	 */
-	public static Optional<Recorded> of(ShopInspectionTracker.Inspection inspection) {
-		Instant at = inspection.inspectedAt();
-		if (inspection.response() != null) {
-			return Optional.of(fromResponse(inspection.response(), inspection, at));
-		}
-		if (inspection.signLines() != null) {
-			return ShopSignParser.parse(inspection.signLines())
-					.map(advert -> fromSign(advert, inspection, at));
-		}
-		return Optional.empty();
-	}
+        /**
+         * The records one inspection contributes. {@code empty} when neither
+         * a response nor a usable sign advert is present — an inspection
+         * with no evidence records nothing.
+         */
+        public static Optional<Recorded> of(ShopInspectionTracker.Inspection inspection) {
+                Instant at = inspection.inspectedAt();
+                if (inspection.response() != null) {
+                        return Optional.of(fromResponse(inspection.response(), inspection, at));
+                }
+                if (inspection.signLines() != null) {
+                        return ShopSignParser.parse(inspection.signLines())
+                                        .map(advert -> fromSign(advert, inspection, at));
+                }
+                return Optional.empty();
+        }
 
-	private static Recorded fromResponse(ShopResponse response,
-			ShopInspectionTracker.Inspection inspection, Instant at) {
-		String shopId = PhysicalShop.idOf(inspection.serverId(), inspection.world(), inspection.signPos());
-		PhysicalShop shop = new PhysicalShop(shopId, inspection.serverId(), inspection.world(),
-				inspection.signPos(), inspection.chestPos(), response.owner(), null, at, at);
-		ItemFingerprint fingerprint = response.preview() != null
-				? ItemFingerprints.ofTemplate(response.preview())
-				: ItemFingerprints.fromDisplay(response.itemDisplay());
-		ShopObservation observation = new ShopObservation(shopId, response.direction(), fingerprint,
-				response.itemDisplay(), response.price(), response.priceScope(), response.bulkSize(),
-				response.stockRaw(), response.stockUnit(), response.remainingPercent(),
-				response.maxBuyBulks(), response.maxBuyItems(), response.maxSellBulks(), response.maxSellItems(),
-				response.supportsAll(), response.enchantments(),
-				SourceType.SERVER_RESPONSE, response.receivedAt());
-		return new Recorded(shop, observation);
-	}
+        private static Recorded fromResponse(ShopResponse response,
+                        ShopInspectionTracker.Inspection inspection, Instant at) {
+                String shopId = PhysicalShop.idOf(inspection.serverId(), inspection.world(), inspection.signPos());
+                PhysicalShop shop = new PhysicalShop(shopId, inspection.serverId(), inspection.world(),
+                                inspection.signPos(), inspection.chestPos(), response.owner(), null, null, at, at);
+                ItemFingerprint fingerprint = response.preview() != null
+                                ? ItemFingerprints.ofTemplate(response.preview())
+                                : ItemFingerprints.fromDisplay(response.itemDisplay());
+                ShopObservation observation = new ShopObservation(shopId, response.direction(), fingerprint,
+                                response.itemDisplay(), response.price(), response.priceScope(), response.bulkSize(),
+                                response.stockRaw(), response.stockUnit(), response.remainingPercent(),
+                                response.maxBuyBulks(), response.maxBuyItems(), response.maxSellBulks(), response.maxSellItems(),
+                                response.supportsAll(), response.enchantments(),
+                                SourceType.SERVER_RESPONSE, response.receivedAt());
+                return new Recorded(shop, observation);
+        }
 
-	private static Recorded fromSign(ShopSignParser.SignAdvert advert,
-			ShopInspectionTracker.Inspection inspection, Instant at) {
-		String shopId = PhysicalShop.idOf(inspection.serverId(), inspection.world(), inspection.signPos());
-		PhysicalShop shop = new PhysicalShop(shopId, inspection.serverId(), inspection.world(),
-				inspection.signPos(), inspection.chestPos(), advert.owner(), null, at, at);
-		ShopObservation observation = new ShopObservation(shopId, advert.direction(),
-				ItemFingerprints.fromDisplay(advert.itemDisplay()), advert.itemDisplay(),
-				null, null, null, advert.quantity(), StockUnit.UNKNOWN,
-				null, null, null, null, null, false, List.of(),
-				SourceType.SIGN_ONLY, at);
-		return new Recorded(shop, observation);
-	}
+        private static Recorded fromSign(ShopSignParser.SignAdvert advert,
+                        ShopInspectionTracker.Inspection inspection, Instant at) {
+                String shopId = PhysicalShop.idOf(inspection.serverId(), inspection.world(), inspection.signPos());
+                PhysicalShop shop = new PhysicalShop(shopId, inspection.serverId(), inspection.world(),
+                                inspection.signPos(), inspection.chestPos(), advert.owner(), null, null, at, at);
+                ShopObservation observation = new ShopObservation(shopId, advert.direction(),
+                                ItemFingerprints.fromDisplay(advert.itemDisplay()), advert.itemDisplay(),
+                                null, null, null, advert.quantity(), StockUnit.UNKNOWN,
+                                null, null, null, null, null, false, List.of(),
+                                SourceType.SIGN_ONLY, at);
+                return new Recorded(shop, observation);
+        }
 
-	/** The shop and observation one inspection produced. */
-	public record Recorded(PhysicalShop shop, ShopObservation observation) {
-		public Recorded {
-			if (shop == null || observation == null) {
-				throw new NullPointerException("recorded fields must not be null");
-			}
-		}
-	}
+        /** The shop and observation one inspection produced. */
+        public record Recorded(PhysicalShop shop, ShopObservation observation) {
+                public Recorded {
+                        if (shop == null || observation == null) {
+                                throw new NullPointerException("recorded fields must not be null");
+                        }
+                }
+        }
 }

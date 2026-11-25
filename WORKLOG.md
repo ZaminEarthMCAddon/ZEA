@@ -5529,3 +5529,88 @@ stock units and bulk terms, the two gate reasons). The rendering and
 interaction drive (strip flips, carousel wrap, disabled Teleport on a
 mapless shop) waits for the maintainer's in-game round, per the
 testing doc.
+
+## 2026-11-21 — The capture flow, redone as the spec actually reads
+
+### What the maintainer's feedback corrected
+
+The first market-editor build treated capture as an add-on to a manual
+listing form: an editor with a seller field, a direction toggle, a price
+row and an inventory pick grid ("what the fuck is picker"). The actual
+ask was the opposite — the server already sends everything a listing
+needs in the shop chat block (owner, item with its component, stock or
+space, the per-bulk price line, the enchantment section), so the flow is:
+capture automatically, announce it with the full information, and open a
+screen only when a specific detail could not be found — the canonical
+case being the shop's spawn, typed the way the player runs it
+(`/n spawn france`). And the tooltip rework landed on container and
+creative screens instead of the items sidebar listing it was asked for.
+
+### What changed
+
+- **Capture is the whole flow.** `MarketSubsystem` announces every
+  recorded inspection in chat: "Listing found and added successfully"
+  (server response) or "Shop sign read — captured from the sign" (sign
+  fallback), followed by gray detail lines — owner, direction + item,
+  stock (with its unit word when the server named one), price (with the
+  normalized per-item figure), the enchantment section, the sign
+  coordinates and the spawn. A second line lists what is missing and
+  carries the clickable `[Add details]` prompt (gated by the renamed
+  `capturePrompts` config option, formerly `captureReviewPrompt`).
+- **The spawn, end to end.** `PhysicalShop` grows a nullable `spawn`
+  reference; claims resolve it automatically (`/n spawn X` for a nation,
+  `/t spawn X` for a town) and the completion screen takes the player's
+  typing otherwise — `SpawnRef` normalizes `/n spawn france`,
+  `n spawn france`, `spawn france` and bare `france` into the canonical
+  command, declining command heads without a name. The store wire gains
+  the field (schema v3, additive), the shared-dataset record too.
+- **The completion screen.** `MarketCaptureScreen` replaces
+  `MarketEditorScreen` (deleted with its picker and manual form): the
+  captured listing shown read-only, one input per missing detail, Done
+  records what was filled (`completeCapture` — the spawn annotation on
+  the shop; a filled price or stock joins the latest observation as the
+  player-vouched MANUAL record). Commands: `/zea market-dev`, with
+  `/zea market-editor` kept as an alias; both open the latest capture.
+- **Same coordinates, different shop — the old listing leaves.** The
+  variant index now takes each shop's *latest* observation — any source,
+  a sign-only advert too — as the only offer the shop contributes. A
+  revisit that says something different (new item, flipped direction)
+  removes the old listing instead of haunting the index as a phantom
+  seller; a sign-only revisit confirming the same item text keeps the
+  exact listing alive, a different text retires it.
+- **The tooltip lives where it was asked for.** The browser sidebar's
+  item tooltip speaks the bullet lore — Sellers, Price (min-max range),
+  Stock (combined only when every report is item-denominated), Buyers,
+  Payout, the age line — via `MarketTooltipLines` straight from the
+  variant. The container and creative tooltip hooks and
+  `MarketTooltipEditor` are gone; the market section no longer rides
+  ordinary item tooltips.
+
+### Verification
+
+Suite green (1494 tests): the replacement cases (changed item stops
+selling the old one, flipped direction leaves the old side, sign-only
+same-text keeps and different-text retires), `SpawnRef` normalization
+and declines, `MarketData.annotate`, the wire round-trip with spawn.
+
+The in-game pass ran twice against the flat world under Xvfb/EGL, each
+against a seeded three-shop market (frames in shots/capture2/): the
+sign at exactly (8, -60, -6) read through a right-click captures after
+the sign-only window, the chat carries the announcement block — "Shop
+sign read — captured from the sign", the gray detail lines (Owner
+Abasing · Selling Diamond Pickaxe, Stock 36, Sign 8, -60, -6) and the
+"Missing: spawn, price [Add details]" prompt — the chat click opens the
+completion screen (captured listing read-only, spawn and price inputs
+only, the sign's own stock never prompting), the typed `/n spawn
+france` and `2` land, Done records, and the chat gains "Listing added
+to the market list · Item: Diamond Pickaxe · Sign: 8, -60, -6 · Spawn:
+/n spawn france". market.json after the flush carries the spawn on the
+shop record and the price-2 MANUAL observation. The browser after the
+capture: the seeded Block of Iron at those same coordinates is gone —
+the shop's latest observation names a different item, so the old
+listing left the index — and the Diamond Pickaxe tile's tooltip speaks
+the bullet lore: Sellers: 2, Price: 1.5G-2G, Stock: 55 items, the age
+line, and NEU's yellow LMB hint. The first pass caught the completion
+panel drawing its inputs at a relative offset in absolute space (the
+rows on top of the captured facts) and the rows overlapping each other
+at an 18 px pitch — both fixed and re-driven clean.

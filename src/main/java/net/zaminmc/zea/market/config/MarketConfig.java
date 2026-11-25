@@ -1,7 +1,6 @@
 package net.zaminmc.zea.market.config;
 
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean;
-import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption;
 
 /**
@@ -13,24 +12,9 @@ import io.github.notenoughupdates.moulconfig.annotations.ConfigOption;
  */
 public final class MarketConfig {
 
-        @ConfigOption(name = "Tooltip market info", desc = "Show the market section at the end of "
-                        + "item tooltips: always, only while Shift is held (default), or never.")
-        @ConfigEditorDropdown
-        public TooltipMode tooltipMode = TooltipMode.WHEN_SHIFT_HELD;
-
-        @ConfigOption(name = "Capture review prompt", desc = "After ZEA captures a shop, put a "
-                        + "Review line in chat: one click opens the market editor with the captured "
-                        + "details, where wrong details can be fixed and missing ones added.")
+        @ConfigOption(name = "Capture prompts", desc = "When a capture is missing details the server "
+                        + "never carried — its spawn, a price the block lacked — put a clickable prompt "
+                        + "in chat that opens the completion screen for the captured listing.")
         @ConfigEditorBoolean
-        public boolean captureReviewPrompt = true;
-
-        /** How much market information item tooltips carry. */
-        public enum TooltipMode {
-                /** Never show the market section. */
-                NEVER,
-                /** Show only while Shift is held (the default). */
-                WHEN_SHIFT_HELD,
-                /** Always show the market section. */
-                ALWAYS
-        }
+        public boolean capturePrompts = true;
 }

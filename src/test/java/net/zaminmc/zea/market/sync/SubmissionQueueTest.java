@@ -38,7 +38,7 @@ class SubmissionQueueTest {
 
         private static PhysicalShop shop() {
                 return new PhysicalShop("earthmc.net|world|1,64,2", "earthmc.net", "world",
-                                new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), "Abasing", null, T, T);
+                                new BlockPos(1, 64, 2), new BlockPos(1, 64, 1), "Abasing", null, null, T, T);
         }
 
         private static ShopObservation verified() {

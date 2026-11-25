@@ -44,7 +44,7 @@ class ItemBrowserStateTest {
 
         private static PhysicalShop shop(String shopId, String owner) {
                 return new PhysicalShop(shopId, "earthmc.net", "minecraft_overworld",
-                                new BlockPos(10, 64, -20), null, owner, null, T0, T1);
+                                new BlockPos(10, 64, -20), null, owner, null, null, T0, T1);
         }
 
         private static ShopObservation observation(String shopId, ShopDirection direction, Instant at) {

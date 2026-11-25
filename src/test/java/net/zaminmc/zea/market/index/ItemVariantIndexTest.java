@@ -32,7 +32,7 @@ class ItemVariantIndexTest {
         private static PhysicalShop shop(String id, String owner) {
                 int hash = Math.abs(id.hashCode());
                 return new PhysicalShop(id, "earthmc.net", "minecraft:overworld",
-                                new BlockPos(hash % 1000, 64, hash % 997), null, owner, null, T, T);
+                                new BlockPos(hash % 1000, 64, hash % 997), null, owner, null, null, T, T);
         }
 
         private static ShopObservation verified(String shopId, String token, String display,
@@ -238,6 +238,73 @@ class ItemVariantIndexTest {
                 assertEquals(1, variant.offers().size());
                 Offer offer = variant.offers().get(0);
                 assertEquals(new BigDecimal("2"), offer.unitPrice());
+        }
+
+        @Test
+        void aShopThatChangedItsItemStopsSellingTheOldOne() {
+                // The spec's same-coordinates rule: the sign at those
+                // coordinates is one shop; when a new interaction says the
+                // shop trades something else, the old listing is gone — it
+                // is not a second seller of the item it no longer has.
+                data.record(shop("s1", "A"), verified("s1", ENCHANTED, "Diamond Pickaxe",
+                                ShopDirection.SELLING, "2", PriceScope.PER_ITEM, null, T));
+                data.record(shop("s1", "A"), verified("s1", PLAIN, "Diamond Pickaxe",
+                                ShopDirection.SELLING, "1", PriceScope.PER_ITEM, null, T.plusSeconds(120)));
+
+                List<Variant> variants = ItemVariantIndex.variants(data);
+                assertEquals(1, variants.size());
+                assertEquals(PLAIN, variants.get(0).token());
+                assertEquals(1, variants.get(0).offers().size());
+        }
+
+        @Test
+        void aShopRevisitThatFlipsDirectionRemovesTheOldSide() {
+                // A selling shop turned buying: it neither sells the old item
+                // nor sits on the sell-to list as a phantom.
+                data.record(shop("s1", "A"), verified("s1", ENCHANTED, "Diamond Pickaxe",
+                                ShopDirection.SELLING, "2", PriceScope.PER_ITEM, null, T));
+                data.record(shop("s1", "A"), verified("s1", ENCHANTED, "Diamond Pickaxe",
+                                ShopDirection.BUYING, "1", PriceScope.PER_ITEM, null, T.plusSeconds(120)));
+
+                Variant variant = ItemVariantIndex.variants(data).get(0);
+                assertEquals(1, variant.offers().size());
+                assertEquals(ShopDirection.BUYING, variant.offers().get(0).observation().direction());
+        }
+
+        @Test
+        void aSignOnlyRevisitConfirmingTheSameItemKeepsTheExactListing() {
+                // The server failed to answer this visit and only the sign
+                // was read: the same item text the exact record carries
+                // confirms the shop still trades it — the listing stays.
+                data.record(shop("s1", "A"), verified("s1", ENCHANTED, "Diamond Pickaxe",
+                                ShopDirection.SELLING, "2", PriceScope.PER_ITEM, null, T));
+                data.record(shop("s1", "A"), new ShopObservation("s1", ShopDirection.SELLING,
+                                new ItemFingerprint("diamond_pickaxe", ItemFingerprint.Fidelity.DISPLAY_ONLY),
+                                "Diamond Pickaxe", null, null, null, "36", StockUnit.UNKNOWN,
+                                null, null, null, null, null, false, List.of(),
+                                SourceType.SIGN_ONLY, T.plusSeconds(120)));
+
+                List<Variant> variants = ItemVariantIndex.variants(data);
+                assertEquals(1, variants.size());
+                assertEquals(ENCHANTED, variants.get(0).token());
+                assertEquals(1, variants.get(0).offers().size());
+                assertEquals(new BigDecimal("2"), variants.get(0).offers().get(0).unitPrice());
+        }
+
+        @Test
+        void aSignOnlyRevisitNamingADifferentItemRetiresTheExactListing() {
+                // The sign now advertises something else: whatever the old
+                // record said, the shop no longer trades it, and the index
+                // can offer nothing it cannot name.
+                data.record(shop("s1", "A"), verified("s1", ENCHANTED, "Diamond Pickaxe",
+                                ShopDirection.SELLING, "2", PriceScope.PER_ITEM, null, T));
+                data.record(shop("s1", "A"), new ShopObservation("s1", ShopDirection.SELLING,
+                                new ItemFingerprint("iron_chestplate", ItemFingerprint.Fidelity.DISPLAY_ONLY),
+                                "Iron Chestplate", null, null, null, "7", StockUnit.UNKNOWN,
+                                null, null, null, null, null, false, List.of(),
+                                SourceType.SIGN_ONLY, T.plusSeconds(120)));
+
+                assertEquals(List.of(), ItemVariantIndex.variants(data));
         }
 
         @Test
